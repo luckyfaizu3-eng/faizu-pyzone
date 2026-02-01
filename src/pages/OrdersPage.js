@@ -40,13 +40,25 @@ function OrdersPage({ orders }) {
       console.log('Final Download URL:', downloadUrl);
       
       // Fetch and download
-      const response = await fetch(downloadUrl);
+      const response = await fetch(downloadUrl, {
+        mode: 'cors',
+        credentials: 'omit'
+      });
+      
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
       
       if (!response.ok) {
-        throw new Error('Download failed');
+        throw new Error(`HTTP ${response.status}`);
       }
       
       const blob = await response.blob();
+      console.log('Blob size:', blob.size);
+      
+      if (blob.size === 0) {
+        throw new Error('Empty file');
+      }
+      
       const blobUrl = URL.createObjectURL(blob);
       
       const link = document.createElement('a');
@@ -56,12 +68,17 @@ function OrdersPage({ orders }) {
       link.click();
       document.body.removeChild(link);
       
-      URL.revokeObjectURL(blobUrl);
+      // Cleanup
+      setTimeout(() => {
+        URL.revokeObjectURL(blobUrl);
+      }, 100);
       
+      console.log('✅ Download completed successfully');
       window.showToast?.('✅ Download successful!', 'success');
+      
     } catch (error) {
-      console.error('Download error:', error);
-      window.showToast?.('❌ Download failed. Please contact support.', 'error');
+      console.error('❌ Download error:', error);
+      window.showToast?.('❌ Download failed: ' + error.message, 'error');
     }
   };
 
