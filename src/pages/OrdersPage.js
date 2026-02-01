@@ -13,68 +13,38 @@ function OrdersPage({ orders }) {
 
   const handleDownload = async (item) => {
     console.log('📥 Starting download for:', item.title);
-    console.log('Original URL:', item.pdfUrl);
+    console.log('Item data:', item);
     
     window.showToast?.('📥 Preparing download...', 'info');
     
     try {
-      let downloadUrl = item.pdfUrl;
+      let downloadUrl;
       
-      // Method 1: If publicId exists
+      // Method 1: Use publicId (BEST for raw files)
       if (item.publicId) {
-        downloadUrl = `https://res.cloudinary.com/dwhkxqnd1/image/upload/fl_attachment/${item.publicId}`;
+        // For raw PDFs - use raw/upload with publicId
+        downloadUrl = `https://res.cloudinary.com/dwhkxqnd1/raw/upload/${item.publicId}.pdf`;
+        console.log('Using publicId method:', downloadUrl);
       } 
-      // Method 2: Fix URL format
-      else {
-        // Remove version number if exists: /v1234567/
-        downloadUrl = downloadUrl.replace(/\/v\d+\//, '/');
-        
-        // Convert to proper format
-        if (downloadUrl.includes('/raw/upload/')) {
-          downloadUrl = downloadUrl.replace('/raw/upload/', '/image/upload/fl_attachment/');
-        } else if (!downloadUrl.includes('fl_attachment')) {
-          downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
-        }
+      // Method 2: Use existing URL
+      else if (item.pdfUrl) {
+        downloadUrl = item.pdfUrl;
+        console.log('Using pdfUrl method:', downloadUrl);
       }
       
-      console.log('Final Download URL:', downloadUrl);
-      
-      // Fetch and download
-      const response = await fetch(downloadUrl, {
-        mode: 'cors',
-        credentials: 'omit'
-      });
-      
-      console.log('Response status:', response.status);
-      console.log('Response ok:', response.ok);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const blob = await response.blob();
-      console.log('Blob size:', blob.size);
-      
-      if (blob.size === 0) {
-        throw new Error('Empty file');
-      }
-      
-      const blobUrl = URL.createObjectURL(blob);
-      
+      // Direct download approach (works best for mobile)
       const link = document.createElement('a');
-      link.href = blobUrl;
+      link.href = downloadUrl;
       link.download = item.pdfFileName || `${item.title}.pdf`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       
-      // Cleanup
-      setTimeout(() => {
-        URL.revokeObjectURL(blobUrl);
-      }, 100);
-      
-      console.log('✅ Download completed successfully');
-      window.showToast?.('✅ Download successful!', 'success');
+      console.log('✅ Download initiated');
+      window.showToast?.('✅ Download started!', 'success');
       
     } catch (error) {
       console.error('❌ Download error:', error);
