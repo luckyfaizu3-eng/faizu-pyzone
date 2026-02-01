@@ -8,18 +8,17 @@ import {
   updateDoc,
   query,
   orderBy,
-  serverTimestamp 
+  serverTimestamp,
+  arrayUnion
 } from 'firebase/firestore';
 
 // Collections
 const PRODUCTS_COLLECTION = 'products';
 const ORDERS_COLLECTION = 'orders';
 
-// TEMPORARY: Upload PDF without storage (for testing)
-// Converts file to base64 and stores in Firestore
+// Upload PDF (temporary base64 solution)
 export const uploadPDF = async (file, folder = 'pdfs') => {
   try {
-    // For testing: Create a data URL (base64)
     const reader = new FileReader();
     
     return new Promise((resolve, reject) => {
@@ -28,9 +27,9 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
         console.log('✅ PDF converted to base64');
         resolve({ 
           success: true, 
-          url: base64, // This will be a data URL
+          url: base64,
           fileName: file.name,
-          note: 'Using temporary base64 storage. Will be replaced with Firebase Storage later.'
+          note: 'Using temporary base64 storage'
         });
       };
       
@@ -47,7 +46,7 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
   }
 };
 
-// Upload Image/Thumbnail (temporary base64 solution)
+// Upload Image/Thumbnail
 export const uploadImage = async (file) => {
   try {
     const reader = new FileReader();
@@ -75,7 +74,7 @@ export const uploadImage = async (file) => {
   }
 };
 
-// Add Product to Firestore
+// Add Product
 export const addProduct = async (productData) => {
   try {
     const docRef = await addDoc(collection(db, PRODUCTS_COLLECTION), {
@@ -108,7 +107,6 @@ export const getAllProducts = async () => {
     return { success: true, products };
   } catch (error) {
     console.error('❌ Fetch products error:', error.message);
-    // Return empty array if collection doesn't exist yet
     if (error.message.includes('indexes')) {
       console.log('⚠️ Creating indexes... Try again in a minute');
       return { success: true, products: [] };
@@ -138,6 +136,21 @@ export const updateProduct = async (productId, updates) => {
     return { success: true };
   } catch (error) {
     console.error('❌ Update product error:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// Add Review to Product
+export const addReview = async (productId, reviewData) => {
+  try {
+    const productRef = doc(db, PRODUCTS_COLLECTION, productId);
+    await updateDoc(productRef, {
+      reviews: arrayUnion(reviewData)
+    });
+    console.log('✅ Review added to product:', productId);
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Add review error:', error.message);
     return { success: false, error: error.message };
   }
 };
