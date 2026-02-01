@@ -1,23 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Shield, Zap, Instagram } from 'lucide-react';
+import { Download, Shield, Zap, Instagram, BookOpen } from 'lucide-react';
 
 function HomePage({ setCurrentPage }) {
   const [currentText, setCurrentText] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [phraseIndex, setPhraseIndex] = useState(0);
-  
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const phrases = useRef([
-    "Premium Study Notes for Success",
-    "Master Python • Excel in Exams",
-    "Land Your Dream Job Today",
-    "Quality Content • Instant Access"
+    "Premium Study Notes",
+    "Master Python",
+    "Excel in Exams",
+    "Land Your Dream Job"
   ]).current;
 
   useEffect(() => {
     const currentPhrase = phrases[phraseIndex];
-    const typingSpeed = isDeleting ? 30 : 80;
-    const pauseTime = 2000;
+    const typingSpeed = isDeleting ? 25 : 70;
+    const pauseTime = 1800;
 
     const timeout = setTimeout(() => {
       if (!isDeleting && currentIndex < currentPhrase.length) {
@@ -38,90 +45,101 @@ function HomePage({ setCurrentPage }) {
   }, [currentIndex, isDeleting, phraseIndex, phrases]);
 
   return (
-    <div style={{ paddingTop: '80px', minHeight: '100vh' }}>
-      {/* Hero Section */}
+    <div style={{ paddingTop: '70px', minHeight: '100vh', overflowX: 'hidden' }}>
+
+      {/* ===== HERO SECTION ===== */}
       <section style={{
-        padding: 'clamp(60px, 12vw, 120px) 1.5rem',
+        padding: isMobile ? '32px 18px 28px' : '80px 24px 60px',
         textAlign: 'center',
-        minHeight: '80vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center'
+        position: 'relative',
+        background: 'linear-gradient(180deg, #f0f4ff 0%, #ffffff 70%)',
+        borderRadius: '0 0 32px 32px'
       }}>
+        {/* Decorative blobs */}
+        <div style={{
+          position: 'absolute', top: '-20px', left: '-40px',
+          width: '200px', height: '200px',
+          background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)',
+          borderRadius: '50%', pointerEvents: 'none'
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '10px', right: '-30px',
+          width: '180px', height: '180px',
+          background: 'radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%)',
+          borderRadius: '50%', pointerEvents: 'none'
+        }} />
+
+        {/* Logo badge */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '8px',
+          background: 'rgba(99,102,241,0.08)',
+          border: '1px solid rgba(99,102,241,0.2)',
+          borderRadius: '50px',
+          padding: '6px 14px 6px 6px',
+          marginBottom: isMobile ? '16px' : '24px'
+        }}>
+          <div style={{
+            width: '30px', height: '30px',
+            background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+            borderRadius: '8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '16px'
+          }}>🎓</div>
+          <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#6366f1' }}>FaizUpyZone</span>
+        </div>
+
+        {/* Typing heading */}
         <h1 style={{
-          fontSize: 'clamp(2.5rem, 7vw, 5rem)',
+          fontSize: isMobile ? '2.2rem' : '3.8rem',
           fontWeight: '900',
-          marginBottom: '2rem',
+          marginBottom: '10px',
           background: 'linear-gradient(135deg, #1e40af, #6366f1, #ec4899)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           lineHeight: 1.2,
-          minHeight: 'clamp(100px, 20vw, 200px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          animation: 'fadeInUp 0.8s ease'
+          minHeight: isMobile ? '58px' : '96px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
           {currentText}
           <span style={{
-            borderRight: '4px solid #6366f1',
+            borderRight: '3px solid #6366f1',
             animation: 'blink 0.7s infinite',
-            marginLeft: '8px'
-          }}>‎</span>
+            marginLeft: '6px',
+            height: isMobile ? '34px' : '56px',
+            display: 'inline-block'
+          }} />
         </h1>
 
         <p style={{
-          fontSize: 'clamp(1.1rem, 3vw, 1.6rem)',
+          fontSize: isMobile ? '0.95rem' : '1.15rem',
           color: '#64748b',
-          maxWidth: '800px',
-          margin: '0 auto 3rem',
-          lineHeight: 1.7,
-          padding: '0 1rem',
-          animation: 'fadeInUp 0.8s ease 0.2s backwards'
+          maxWidth: '560px',
+          margin: '0 auto 20px',
+          lineHeight: 1.6,
+          fontWeight: '500'
         }}>
-          Master JKBOSE • Excel Python • Land Your Dream Job
+          Quality study materials for JKBOSE, Python & Job Prep — delivered instantly after payment.
         </p>
 
-        {/* Trust Badges - REAL ONLY */}
+        {/* Trust badges */}
         <div style={{
-          display: 'flex',
-          gap: 'clamp(1rem, 3vw, 2rem)',
-          justifyContent: 'center',
-          flexWrap: 'wrap',
-          marginBottom: '3rem',
-          padding: '0 1rem',
-          animation: 'fadeInUp 0.8s ease 0.4s backwards'
+          display: 'flex', gap: '10px', justifyContent: 'center',
+          flexWrap: 'wrap', marginBottom: '24px'
         }}>
           {[
             { icon: Shield, color: '#10b981', text: 'Secure Payment' },
-            { icon: Zap, color: '#6366f1', text: 'Instant Access' }
+            { icon: Zap, color: '#6366f1', text: 'Instant Access' },
+            { icon: BookOpen, color: '#ec4899', text: '100% Original' }
           ].map((badge, i) => (
             <div key={i} style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              background: `${badge.color}15`,
-              padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1.25rem, 3vw, 1.75rem)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              background: `${badge.color}10`,
+              padding: '7px 14px',
               borderRadius: '50px',
-              border: `1.5px solid ${badge.color}40`,
-              backdropFilter: 'blur(10px)',
-              transition: 'all 0.3s ease'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-3px)';
-              e.currentTarget.style.boxShadow = `0 8px 25px ${badge.color}30`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = 'none';
+              border: `1px solid ${badge.color}30`
             }}>
-              <badge.icon size={20} color={badge.color} />
-              <span style={{
-                fontSize: 'clamp(0.9rem, 2vw, 1.05rem)',
-                fontWeight: '600',
-                color: badge.color
-              }}>
+              <badge.icon size={15} color={badge.color} />
+              <span style={{ fontSize: '0.82rem', fontWeight: '600', color: badge.color }}>
                 {badge.text}
               </span>
             </div>
@@ -129,412 +147,305 @@ function HomePage({ setCurrentPage }) {
         </div>
 
         {/* CTA Button */}
-        <button 
-          onClick={() => setCurrentPage('products')} 
+        <button
+          onClick={() => setCurrentPage('products')}
           style={{
-            background: 'linear-gradient(135deg, #1e40af, #3b82f6)',
-            border: 'none',
-            color: 'white',
-            padding: 'clamp(1rem, 3vw, 1.35rem) clamp(2.5rem, 6vw, 3.5rem)',
-            fontSize: 'clamp(1.05rem, 2.5vw, 1.35rem)',
-            borderRadius: '50px',
-            cursor: 'pointer',
-            fontWeight: '700',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            boxShadow: '0 20px 60px rgba(30, 64, 175, 0.4)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-            animation: 'fadeInUp 0.8s ease 0.6s backwards',
-            minHeight: '56px'
+            background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+            border: 'none', color: 'white',
+            padding: isMobile ? '14px 32px' : '16px 40px',
+            fontSize: isMobile ? '1rem' : '1.15rem',
+            borderRadius: '50px', cursor: 'pointer', fontWeight: '700',
+            display: 'inline-flex', alignItems: 'center', gap: '8px',
+            boxShadow: '0 8px 30px rgba(99,102,241,0.35)',
+            transition: 'all 0.3s ease'
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-5px) scale(1.02)';
-            e.currentTarget.style.boxShadow = '0 25px 70px rgba(30, 64, 175, 0.5)';
+            e.currentTarget.style.transform = 'translateY(-3px)';
+            e.currentTarget.style.boxShadow = '0 12px 40px rgba(99,102,241,0.45)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0) scale(1)';
-            e.currentTarget.style.boxShadow = '0 20px 60px rgba(30, 64, 175, 0.4)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 8px 30px rgba(99,102,241,0.35)';
           }}
-          onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-          onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
         >
-          <Download size={24} />
+          <Download size={20} />
           Browse Notes Now
         </button>
       </section>
 
-      {/* Features Section */}
+      {/* ===== QUICK ACTION CARDS (Mobile highlight) ===== */}
       <section style={{
-        maxWidth: '1200px',
-        margin: '6rem auto',
-        padding: '0 1.5rem'
+        padding: isMobile ? '20px 18px' : '40px 24px',
+        maxWidth: '1000px', margin: '0 auto'
       }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: 'clamp(2rem, 4vw, 3rem)'
+          gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
+          gap: isMobile ? '10px' : '14px'
         }}>
           {[
-            {
-              icon: '📚',
-              title: 'Quality Content',
-              desc: 'Handpicked study materials curated by experts',
-              gradient: 'linear-gradient(135deg, #1e40af, #3b82f6)'
-            },
-            {
-              icon: '🔒',
-              title: 'Secure & Safe',
-              desc: 'Protected payments via Razorpay gateway',
-              gradient: 'linear-gradient(135deg, #10b981, #059669)'
-            },
-            {
-              icon: '⚡',
-              title: 'Instant Download',
-              desc: 'Get your PDFs immediately after payment',
-              gradient: 'linear-gradient(135deg, #6366f1, #ec4899)'
-            }
-          ].map((feature, i) => (
+            { icon: '📚', label: 'Browse Notes', page: 'products', gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)' },
+            { icon: '🛒', label: 'My Cart', page: 'cart', gradient: 'linear-gradient(135deg, #ec4899, #f472b6)' },
+            { icon: '📦', label: 'My Orders', page: 'orders', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
+            { icon: '🔐', label: 'Login', page: 'login', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }
+          ].map((card, i) => (
+            <button
+              key={i}
+              onClick={() => setCurrentPage(card.page)}
+              style={{
+                background: '#ffffff',
+                border: '1.5px solid #e8ecf0',
+                borderRadius: '16px',
+                padding: isMobile ? '16px 10px' : '20px 14px',
+                cursor: 'pointer',
+                display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: '10px',
+                transition: 'all 0.25s ease',
+                boxShadow: '0 2px 12px rgba(0,0,0,0.06)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-4px)';
+                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                e.currentTarget.style.borderColor = '#6366f1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.06)';
+                e.currentTarget.style.borderColor = '#e8ecf0';
+              }}
+            >
+              <div style={{
+                width: '44px', height: '44px',
+                background: card.gradient,
+                borderRadius: '12px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.4rem',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+              }}>
+                {card.icon}
+              </div>
+              <span style={{
+                fontSize: isMobile ? '0.78rem' : '0.85rem',
+                fontWeight: '700', color: '#1e293b'
+              }}>
+                {card.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ===== FEATURES SECTION ===== */}
+      <section style={{
+        padding: isMobile ? '24px 18px' : '40px 24px',
+        maxWidth: '1000px', margin: '0 auto'
+      }}>
+        <h2 style={{
+          fontSize: isMobile ? '1.5rem' : '2rem',
+          fontWeight: '900', textAlign: 'center',
+          marginBottom: isMobile ? '16px' : '28px',
+          color: '#1e293b'
+        }}>
+          Why Students Love Us
+        </h2>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+          gap: isMobile ? '12px' : '18px'
+        }}>
+          {[
+            { icon: '📚', title: 'Quality Content', desc: 'Expert-curated notes & filtered important questions.', color: '#6366f1' },
+            { icon: '🔒', title: 'Secure & Safe', desc: 'Razorpay protected payments — UPI, Cards & more.', color: '#10b981' },
+            { icon: '⚡', title: 'Instant Download', desc: 'Get your PDFs the second payment is done.', color: '#ec4899' }
+          ].map((f, i) => (
             <div key={i} style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '24px',
-              padding: 'clamp(2.5rem, 5vw, 3rem)',
-              textAlign: 'center',
-              transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-              cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+              background: '#fff',
+              border: '1.5px solid #e8ecf0',
+              borderRadius: '18px',
+              padding: isMobile ? '18px 16px' : '24px',
+              display: 'flex', alignItems: 'flex-start', gap: '14px',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+              transition: 'all 0.3s ease'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-12px)';
-              e.currentTarget.style.boxShadow = '0 20px 50px rgba(99,102,241,0.15)';
-              e.currentTarget.style.borderColor = '#6366f1';
+              e.currentTarget.style.borderColor = f.color;
+              e.currentTarget.style.boxShadow = `0 6px 20px ${f.color}20`;
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
-              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.borderColor = '#e8ecf0';
+              e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.05)';
             }}>
               <div style={{
-                width: 'clamp(75px, 18vw, 90px)',
-                height: 'clamp(75px, 18vw, 90px)',
-                margin: '0 auto 1.75rem',
-                background: 'rgba(99,102,241,0.1)',
-                borderRadius: '22px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 'clamp(2.5rem, 6vw, 3rem)',
-                transition: 'transform 0.3s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'rotate(360deg) scale(1.1)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'rotate(0) scale(1)'}>
-                {feature.icon}
+                width: '42px', height: '42px', flexShrink: 0,
+                background: `${f.color}12`,
+                borderRadius: '12px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.3rem'
+              }}>
+                {f.icon}
               </div>
-              <h3 style={{
-                fontSize: 'clamp(1.5rem, 4vw, 2rem)',
-                fontWeight: '900',
-                background: feature.gradient,
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                marginBottom: '0.75rem'
-              }}>
-                {feature.title}
-              </h3>
-              <p style={{
-                color: '#64748b',
-                fontSize: 'clamp(1rem, 2.2vw, 1.15rem)',
-                lineHeight: 1.6
-              }}>
-                {feature.desc}
-              </p>
+              <div>
+                <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b', marginBottom: '3px' }}>{f.title}</div>
+                <div style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5 }}>{f.desc}</div>
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Info Cards Section - Policy, Payment, About, Why Choose, Better */}
+      {/* ===== INFO CARDS SECTION ===== */}
       <section style={{
-        maxWidth: '1400px',
-        margin: '8rem auto',
-        padding: '0 1.5rem'
+        padding: isMobile ? '24px 18px' : '40px 24px',
+        maxWidth: '1000px', margin: '0 auto'
       }}>
         <h2 style={{
-          fontSize: 'clamp(2.5rem, 6vw, 3.5rem)',
-          fontWeight: '900',
-          textAlign: 'center',
-          marginBottom: '4rem',
-          background: 'linear-gradient(135deg, #1e40af, #6366f1)',
+          fontSize: isMobile ? '1.5rem' : '2rem',
+          fontWeight: '900', textAlign: 'center',
+          marginBottom: isMobile ? '16px' : '28px',
+          background: 'linear-gradient(135deg, #6366f1, #ec4899)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent'
         }}>
           Why FaizUpyZone?
         </h2>
-        
+
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-          gap: '2.5rem'
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+          gap: isMobile ? '12px' : '18px'
         }}>
           {[
-            {
-              icon: '📜',
-              title: 'Our Policy',
-              desc: 'We provide genuine, quality-checked study materials. All notes are carefully reviewed before upload. No refund for digital products once downloaded, but we ensure 100% satisfaction with preview options.',
-              color: '#6366f1'
-            },
-            {
-              icon: '💳',
-              title: 'Secure Payment',
-              desc: 'All transactions are processed through Razorpay, India\'s most trusted payment gateway. We accept UPI, Cards, Net Banking, and Wallets. Your payment information is encrypted and secure.',
-              color: '#10b981'
-            },
-            {
-              icon: '👨‍💻',
-              title: 'About Us',
-              desc: 'Started by Faizan Tariq, a Software Engineering student at ILS Srinagar. Our mission is to provide quality study materials to students at affordable prices. We understand student needs because we are students.',
-              color: '#ec4899'
-            },
-            {
-              icon: '🎯',
-              title: 'Why Choose Us',
-              desc: 'Instant access after payment, lifetime downloads, mobile-friendly PDFs, expert-curated content, affordable pricing, and 24/7 WhatsApp support. We focus on what students actually need.',
-              color: '#f59e0b'
-            },
-            {
-              icon: '⭐',
-              title: 'What Makes Us Better',
-              desc: 'Unlike others, we don\'t sell outdated or copied content. Every note is filtered for important questions. Real reviews from real students. No hidden charges. Direct support from founders.',
-              color: '#8b5cf6'
-            }
+            { icon: '📜', title: 'Our Policy', desc: 'Genuine, quality-checked study materials reviewed before upload. No refund after download, but we guarantee satisfaction with preview options.', color: '#6366f1' },
+            { icon: '💳', title: 'Secure Payment', desc: 'Transactions via Razorpay — India\'s most trusted gateway. UPI, Cards, Net Banking & Wallets. Fully encrypted & secure.', color: '#10b981' },
+            { icon: '🎯', title: 'Why Choose Us', desc: 'Instant access, lifetime downloads, mobile-friendly PDFs, expert content, affordable pricing & 24/7 WhatsApp support.', color: '#f59e0b' },
+            { icon: '⭐', title: 'What Makes Us Better', desc: 'No outdated or copied content. Every note filtered for important questions. Real reviews, no hidden charges, direct founder support.', color: '#8b5cf6' }
           ].map((card, i) => (
             <div key={i} style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '24px',
-              padding: '2.5rem',
-              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-              cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-              position: 'relative',
-              overflow: 'hidden'
+              background: '#fff',
+              border: '1.5px solid #e8ecf0',
+              borderRadius: '18px',
+              padding: isMobile ? '18px 16px' : '22px',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+              transition: 'all 0.3s ease',
+              position: 'relative', overflow: 'hidden'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-8px)';
-              e.currentTarget.style.boxShadow = `0 20px 50px ${card.color}30`;
               e.currentTarget.style.borderColor = card.color;
+              e.currentTarget.style.boxShadow = `0 6px 20px ${card.color}20`;
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
-              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.borderColor = '#e8ecf0';
+              e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.05)';
             }}>
               <div style={{
-                position: 'absolute',
-                top: '-50px',
-                right: '-50px',
-                width: '150px',
-                height: '150px',
-                background: `${card.color}10`,
-                borderRadius: '50%',
-                opacity: 0.5
+                position: 'absolute', top: '-30px', right: '-30px',
+                width: '100px', height: '100px',
+                background: `${card.color}08`, borderRadius: '50%'
               }} />
-              
-              <div style={{
-                width: '70px',
-                height: '70px',
-                background: `${card.color}15`,
-                borderRadius: '18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: '1.5rem',
-                fontSize: '2.5rem',
-                border: `2px solid ${card.color}30`,
-                transition: 'transform 0.3s ease'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1) rotate(5deg)'}
-              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1) rotate(0)'}
-              >
-                {card.icon}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+                <div style={{
+                  width: '38px', height: '38px',
+                  background: `${card.color}12`,
+                  borderRadius: '10px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '1.2rem'
+                }}>
+                  {card.icon}
+                </div>
+                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: card.color }}>{card.title}</h3>
               </div>
-              
-              <h3 style={{
-                fontSize: '1.75rem',
-                fontWeight: '900',
-                color: card.color,
-                marginBottom: '1rem'
-              }}>
-                {card.title}
-              </h3>
-              
-              <p style={{
-                color: '#64748b',
-                fontSize: '1.05rem',
-                lineHeight: 1.8
-              }}>
-                {card.desc}
-              </p>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6, margin: 0 }}>{card.desc}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Founder Section */}
+      {/* ===== FOUNDER SECTION ===== */}
       <section style={{
-        maxWidth: '1000px',
-        margin: '8rem auto',
-        padding: '0 1.5rem'
+        padding: isMobile ? '24px 18px 32px' : '40px 24px 60px',
+        maxWidth: '700px', margin: '0 auto'
       }}>
-        <h2 style={{
-          fontSize: 'clamp(2rem, 5vw, 2.5rem)',
-          fontWeight: '700',
-          textAlign: 'center',
-          marginBottom: '3rem',
-          color: '#1e293b'
-        }}>
-          Meet the Founder
-        </h2>
-        
         <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '24px',
-          padding: 'clamp(2.5rem, 5vw, 3.5rem)',
-          boxShadow: '0 10px 40px rgba(0,0,0,0.06)',
-          transition: 'transform 0.3s ease',
-          animation: 'fadeInUp 0.8s ease'
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-8px)'}
-        onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
-        >
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: window.innerWidth > 768 ? 'auto 1fr' : '1fr',
-            gap: 'clamp(2rem, 4vw, 3rem)',
-            alignItems: 'center'
-          }}>
-            {/* Professional Photo */}
+          background: 'linear-gradient(135deg, #f0f4ff, #fdf2f8)',
+          border: '1.5px solid #e0e4f0',
+          borderRadius: '22px',
+          padding: isMobile ? '22px 18px' : '32px',
+          display: 'flex',
+          flexDirection: isMobile ? 'column' : 'row',
+          alignItems: isMobile ? 'center' : 'flex-start',
+          gap: isMobile ? '16px' : '24px',
+          textAlign: isMobile ? 'center' : 'left',
+          boxShadow: '0 4px 20px rgba(99,102,241,0.08)'
+        }}>
+          {/* Photo */}
+          <div style={{ flexShrink: 0 }}>
             <div style={{
-              margin: window.innerWidth > 768 ? '0' : '0 auto',
-              position: 'relative'
+              width: isMobile ? '90px' : '110px',
+              height: isMobile ? '90px' : '110px',
+              borderRadius: '50%',
+              overflow: 'hidden',
+              border: '3px solid rgba(99,102,241,0.3)',
+              boxShadow: '0 6px 20px rgba(99,102,241,0.2)',
+              background: 'linear-gradient(135deg, #6366f120, #ec4899 20%)'
             }}>
-              <div style={{
-                width: 'clamp(140px, 22vw, 180px)',
-                height: 'clamp(140px, 22vw, 180px)',
-                borderRadius: '50%',
-                overflow: 'hidden',
-                border: '4px solid rgba(99, 102, 241, 0.3)',
-                boxShadow: '0 12px 40px rgba(99, 102, 241, 0.2)',
-                position: 'relative',
-                background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(236, 72, 153, 0.1))'
-              }}>
-                <img 
-                  src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg"
-                  alt="Faizan Tariq - Founder" 
-                  crossOrigin="anonymous"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    objectPosition: 'center'
-                  }}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    const parent = e.target.parentElement;
-                    parent.style.display = 'flex';
-                    parent.style.alignItems = 'center';
-                    parent.style.justifyContent = 'center';
-                    parent.style.fontSize = 'clamp(3rem, 8vw, 4rem)';
-                    parent.innerHTML = '👨‍💻';
-                  }}
-                />
-              </div>
+              <img
+                src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg"
+                alt="Faizan Tariq"
+                crossOrigin="anonymous"
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.parentElement.style.display = 'flex';
+                  e.target.parentElement.style.alignItems = 'center';
+                  e.target.parentElement.style.justifyContent = 'center';
+                  e.target.parentElement.style.fontSize = '2.5rem';
+                  e.target.parentElement.innerHTML = '👨‍💻';
+                }}
+              />
             </div>
-            
-            {/* Professional Content */}
-            <div style={{
-              textAlign: window.innerWidth > 768 ? 'left' : 'center'
-            }}>
-              <h3 style={{
-                fontSize: 'clamp(1.6rem, 3.5vw, 2rem)',
-                fontWeight: '700',
-                marginBottom: '0.75rem',
-                color: '#1e293b',
-                letterSpacing: '-0.02em'
-              }}>
-                Faizan Tariq
-              </h3>
-              
-              <div style={{
-                fontSize: 'clamp(0.95rem, 2vw, 1.05rem)',
-                color: '#6366f1',
-                fontWeight: '600',
-                marginBottom: '1.75rem',
-                lineHeight: 1.4
-              }}>
-                Software Engineering Student<br/>
-                ILS Srinagar Institute
-              </div>
-              
-              <p style={{
-                color: '#64748b',
-                fontSize: 'clamp(0.95rem, 2vw, 1.05rem)',
-                lineHeight: 1.8,
-                marginBottom: '2rem',
-                maxWidth: '550px',
-                margin: window.innerWidth > 768 ? '0 0 2rem 0' : '0 auto 2rem'
-              }}>
-                Currently pursuing Software Engineering at ILS Srinagar Institute. My goal is to provide quality study materials and important filtered questions to help students excel in their academic journey.
-              </p>
-              
-              {/* Instagram Link */}
-              <a
-                href="https://instagram.com/code_with_06"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  background: 'linear-gradient(135deg, #f093fb, #f5576c)',
-                  color: '#fff',
-                  padding: '0.9rem 2rem',
-                  borderRadius: '50px',
-                  textDecoration: 'none',
-                  fontWeight: '600',
-                  fontSize: '1rem',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: '0 6px 20px rgba(240, 147, 251, 0.3)'
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-3px) scale(1.02)';
-                  e.currentTarget.style.boxShadow = '0 10px 30px rgba(240, 147, 251, 0.4)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)';
-                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(240, 147, 251, 0.3)';
-                }}
-              >
-                <Instagram size={22} />
-                Follow on Instagram
-              </a>
+          </div>
+
+          {/* Content */}
+          <div style={{ flex: 1 }}>
+            <h3 style={{ fontSize: isMobile ? '1.2rem' : '1.4rem', fontWeight: '800', color: '#1e293b', marginBottom: '2px' }}>
+              Faizan Tariq
+            </h3>
+            <div style={{ fontSize: '0.82rem', color: '#6366f1', fontWeight: '600', marginBottom: '10px' }}>
+              Software Engineering • ILS Srinagar
             </div>
+            <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6, margin: '0 0 14px' }}>
+              Providing quality study materials & filtered important questions to help students excel — because we are students too.
+            </p>
+            <a
+              href="https://instagram.com/code_with_06"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                background: 'linear-gradient(135deg, #f093fb, #f5576c)',
+                color: '#fff', padding: '8px 18px',
+                borderRadius: '50px', textDecoration: 'none',
+                fontWeight: '600', fontSize: '0.82rem',
+                boxShadow: '0 4px 14px rgba(240,147,251,0.3)',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(240,147,251,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 14px rgba(240,147,251,0.3)';
+              }}
+            >
+              <Instagram size={16} /> Follow on Instagram
+            </a>
           </div>
         </div>
       </section>
 
       <style>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
         @keyframes blink {
           0%, 50% { opacity: 1; }
           51%, 100% { opacity: 0; }

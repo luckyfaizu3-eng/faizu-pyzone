@@ -12,62 +12,65 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 
+// ✅ Cloudinary Config
+const CLOUDINARY_CLOUD_NAME = 'dwhkxqnd1';
+
 // Collections
 const PRODUCTS_COLLECTION = 'products';
 const ORDERS_COLLECTION = 'orders';
 
-// Upload PDF (temporary base64 solution)
+// ✅ Upload PDF to Cloudinary (using ml_default unsigned preset)
 export const uploadPDF = async (file, folder = 'pdfs') => {
   try {
-    const reader = new FileReader();
-    
-    return new Promise((resolve, reject) => {
-      reader.onload = () => {
-        const base64 = reader.result;
-        console.log('✅ PDF converted to base64');
-        resolve({ 
-          success: true, 
-          url: base64,
-          fileName: file.name,
-          note: 'Using temporary base64 storage'
-        });
-      };
-      
-      reader.onerror = () => {
-        console.error('❌ PDF conversion error');
-        reject({ success: false, error: 'Failed to process PDF' });
-      };
-      
-      reader.readAsDataURL(file);
-    });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'ml_default');
+    formData.append('folder', folder);
+    formData.append('resource_type', 'raw');
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,
+      { method: 'POST', body: formData }
+    );
+
+    const result = await response.json();
+
+    if (result.secure_url) {
+      console.log('✅ PDF uploaded to Cloudinary:', result.secure_url);
+      return { success: true, url: result.secure_url, fileName: file.name };
+    }
+
+    console.error('❌ Cloudinary PDF error:', result);
+    return { success: false, error: result.error?.message || 'PDF upload failed' };
   } catch (error) {
     console.error('❌ PDF upload error:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-// Upload Image/Thumbnail
+// ✅ Upload Image to Cloudinary (using ml_default unsigned preset)
 export const uploadImage = async (file) => {
   try {
-    const reader = new FileReader();
-    
-    return new Promise((resolve, reject) => {
-      reader.onload = () => {
-        const base64 = reader.result;
-        console.log('✅ Image converted to base64');
-        resolve({ 
-          success: true, 
-          url: base64,
-          fileName: file.name 
-        });
-      };
-      
-      reader.onerror = () => {
-        reject({ success: false, error: 'Failed to process image' });
-      };
-      
-      reader.readAsDataURL(file);
-    });
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', 'ml_default');
+    formData.append('folder', 'thumbnails');
+    formData.append('resource_type', 'image');
+
+    const response = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
+      { method: 'POST', body: formData }
+    );
+
+    const result = await response.json();
+
+    if (result.secure_url) {
+      console.log('✅ Image uploaded to Cloudinary:', result.secure_url);
+      return { success: true, url: result.secure_url, fileName: file.name };
+    }
+
+    console.error('❌ Cloudinary Image error:', result);
+    return { success: false, error: result.error?.message || 'Image upload failed' };
   } catch (error) {
     console.error('❌ Image upload error:', error.message);
     return { success: false, error: error.message };
@@ -155,9 +158,11 @@ export const addReview = async (productId, reviewData) => {
   }
 };
 
-// Add Order
+// ✅ Add Order
 export const addOrder = async (orderData) => {
   try {
+    console.log('📝 Saving order data:', JSON.stringify(orderData, null, 2));
+
     const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
       ...orderData,
       createdAt: serverTimestamp()
@@ -171,14 +176,17 @@ export const addOrder = async (orderData) => {
   }
 };
 
-// Get User Orders
+// ✅ Get User Orders
 export const getUserOrders = async (userEmail) => {
   try {
+    console.log('🔍 Fetching orders for:', userEmail);
+
     const querySnapshot = await getDocs(collection(db, ORDERS_COLLECTION));
     
     const orders = [];
     querySnapshot.forEach((doc) => {
       const orderData = doc.data();
+      console.log('📄 Order - email:', orderData.userEmail, '| match:', orderData.userEmail === userEmail);
       if (orderData.userEmail === userEmail) {
         orders.push({ id: doc.id, ...orderData });
       }

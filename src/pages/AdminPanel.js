@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader } from 'lucide-react';
-import { uploadPDF } from '../dbService';
+import { uploadPDF, uploadImage } from '../dbService';
 
 function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -20,7 +20,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     language: 'English',
     image: '📚',
     customCategory: '',
-    // Bundle fields
     individualPrice: '',
     discount: '',
     itemsIncluded: ''
@@ -76,23 +75,36 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
 
     try {
       let pdfUrl = '';
+      let pdfFileName = '';
       let thumbnailUrl = '';
 
-      // Upload PDF if not bundle
+      // ✅ Upload PDF to Cloudinary
       if (pdfFile && !isBundle) {
-        if (typeof uploadPDF === 'function') {
-          const pdfResult = await uploadPDF(pdfFile);
-          if (pdfResult.success) {
-            pdfUrl = pdfResult.url;
-          }
+        console.log('📤 Uploading PDF to Cloudinary...');
+        const pdfResult = await uploadPDF(pdfFile);
+        if (pdfResult.success) {
+          pdfUrl = pdfResult.url;
+          pdfFileName = pdfResult.fileName;
+          console.log('✅ PDF URL:', pdfUrl);
         } else {
-          pdfUrl = URL.createObjectURL(pdfFile);
+          window.showToast?.('❌ PDF upload failed: ' + pdfResult.error, 'error');
+          setUploading(false);
+          return;
         }
       }
 
-      // Upload Thumbnail
+      // ✅ Upload Thumbnail to Cloudinary
       if (thumbnailFile) {
-        thumbnailUrl = URL.createObjectURL(thumbnailFile);
+        console.log('📤 Uploading Thumbnail to Cloudinary...');
+        const thumbResult = await uploadImage(thumbnailFile);
+        if (thumbResult.success) {
+          thumbnailUrl = thumbResult.url;
+          console.log('✅ Thumbnail URL:', thumbnailUrl);
+        } else {
+          window.showToast?.('❌ Thumbnail upload failed: ' + thumbResult.error, 'error');
+          setUploading(false);
+          return;
+        }
       }
 
       // Create product data
@@ -107,9 +119,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         language: formData.language,
         image: formData.image,
         pdfUrl: pdfUrl,
-        pdfFileName: pdfFile?.name || null,
+        pdfFileName: pdfFileName || null,
         thumbnail: thumbnailUrl || null,
-        thumbnailFileName: thumbnailFile?.name || null,
         isBundle: isBundle
       };
 
@@ -123,11 +134,11 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         };
       }
 
-      // Only add customCategory if exists
       if (formData.category === 'custom' && formData.customCategory) {
         productData.customCategory = formData.customCategory;
       }
 
+      console.log('📝 Product data to save:', productData);
       await addProduct(productData);
       
       // Reset form
@@ -155,6 +166,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       window.showToast?.('✅ Product uploaded successfully!', 'success');
       
     } catch (error) {
+      console.error('❌ Upload error:', error);
       window.showToast?.('❌ Upload failed: ' + error.message, 'error');
     } finally {
       setUploading(false);
@@ -341,7 +353,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               }}>
                 <span style={{
                   position: 'absolute',
-                  content: '""',
                   height: '24px',
                   width: '24px',
                   left: isBundle ? '32px' : '4px',
@@ -501,7 +512,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     borderRadius: '12px',
                     fontSize: '1.05rem',
                     marginTop: '1rem',
-                    resize: 'vertical'
+                    resize: 'vertical',
+                    boxSizing: 'border-box'
                   }}
                 />
               </div>
@@ -592,10 +604,10 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   <Upload size={24} color={pdfFile ? '#10b981' : '#64748b'} />
                   <div>
                     <div style={{ fontWeight: '600', color: '#1e293b' }}>
-                      {pdfFile ? pdfFile.name : 'Click to upload PDF'}
+                      {pdfFile ? `✅ ${pdfFile.name}` : 'Click to upload PDF'}
                     </div>
                     <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                      PDF files only
+                      {pdfFile ? `Size: ${(pdfFile.size / 1024 / 1024).toFixed(2)} MB` : 'PDF files only'}
                     </div>
                   </div>
                   <input
@@ -636,7 +648,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 <ImageIcon size={24} color={thumbnailFile ? '#10b981' : '#64748b'} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: '600', color: '#1e293b' }}>
-                    {thumbnailFile ? thumbnailFile.name : 'Click to upload thumbnail'}
+                    {thumbnailFile ? `✅ ${thumbnailFile.name}` : 'Click to upload thumbnail'}
                   </div>
                   <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
                     PNG, JPG (recommended: 400x300px)
@@ -783,6 +795,30 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       gap: '0.25rem'
                     }}>
                       <Package size={14} /> BUNDLE
+                    </span>
+                  )}
+                  {/* ✅ PDF status indicator */}
+                  {product.pdfUrl ? (
+                    <span style={{
+                      background: 'rgba(16,185,129,0.1)',
+                      color: '#10b981',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600'
+                    }}>
+                      ✅ PDF Ready
+                    </span>
+                  ) : (
+                    <span style={{
+                      background: 'rgba(239,68,68,0.1)',
+                      color: '#ef4444',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600'
+                    }}>
+                      ❌ No PDF
                     </span>
                   )}
                 </div>

@@ -21,7 +21,4 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Storage will be added later when needed
-export const storage = null; // Temporarily disabled
-
 export default app;
