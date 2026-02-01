@@ -36,8 +36,8 @@ export const useCart = () => React.useContext(CartContext);
 export const useAuth = () => React.useContext(AuthContext);
 export const useTheme = () => React.useContext(ThemeContext);
 
-// Constants
-export const RAZORPAY_KEY_ID = "rzp_test_S6ZxzqSocanX62";
+// Constants - UPDATED TO LIVE KEY
+export const RAZORPAY_KEY_ID = process.env.REACT_APP_RAZORPAY_KEY_ID || "rzp_live_SAr5MEE3k1QCDz";
 
 export const CATEGORIES = [
   { id: 'all', name: 'All Notes', icon: '📚', color: '#6366f1' },
@@ -172,6 +172,11 @@ function App() {
   const removeFromCart = (productId) => {
     setCart(cart.filter(item => item.id !== productId));
     window.showToast?.('Removed from cart', 'info');
+  };
+
+  // ✅ CLEAR CART FUNCTION ADDED
+  const clearCart = () => {
+    setCart([]);
   };
 
   const buyNow = async (product) => {
@@ -348,7 +353,7 @@ function App() {
 
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
-      <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
+      <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, cartTotal, cartCount }}>
         <ThemeContext.Provider value={{ isDark }}>
           <div style={{
             minHeight: '100vh',
@@ -387,7 +392,7 @@ function App() {
                   addReview={addReview}
                 />
               )}
-              {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} />}
+              {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
               {currentPage === 'login' && <LoginPage />}
               {currentPage === 'orders' && <OrdersPage orders={orders} />}
               {currentPage === 'admin' && user?.isAdmin && (

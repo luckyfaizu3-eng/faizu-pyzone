@@ -1,9 +1,90 @@
-import React from 'react';
-import { ShoppingCart, Trash2, Download, Zap } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShoppingCart, Trash2, Download, Zap, Loader } from 'lucide-react';
 import { useCart } from '../App';
+import { db } from '../firebase';
+import { collection, addDoc } from 'firebase/firestore';
 
-function CartPage({ setCurrentPage, completeOrder }) {
-  const { cart, removeFromCart, cartTotal } = useCart();
+function CartPage({ setCurrentPage, completeOrder, user }) {
+  const { cart, removeFromCart, cartTotal, clearCart } = useCart();
+  const [loading, setLoading] = useState(false);
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handlePayment = async () => {
+    if (!user) {
+      alert('Please login first to complete purchase!');
+      setCurrentPage('login');
+      return;
+    }
+
+    setLoading(true);
+
+    // Load Razorpay script
+    const scriptLoaded = await loadRazorpayScript();
+    if (!scriptLoaded) {
+      alert('Razorpay SDK failed to load. Please check your internet connection.');
+      setLoading(false);
+      return;
+    }
+
+    // Razorpay options
+    const options = {
+      key: process.env.REACT_APP_RAZORPAY_KEY_ID,
+      amount: cartTotal * 100, // Convert to paise
+      currency: 'INR',
+      name: 'FaizUpyZone',
+      description: 'Purchase Study Notes',
+      image: '/logo192.png',
+      handler: async function (response) {
+        try {
+          // Payment successful - Save order to Firebase
+          const orderData = {
+            userId: user.uid,
+            userEmail: user.email,
+            items: cart,
+            total: cartTotal,
+            paymentId: response.razorpay_payment_id,
+            status: 'completed',
+            createdAt: new Date().toISOString()
+          };
+
+          await addDoc(collection(db, 'orders'), orderData);
+          
+          window.showToast?.('✅ Payment Successful! Your notes are ready to download.', 'success');
+          clearCart();
+          setCurrentPage('orders');
+        } catch (error) {
+          console.error('Error saving order:', error);
+          alert('Payment received but order save failed. Please contact support with Payment ID: ' + response.razorpay_payment_id);
+        }
+        setLoading(false);
+      },
+      prefill: {
+        email: user?.email || '',
+        contact: user?.phoneNumber || ''
+      },
+      theme: {
+        color: '#6366f1'
+      },
+      modal: {
+        ondismiss: function() {
+          setLoading(false);
+          window.showToast?.('Payment cancelled 🛒', 'info');
+        }
+      }
+    };
+
+    const razorpay = new window.Razorpay(options);
+    razorpay.open();
+  };
 
   if (cart.length === 0) {
     return (
@@ -223,16 +304,19 @@ function CartPage({ setCurrentPage, completeOrder }) {
             </span>
           </div>
           <button 
-            onClick={completeOrder} 
+            onClick={handlePayment}
+            disabled={loading}
             style={{
               width: '100%',
-              background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+              background: loading 
+                ? '#94a3b8' 
+                : 'linear-gradient(135deg, #6366f1, #ec4899)',
               border: 'none',
               color: 'white',
               padding: '1.5rem',
               fontSize: '1.5rem',
               borderRadius: '16px',
-              cursor: 'pointer',
+              cursor: loading ? 'not-allowed' : 'pointer',
               fontWeight: '900',
               display: 'flex',
               alignItems: 'center',
@@ -242,18 +326,29 @@ function CartPage({ setCurrentPage, completeOrder }) {
               transition: 'all 0.3s ease'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-3px)';
-              e.currentTarget.style.boxShadow = '0 15px 50px rgba(99,102,241,0.5)';
+              if (!loading) {
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = '0 15px 50px rgba(99,102,241,0.5)';
+              }
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 10px 40px rgba(99,102,241,0.4)';
+              if (!loading) {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 10px 40px rgba(99,102,241,0.4)';
+              }
             }}
-            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            <Zap size={28} />
-            Proceed to Checkout
+            {loading ? (
+              <>
+                <Loader size={28} className="spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Zap size={28} />
+                Pay ₹{cartTotal} - Proceed to Checkout
+              </>
+            )}
           </button>
         </div>
       </div>
