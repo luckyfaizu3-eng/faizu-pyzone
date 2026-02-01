@@ -14,31 +14,33 @@ import {
 
 // Cloudinary Config
 const CLOUDINARY_CLOUD_NAME = 'dwhkxqnd1';
+const CLOUDINARY_UPLOAD_PRESET = 'ml_default';
 
 // Collections
 const PRODUCTS_COLLECTION = 'products';
 const ORDERS_COLLECTION = 'orders';
 
-// ✅ PERMANENT FIX: Upload PDF to Cloudinary with proper download support
+// ✅ FIXED: Upload PDF to Cloudinary (CORRECT ENDPOINT)
 export const uploadPDF = async (file, folder = 'pdfs') => {
   try {
     console.log('Uploading PDF to Cloudinary...');
     
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', 'ml_default');
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     formData.append('folder', folder);
-    formData.append('resource_type', 'auto'); // Changed from 'raw' to 'auto'
+    formData.append('resource_type', 'raw'); // Important: 'raw' for PDFs
 
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`,
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, // ✅ FIXED: /raw/upload
       { method: 'POST', body: formData }
     );
 
     const result = await response.json();
+    console.log('Cloudinary response:', result);
 
     if (result.secure_url) {
-      console.log('✅ PDF uploaded to Cloudinary:', result.secure_url);
+      console.log('✅ PDF uploaded:', result.secure_url);
       return { 
         success: true, 
         url: result.secure_url, 
@@ -47,20 +49,25 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
       };
     }
 
-    console.error('❌ Cloudinary PDF error:', result);
-    return { success: false, error: result.error?.message || 'PDF upload failed' };
+    console.error('❌ Cloudinary error:', result);
+    return { 
+      success: false, 
+      error: result.error?.message || 'Upload failed' 
+    };
   } catch (error) {
-    console.error('❌ PDF upload error:', error.message);
+    console.error('❌ Upload error:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-// ✅ Upload Image to Cloudinary
+// Upload Image to Cloudinary
 export const uploadImage = async (file) => {
   try {
+    console.log('Uploading image...');
+    
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('upload_preset', 'ml_default');
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     formData.append('folder', 'thumbnails');
     formData.append('resource_type', 'image');
 
@@ -72,14 +79,17 @@ export const uploadImage = async (file) => {
     const result = await response.json();
 
     if (result.secure_url) {
-      console.log('✅ Image uploaded to Cloudinary:', result.secure_url);
+      console.log('✅ Image uploaded:', result.secure_url);
       return { success: true, url: result.secure_url, fileName: file.name };
     }
 
-    console.error('❌ Cloudinary Image error:', result);
-    return { success: false, error: result.error?.message || 'Image upload failed' };
+    console.error('❌ Image error:', result);
+    return { 
+      success: false, 
+      error: result.error?.message || 'Image upload failed' 
+    };
   } catch (error) {
-    console.error('❌ Image upload error:', error.message);
+    console.error('❌ Image error:', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -94,7 +104,7 @@ export const addProduct = async (productData) => {
       reviews: []
     });
     
-    console.log('✅ Product added with ID:', docRef.id);
+    console.log('✅ Product added:', docRef.id);
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error('❌ Add product error:', error.message);
@@ -118,7 +128,7 @@ export const getAllProducts = async () => {
   } catch (error) {
     console.error('❌ Fetch products error:', error.message);
     if (error.message.includes('indexes')) {
-      console.log('⚠️ Creating indexes... Try again in a minute');
+      console.log('⚠️ Creating indexes...');
       return { success: true, products: [] };
     }
     return { success: false, error: error.message, products: [] };
@@ -128,11 +138,20 @@ export const getAllProducts = async () => {
 // Delete Product
 export const deleteProduct = async (productId) => {
   try {
-    await deleteDoc(doc(db, PRODUCTS_COLLECTION, productId));
+    console.log('Deleting product:', productId);
+    
+    const productRef = doc(db, PRODUCTS_COLLECTION, productId);
+    await deleteDoc(productRef);
+    
     console.log('✅ Product deleted:', productId);
     return { success: true };
   } catch (error) {
-    console.error('❌ Delete product error:', error.message);
+    console.error('❌ Delete error:', error);
+    
+    if (error.code === 'permission-denied') {
+      return { success: false, error: 'Permission denied. Logout and login again.' };
+    }
+    
     return { success: false, error: error.message };
   }
 };
@@ -145,22 +164,22 @@ export const updateProduct = async (productId, updates) => {
     console.log('✅ Product updated:', productId);
     return { success: true };
   } catch (error) {
-    console.error('❌ Update product error:', error.message);
+    console.error('❌ Update error:', error.message);
     return { success: false, error: error.message };
   }
 };
 
-// Add Review to Product
+// Add Review
 export const addReview = async (productId, reviewData) => {
   try {
     const productRef = doc(db, PRODUCTS_COLLECTION, productId);
     await updateDoc(productRef, {
       reviews: arrayUnion(reviewData)
     });
-    console.log('✅ Review added to product:', productId);
+    console.log('✅ Review added:', productId);
     return { success: true };
   } catch (error) {
-    console.error('❌ Add review error:', error.message);
+    console.error('❌ Review error:', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -168,17 +187,17 @@ export const addReview = async (productId, reviewData) => {
 // Add Order
 export const addOrder = async (orderData) => {
   try {
-    console.log('📝 Saving order data:', JSON.stringify(orderData, null, 2));
+    console.log('💾 Saving order:', JSON.stringify(orderData, null, 2));
 
     const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
       ...orderData,
       createdAt: serverTimestamp()
     });
     
-    console.log('✅ Order added with ID:', docRef.id);
+    console.log('✅ Order saved:', docRef.id);
     return { success: true, id: docRef.id };
   } catch (error) {
-    console.error('❌ Add order error:', error.message);
+    console.error('❌ Order error:', error.message);
     return { success: false, error: error.message };
   }
 };
@@ -200,10 +219,10 @@ export const getUserOrders = async (userEmail) => {
       }
     });
     
-    console.log('✅ Orders fetched:', orders.length);
+    console.log('✅ Orders found:', orders.length);
     return { success: true, orders };
   } catch (error) {
-    console.error('❌ Fetch orders error:', error.message);
+    console.error('❌ Orders error:', error.message);
     return { success: false, error: error.message, orders: [] };
   }
 };
@@ -219,10 +238,10 @@ export const getAllOrders = async () => {
       orders.push({ id: doc.id, ...doc.data() });
     });
     
-    console.log('✅ All orders fetched:', orders.length);
+    console.log('✅ All orders:', orders.length);
     return { success: true, orders };
   } catch (error) {
-    console.error('❌ Fetch all orders error:', error.message);
+    console.error('❌ All orders error:', error.message);
     return { success: false, error: error.message, orders: [] };
   }
 };
