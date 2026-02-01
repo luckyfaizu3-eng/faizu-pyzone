@@ -12,30 +12,33 @@ function OrdersPage({ orders }) {
   }, [orders, user]);
 
   const handleDownload = (item) => {
-    console.log('Download URL:', item.pdfUrl);
+    console.log('Original URL:', item.pdfUrl);
     
-    // ✅ Fix wrong URLs on the fly for old orders
+    // ✅ Fix wrong URLs on the fly
     let downloadUrl = item.pdfUrl;
     
-    // If URL has /image/upload/ instead of /raw/upload/, fix it
+    // Fix 1: /image/upload/ → /raw/upload/
     if (downloadUrl.includes('/image/upload/') && downloadUrl.endsWith('.pdf')) {
       downloadUrl = downloadUrl.replace('/image/upload/', '/raw/upload/');
-      console.log('Fixed URL:', downloadUrl);
     }
     
+    // ✅ Fix 2: Remove version number from /raw/upload/ URLs
+    if (downloadUrl.includes('/raw/upload/v')) {
+      downloadUrl = downloadUrl.replace(/\/raw\/upload\/v\d+\//, '/raw/upload/');
+      console.log('Fixed version URL:', downloadUrl);
+    }
+    
+    console.log('Final URL:', downloadUrl);
     window.showToast?.('📥 Starting download...', 'info');
     
-    // WORKING METHOD: Use window.open with download attribute
-    const downloadLink = document.createElement('a');
-    downloadLink.href = downloadUrl;
-    downloadLink.download = item.pdfFileName || `${item.title}.pdf`;
-    downloadLink.target = '_blank';
-    downloadLink.rel = 'noopener noreferrer';
-    
-    // Trigger download
-    document.body.appendChild(downloadLink);
-    downloadLink.click();
-    document.body.removeChild(downloadLink);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = item.pdfFileName || `${item.title}.pdf`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
     
     setTimeout(() => {
       window.showToast?.('✅ Download started! Check your downloads.', 'success');
