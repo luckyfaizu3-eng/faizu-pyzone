@@ -12,23 +12,27 @@ function OrdersPage({ orders }) {
   }, [orders, user]);
 
   const handleDownload = (item) => {
+    console.log('=== DOWNLOAD DEBUG ===');
     console.log('Original URL:', item.pdfUrl);
     
-    // ✅ Fix wrong URLs on the fly
+    // ✅ Enhanced URL Fix - Handles ALL cases
     let downloadUrl = item.pdfUrl;
     
     // Fix 1: /image/upload/ → /raw/upload/
     if (downloadUrl.includes('/image/upload/') && downloadUrl.endsWith('.pdf')) {
       downloadUrl = downloadUrl.replace('/image/upload/', '/raw/upload/');
+      console.log('✅ Fixed /image/ → /raw/');
     }
     
-    // ✅ Fix 2: Remove version number from /raw/upload/ URLs
+    // Fix 2: Remove version number from /raw/upload/vXXXXXX/ URLs
     if (downloadUrl.includes('/raw/upload/v')) {
       downloadUrl = downloadUrl.replace(/\/raw\/upload\/v\d+\//, '/raw/upload/');
-      console.log('Fixed version URL:', downloadUrl);
+      console.log('✅ Removed version number');
     }
     
     console.log('Final URL:', downloadUrl);
+    console.log('===================');
+    
     window.showToast?.('📥 Starting download...', 'info');
     
     const link = document.createElement('a');

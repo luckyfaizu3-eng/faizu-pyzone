@@ -1,14 +1,38 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Star, Zap, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw } from 'lucide-react';
 import { useCart } from '../App';
 import { CATEGORIES } from '../App';
+import { getAllProducts } from '../dbService';
 import ProductDetailPage from '../components/ProductDetailPage';
 
-function ProductsPage({ products, buyNow, selectedCategory, setSelectedCategory, searchQuery, addReview }) {
+function ProductsPage({ products, setProducts, buyNow, selectedCategory, setSelectedCategory, searchQuery, addReview }) {
   const { addToCart } = useCart();
   const [hoveredCard, setHoveredCard] = useState(null);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  // ✅ Manual Refresh Function
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    window.showToast?.('🔄 Refreshing products...', 'info');
+    
+    try {
+      const result = await getAllProducts();
+      if (result.success) {
+        setProducts(result.products);
+        window.showToast?.(`✅ Refreshed! ${result.products.length} products loaded`, 'success');
+        console.log('✅ Manual refresh successful:', result.products.length);
+      } else {
+        window.showToast?.('❌ Refresh failed: ' + result.error, 'error');
+      }
+    } catch (error) {
+      console.error('❌ Refresh error:', error);
+      window.showToast?.('❌ Refresh failed!', 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const customCategories = [...new Set(products.filter(p => p.customCategory).map(p => p.customCategory))];
   const allCategories = [...CATEGORIES, ...customCategories.map(name => ({ 
@@ -48,14 +72,18 @@ function ProductsPage({ products, buyNow, selectedCategory, setSelectedCategory,
         Browse Study Notes
       </h1>
       
-      {/* Category Dropdown - CLEAN & PROFESSIONAL */}
+      {/* Category Dropdown + Refresh Button */}
       <div style={{
         maxWidth: '1400px',
         margin: '0 auto 3rem',
         display: 'flex',
         justifyContent: 'center',
-        padding: '0 1rem'
+        alignItems: 'center',
+        gap: '1rem',
+        padding: '0 1rem',
+        flexWrap: 'wrap'
       }}>
+        {/* Category Dropdown */}
         <div style={{ position: 'relative', width: '100%', maxWidth: '320px' }}>
           <button
             onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
@@ -155,6 +183,50 @@ function ProductsPage({ products, buyNow, selectedCategory, setSelectedCategory,
             </div>
           )}
         </div>
+
+        {/* ✅ Refresh Button */}
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          style={{
+            background: refreshing ? 'rgba(99,102,241,0.1)' : '#ffffff',
+            border: '2px solid #e2e8f0',
+            borderRadius: '16px',
+            padding: '1rem 1.5rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem',
+            cursor: refreshing ? 'not-allowed' : 'pointer',
+            fontSize: '1.05rem',
+            fontWeight: '600',
+            color: '#6366f1',
+            transition: 'all 0.3s ease',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+            opacity: refreshing ? 0.6 : 1
+          }}
+          onMouseEnter={(e) => {
+            if (!refreshing) {
+              e.currentTarget.style.borderColor = '#6366f1';
+              e.currentTarget.style.boxShadow = '0 8px 30px rgba(99,102,241,0.15)';
+              e.currentTarget.style.background = 'rgba(99,102,241,0.05)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!refreshing) {
+              e.currentTarget.style.borderColor = '#e2e8f0';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0,0,0,0.05)';
+              e.currentTarget.style.background = '#ffffff';
+            }
+          }}
+        >
+          <RefreshCw 
+            size={20} 
+            style={{
+              animation: refreshing ? 'spin 1s linear infinite' : 'none'
+            }}
+          />
+          <span>{refreshing ? 'Refreshing...' : 'Refresh'}</span>
+        </button>
       </div>
       
       {/* Products Grid */}
@@ -179,10 +251,30 @@ function ProductsPage({ products, buyNow, selectedCategory, setSelectedCategory,
           </h2>
           <p style={{
             color: '#94a3b8',
-            fontSize: '1.1rem'
+            fontSize: '1.1rem',
+            marginBottom: '2rem'
           }}>
             {searchQuery ? 'Try different keywords' : 'Check back soon or browse other categories!'}
           </p>
+          <button
+            onClick={handleRefresh}
+            style={{
+              background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+              border: 'none',
+              color: '#fff',
+              padding: '1rem 2rem',
+              borderRadius: '12px',
+              cursor: 'pointer',
+              fontWeight: '700',
+              fontSize: '1rem',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.75rem'
+            }}
+          >
+            <RefreshCw size={20} />
+            Refresh Products
+          </button>
         </div>
       ) : (
         <div style={{
@@ -448,6 +540,10 @@ function ProductsPage({ products, buyNow, selectedCategory, setSelectedCategory,
             opacity: 1;
             transform: translateY(0);
           }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>

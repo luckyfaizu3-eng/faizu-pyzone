@@ -75,18 +75,34 @@ function App() {
     };
   }, []);
 
-  // Load products from Firebase
+  // ✅ ENHANCED: Load products from Firebase with auto-refresh
   useEffect(() => {
     const loadProducts = async () => {
+      console.log('📦 Loading products from Firebase...');
       const result = await getAllProducts();
       if (result.success) {
+        console.log(`✅ Products loaded: ${result.products.length} items`);
         setProducts(result.products);
+      } else {
+        console.error('❌ Failed to load products:', result.error);
       }
     };
+    
+    // Initial load
     loadProducts();
-  }, []);
+    
+    // ✅ AUTO-REFRESH: Reload products every 30 seconds when on products page
+    const interval = setInterval(() => {
+      if (currentPage === 'products') {
+        console.log('🔄 Auto-refreshing products...');
+        loadProducts();
+      }
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [currentPage]);
 
-  // Load user orders - ✅ WITH EMAIL NORMALIZATION
+  // ✅ ENHANCED: Load user orders with email normalization and better logging
   useEffect(() => {
     const loadOrders = async () => {
       if (user?.email) {
@@ -98,9 +114,13 @@ function App() {
           if (result.success) {
             setOrders(result.orders);
             console.log('✅ Orders loaded:', result.orders.length);
+            
+            // Show success message only if orders exist
             if (result.orders.length > 0) {
-              window.showToast?.(`📦 ${result.orders.length} orders found`, 'success');
+              window.showToast?.(`📦 ${result.orders.length} order${result.orders.length > 1 ? 's' : ''} found`, 'success');
             }
+          } else {
+            console.error('❌ Failed to load orders:', result.error);
           }
         } catch (err) {
           console.error('❌ Error loading orders:', err);
@@ -123,8 +143,10 @@ function App() {
           uid: firebaseUser.uid,
           isAdmin: isAdmin(firebaseUser.email)
         });
+        console.log('👤 User logged in:', firebaseUser.email);
       } else {
         setUser(null);
+        console.log('👤 User logged out');
       }
     });
     return () => unsubscribe();
@@ -190,7 +212,7 @@ function App() {
     setCart([]);
   };
 
-  // ✅ BUY NOW - WITH EMAIL NORMALIZATION
+  // ✅ ENHANCED: BUY NOW with email normalization and better order tracking
   const buyNow = async (product) => {
     if (!user) {
       window.showToast?.('Please login first! 🔐', 'error');
@@ -217,13 +239,13 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
-      console.log('💾 Saving order:', newOrder);
+      console.log('💾 Saving order:', JSON.stringify(newOrder, null, 2));
       
       const result = await addOrderDB(newOrder);
       if (result.success) {
-        console.log('✅ Order saved successfully!');
+        console.log('✅ Order saved successfully! Order ID:', result.id);
         
-        // FORCE RELOAD ORDERS
+        // ✅ FORCE RELOAD ORDERS
         const updatedOrders = await getUserOrders(normalizedEmail);
         if (updatedOrders.success) {
           setOrders(updatedOrders.orders);
@@ -282,7 +304,7 @@ function App() {
     }
   };
 
-  // ✅ COMPLETE ORDER - WITH EMAIL NORMALIZATION
+  // ✅ ENHANCED: COMPLETE ORDER with email normalization and force reload
   const completeOrder = () => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -309,13 +331,13 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
-      console.log('💾 Saving order:', newOrder);
+      console.log('💾 Saving cart order:', JSON.stringify(newOrder, null, 2));
       
       const result = await addOrderDB(newOrder);
       if (result.success) {
-        console.log('✅ Order saved successfully!');
+        console.log('✅ Cart order saved successfully! Order ID:', result.id);
         
-        // FORCE RELOAD ORDERS
+        // ✅ FORCE RELOAD ORDERS
         const updatedOrders = await getUserOrders(normalizedEmail);
         if (updatedOrders.success) {
           setOrders(updatedOrders.orders);
@@ -333,7 +355,7 @@ function App() {
           window.showToast?.('🎊 Order placed! Download your PDFs!', 'success');
         }, 500);
       } else {
-        console.error('❌ Order save failed:', result.error);
+        console.error('❌ Cart order save failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -346,26 +368,33 @@ function App() {
       totalDownloads: 0
     };
     
+    console.log('📤 Adding product:', productData.title);
     const result = await addProductDB(productData);
     if (result.success) {
       setProducts([...products, { id: result.id, ...productData }]);
       window.showToast?.('✅ Product uploaded!', 'success');
+      console.log('✅ Product added successfully! ID:', result.id);
     } else {
       window.showToast?.('❌ Upload failed: ' + result.error, 'error');
+      console.error('❌ Product add failed:', result.error);
     }
   };
 
   const deleteProduct = async (id) => {
+    console.log('🗑️ Deleting product:', id);
     const result = await deleteProductDB(id);
     if (result.success) {
       setProducts(products.filter(p => p.id !== id));
       window.showToast?.('✅ Product deleted!', 'success');
+      console.log('✅ Product deleted successfully');
     } else {
       window.showToast?.('❌ Delete failed: ' + result.error, 'error');
+      console.error('❌ Product delete failed:', result.error);
     }
   };
 
   const addReview = async (productId, reviewData) => {
+    console.log('⭐ Adding review to product:', productId);
     const result = await addReviewDB(productId, reviewData);
     if (result.success) {
       // Reload products to get updated reviews
@@ -374,8 +403,10 @@ function App() {
         setProducts(updatedProducts.products);
       }
       window.showToast?.('✅ Review added!', 'success');
+      console.log('✅ Review added successfully');
     } else {
       window.showToast?.('❌ Failed to add review: ' + result.error, 'error');
+      console.error('❌ Review add failed:', result.error);
     }
   };
 
@@ -412,7 +443,8 @@ function App() {
               {currentPage === 'home' && <HomePage setCurrentPage={setCurrentPage} />}
               {currentPage === 'products' && (
                 <ProductsPage 
-                  products={products} 
+                  products={products}
+                  setProducts={setProducts}  // ✅ ADDED: Allow manual refresh
                   buyNow={buyNow} 
                   selectedCategory={selectedCategory} 
                   setSelectedCategory={setSelectedCategory} 
