@@ -12,12 +12,22 @@ function OrdersPage({ orders }) {
   }, [orders, user]);
 
   const handleDownload = (item) => {
-    console.log('Downloading:', item.pdfUrl);
+    console.log('Download URL:', item.pdfUrl);
+    
+    // ✅ Fix wrong URLs on the fly for old orders
+    let downloadUrl = item.pdfUrl;
+    
+    // If URL has /image/upload/ instead of /raw/upload/, fix it
+    if (downloadUrl.includes('/image/upload/') && downloadUrl.endsWith('.pdf')) {
+      downloadUrl = downloadUrl.replace('/image/upload/', '/raw/upload/');
+      console.log('Fixed URL:', downloadUrl);
+    }
+    
     window.showToast?.('📥 Starting download...', 'info');
     
     // WORKING METHOD: Use window.open with download attribute
     const downloadLink = document.createElement('a');
-    downloadLink.href = item.pdfUrl;
+    downloadLink.href = downloadUrl;
     downloadLink.download = item.pdfFileName || `${item.title}.pdf`;
     downloadLink.target = '_blank';
     downloadLink.rel = 'noopener noreferrer';
