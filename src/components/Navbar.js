@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Search, Menu, X, Sun, Moon, User, LogOut } from 'lucide-react';
+import { ShoppingCart, Search, Menu, X, User, LogOut } from 'lucide-react';
 
 const Navbar = ({ 
   currentPage, 
