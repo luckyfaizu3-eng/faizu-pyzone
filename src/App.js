@@ -86,17 +86,24 @@ function App() {
     loadProducts();
   }, []);
 
-  // Load user orders
+  // Load user orders - ✅ WITH EMAIL NORMALIZATION
   useEffect(() => {
     const loadOrders = async () => {
       if (user?.email) {
         try {
-          const result = await getUserOrders(user.email.trim().toLowerCase());
+          const normalizedEmail = user.email.trim().toLowerCase();
+          console.log('🔍 Loading orders for:', normalizedEmail);
+          
+          const result = await getUserOrders(normalizedEmail);
           if (result.success) {
             setOrders(result.orders);
-            window.showToast?.(`📦 ${result.orders.length} orders found`, 'info');
+            console.log('✅ Orders loaded:', result.orders.length);
+            if (result.orders.length > 0) {
+              window.showToast?.(`📦 ${result.orders.length} orders found`, 'success');
+            }
           }
         } catch (err) {
+          console.error('❌ Error loading orders:', err);
           window.showToast?.('❌ Error loading orders: ' + err.message, 'error');
         }
       } else {
@@ -137,7 +144,7 @@ function App() {
       description: "Premium Study Materials",
       image: "https://img.icons8.com/fluency/96/000000/graduation-cap.png",
       handler: async function (response) {
-        window.showToast?.('🎉 Payment Successful! Redirecting to orders...', 'success');
+        window.showToast?.('🎉 Payment Successful! Processing order...', 'success');
         setTimeout(async () => {
           await onSuccess(response);
         }, 1500);
@@ -179,11 +186,11 @@ function App() {
     window.showToast?.('Removed from cart', 'info');
   };
 
-  // ✅ CLEAR CART FUNCTION ADDED
   const clearCart = () => {
     setCart([]);
   };
 
+  // ✅ BUY NOW - WITH EMAIL NORMALIZATION
   const buyNow = async (product) => {
     if (!user) {
       window.showToast?.('Please login first! 🔐', 'error');
@@ -192,8 +199,10 @@ function App() {
     }
 
     initiatePayment(product.price, [product], async (response) => {
+      const normalizedEmail = user.email.trim().toLowerCase();
+      
       const newOrder = {
-        userEmail: user.email,
+        userEmail: normalizedEmail, // ✅ NORMALIZED EMAIL
         items: [{
           id: product.id,
           title: product.title,
@@ -208,13 +217,17 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
+      console.log('💾 Saving order:', newOrder);
+      
       const result = await addOrderDB(newOrder);
       if (result.success) {
+        console.log('✅ Order saved successfully!');
+        
         // FORCE RELOAD ORDERS
-        const updatedOrders = await getUserOrders(user.email);
+        const updatedOrders = await getUserOrders(normalizedEmail);
         if (updatedOrders.success) {
           setOrders(updatedOrders.orders);
-          console.log('✅ Orders updated:', updatedOrders.orders);
+          console.log('✅ Orders reloaded:', updatedOrders.orders.length);
         }
         
         // Navigate to orders page
@@ -225,6 +238,7 @@ function App() {
           window.showToast?.('🎊 Order placed! Download your PDF now!', 'success');
         }, 500);
       } else {
+        console.error('❌ Order save failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -262,11 +276,13 @@ function App() {
     if (result.success) {
       setUser(null);
       setCart([]);
+      setOrders([]);
       setCurrentPage('home');
       window.showToast?.('Logged out! 👋', 'info');
     }
   };
 
+  // ✅ COMPLETE ORDER - WITH EMAIL NORMALIZATION
   const completeOrder = () => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -275,8 +291,10 @@ function App() {
     }
 
     initiatePayment(cartTotal, cart, async (response) => {
+      const normalizedEmail = user.email.trim().toLowerCase();
+      
       const newOrder = {
-        userEmail: user.email,
+        userEmail: normalizedEmail, // ✅ NORMALIZED EMAIL
         items: cart.map(item => ({
           id: item.id,
           title: item.title,
@@ -291,13 +309,17 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
+      console.log('💾 Saving order:', newOrder);
+      
       const result = await addOrderDB(newOrder);
       if (result.success) {
+        console.log('✅ Order saved successfully!');
+        
         // FORCE RELOAD ORDERS
-        const updatedOrders = await getUserOrders(user.email);
+        const updatedOrders = await getUserOrders(normalizedEmail);
         if (updatedOrders.success) {
           setOrders(updatedOrders.orders);
-          console.log('✅ Orders updated:', updatedOrders.orders);
+          console.log('✅ Orders reloaded:', updatedOrders.orders.length);
         }
         
         // Clear cart
@@ -311,6 +333,7 @@ function App() {
           window.showToast?.('🎊 Order placed! Download your PDFs!', 'success');
         }, 500);
       } else {
+        console.error('❌ Order save failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });

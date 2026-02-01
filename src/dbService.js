@@ -12,24 +12,26 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 
-// ✅ Cloudinary Config
+// Cloudinary Config
 const CLOUDINARY_CLOUD_NAME = 'dwhkxqnd1';
 
 // Collections
 const PRODUCTS_COLLECTION = 'products';
 const ORDERS_COLLECTION = 'orders';
 
-// ✅ Upload PDF to Cloudinary (using ml_default unsigned preset)
+// ✅ PERMANENT FIX: Upload PDF to Cloudinary with proper download support
 export const uploadPDF = async (file, folder = 'pdfs') => {
   try {
+    console.log('Uploading PDF to Cloudinary...');
+    
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', 'ml_default');
     formData.append('folder', folder);
-    formData.append('resource_type', 'raw');
+    formData.append('resource_type', 'auto'); // Changed from 'raw' to 'auto'
 
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`,
       { method: 'POST', body: formData }
     );
 
@@ -37,7 +39,12 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
 
     if (result.secure_url) {
       console.log('✅ PDF uploaded to Cloudinary:', result.secure_url);
-      return { success: true, url: result.secure_url, fileName: file.name };
+      return { 
+        success: true, 
+        url: result.secure_url, 
+        publicId: result.public_id,
+        fileName: file.name 
+      };
     }
 
     console.error('❌ Cloudinary PDF error:', result);
@@ -48,7 +55,7 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
   }
 };
 
-// ✅ Upload Image to Cloudinary (using ml_default unsigned preset)
+// ✅ Upload Image to Cloudinary
 export const uploadImage = async (file) => {
   try {
     const formData = new FormData();
@@ -158,7 +165,7 @@ export const addReview = async (productId, reviewData) => {
   }
 };
 
-// ✅ Add Order
+// Add Order
 export const addOrder = async (orderData) => {
   try {
     console.log('📝 Saving order data:', JSON.stringify(orderData, null, 2));
@@ -176,7 +183,7 @@ export const addOrder = async (orderData) => {
   }
 };
 
-// ✅ Get User Orders - email normalize kar ke match karta hai
+// Get User Orders
 export const getUserOrders = async (userEmail) => {
   try {
     const normalizedEmail = userEmail.trim().toLowerCase();

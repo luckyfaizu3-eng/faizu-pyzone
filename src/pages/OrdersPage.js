@@ -1,8 +1,38 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Download, CheckCircle } from 'lucide-react';
+import { useAuth } from '../App';
 
 function OrdersPage({ orders }) {
-  if (orders.length === 0) {
+  const { user } = useAuth();
+
+  useEffect(() => {
+    console.log('=== ORDERS PAGE DEBUG ===');
+    console.log('User:', user?.email);
+    console.log('Orders:', orders?.length || 0);
+  }, [orders, user]);
+
+  const handleDownload = (item) => {
+    console.log('Downloading:', item.pdfUrl);
+    window.showToast?.('📥 Starting download...', 'info');
+    
+    // WORKING METHOD: Use window.open with download attribute
+    const downloadLink = document.createElement('a');
+    downloadLink.href = item.pdfUrl;
+    downloadLink.download = item.pdfFileName || `${item.title}.pdf`;
+    downloadLink.target = '_blank';
+    downloadLink.rel = 'noopener noreferrer';
+    
+    // Trigger download
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    
+    setTimeout(() => {
+      window.showToast?.('✅ Download started! Check your downloads.', 'success');
+    }, 500);
+  };
+
+  if (!orders || orders.length === 0) {
     return (
       <div style={{
         paddingTop: '120px',
@@ -62,7 +92,7 @@ function OrdersPage({ orders }) {
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent'
         }}>
-          My Orders
+          My Orders ({orders.length})
         </h1>
         
         {orders.map((order, index) => (
@@ -75,7 +105,7 @@ function OrdersPage({ orders }) {
               padding: '2.5rem',
               marginBottom: '2rem',
               boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-              animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`
+              animation: 'fadeInUp 0.6s ease ' + (index * 0.1) + 's backwards'
             }}
           >
             <div style={{
@@ -140,26 +170,16 @@ function OrdersPage({ orders }) {
                 </span>
               </div>
 
-              {/* DOWNLOAD BUTTONS - BIG & VISIBLE */}
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '1rem'
               }}>
                 {order.items.map(item => (
-                  <a 
-                    key={item.id} 
-                    href={item.pdfUrl} 
-                    download={item.pdfFileName || `${item.title}.pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{ 
-                      textDecoration: 'none',
-                      width: '100%'
-                    }}
-                    onClick={() => window.showToast?.(`📥 Downloading ${item.title}...`, 'info')}
-                  >
-                    <button style={{
+                  <button 
+                    key={item.id}
+                    onClick={() => handleDownload(item)}
+                    style={{
                       width: '100%',
                       background: 'linear-gradient(135deg, #10b981, #059669)',
                       border: 'none',
@@ -184,31 +204,28 @@ function OrdersPage({ orders }) {
                       e.currentTarget.style.transform = 'translateY(0)';
                       e.currentTarget.style.boxShadow = '0 4px 15px rgba(16,185,129,0.3)';
                     }}
-                    onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-                    onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                      <span style={{
-                        flex: 1,
-                        textAlign: 'left',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        📄 {item.title}
-                      </span>
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        background: 'rgba(255,255,255,0.2)',
-                        padding: '0.5rem 1rem',
-                        borderRadius: '20px'
-                      }}>
-                        <Download size={20} /> 
-                        Download PDF
-                      </div>
-                    </button>
-                  </a>
+                  >
+                    <span style={{
+                      flex: 1,
+                      textAlign: 'left',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      📄 {item.title}
+                    </span>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      background: 'rgba(255,255,255,0.2)',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '20px'
+                    }}>
+                      <Download size={20} /> 
+                      Download PDF
+                    </div>
+                  </button>
                 ))}
               </div>
             </div>
