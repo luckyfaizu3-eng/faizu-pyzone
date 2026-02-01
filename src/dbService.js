@@ -20,19 +20,19 @@ const CLOUDINARY_UPLOAD_PRESET = 'ml_default';
 const PRODUCTS_COLLECTION = 'products';
 const ORDERS_COLLECTION = 'orders';
 
-// ✅ FIXED: Upload PDF to Cloudinary (CORRECT ENDPOINT)
+// ✅ FIXED: Upload PDF with attachment flag for force download
 export const uploadPDF = async (file, folder = 'pdfs') => {
   try {
-    console.log('Uploading PDF to Cloudinary...');
+    console.log('📤 Uploading PDF to Cloudinary...');
     
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     formData.append('folder', folder);
-    formData.append('resource_type', 'raw'); // Important: 'raw' for PDFs
+    // Let preset handle resource type automatically
 
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, // ✅ FIXED: /raw/upload
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`,
       { method: 'POST', body: formData }
     );
 
@@ -40,10 +40,16 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
     console.log('Cloudinary response:', result);
 
     if (result.secure_url) {
-      console.log('✅ PDF uploaded:', result.secure_url);
+      // ✅ Add fl_attachment flag to force download
+      let downloadUrl = result.secure_url;
+      if (!downloadUrl.includes('fl_attachment')) {
+        downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
+      }
+      
+      console.log('✅ PDF uploaded:', downloadUrl);
       return { 
         success: true, 
-        url: result.secure_url, 
+        url: downloadUrl,
         publicId: result.public_id,
         fileName: file.name 
       };
@@ -235,7 +241,7 @@ export const getAllOrders = async () => {
     
     const orders = [];
     querySnapshot.forEach((doc) => {
-      orders.push({ id: doc.id, ...doc.data() });
+      orders.push({ id: doc.id, ...doc.data() }); // ✅ Fixed
     });
     
     console.log('✅ All orders:', orders.length);

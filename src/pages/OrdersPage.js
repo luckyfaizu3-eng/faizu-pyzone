@@ -11,42 +11,58 @@ function OrdersPage({ orders }) {
     console.log('Orders:', orders?.length || 0);
   }, [orders, user]);
 
-  const handleDownload = (item) => {
-    console.log('=== DOWNLOAD DEBUG ===');
+  const handleDownload = async (item) => {
+    console.log('📥 Starting download for:', item.title);
     console.log('Original URL:', item.pdfUrl);
     
-    // ✅ Enhanced URL Fix - Handles ALL cases
-    let downloadUrl = item.pdfUrl;
+    window.showToast?.('📥 Preparing download...', 'info');
     
-    // Fix 1: /image/upload/ → /raw/upload/
-    if (downloadUrl.includes('/image/upload/') && downloadUrl.endsWith('.pdf')) {
-      downloadUrl = downloadUrl.replace('/image/upload/', '/raw/upload/');
-      console.log('✅ Fixed /image/ → /raw/');
+    try {
+      let downloadUrl = item.pdfUrl;
+      
+      // Method 1: If publicId exists
+      if (item.publicId) {
+        downloadUrl = `https://res.cloudinary.com/dwhkxqnd1/image/upload/fl_attachment/${item.publicId}`;
+      } 
+      // Method 2: Fix URL format
+      else {
+        // Remove version number if exists: /v1234567/
+        downloadUrl = downloadUrl.replace(/\/v\d+\//, '/');
+        
+        // Convert to proper format
+        if (downloadUrl.includes('/raw/upload/')) {
+          downloadUrl = downloadUrl.replace('/raw/upload/', '/image/upload/fl_attachment/');
+        } else if (!downloadUrl.includes('fl_attachment')) {
+          downloadUrl = downloadUrl.replace('/upload/', '/upload/fl_attachment/');
+        }
+      }
+      
+      console.log('Final Download URL:', downloadUrl);
+      
+      // Fetch and download
+      const response = await fetch(downloadUrl);
+      
+      if (!response.ok) {
+        throw new Error('Download failed');
+      }
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = item.pdfFileName || `${item.title}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      URL.revokeObjectURL(blobUrl);
+      
+      window.showToast?.('✅ Download successful!', 'success');
+    } catch (error) {
+      console.error('Download error:', error);
+      window.showToast?.('❌ Download failed. Please contact support.', 'error');
     }
-    
-    // Fix 2: Remove version number from /raw/upload/vXXXXXX/ URLs
-    if (downloadUrl.includes('/raw/upload/v')) {
-      downloadUrl = downloadUrl.replace(/\/raw\/upload\/v\d+\//, '/raw/upload/');
-      console.log('✅ Removed version number');
-    }
-    
-    console.log('Final URL:', downloadUrl);
-    console.log('===================');
-    
-    window.showToast?.('📥 Starting download...', 'info');
-    
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = item.pdfFileName || `${item.title}.pdf`;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    setTimeout(() => {
-      window.showToast?.('✅ Download started! Check your downloads.', 'success');
-    }, 500);
   };
 
   if (!orders || orders.length === 0) {
