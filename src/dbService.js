@@ -176,23 +176,24 @@ export const addOrder = async (orderData) => {
   }
 };
 
-// ✅ Get User Orders
+// ✅ Get User Orders - email normalize kar ke match karta hai
 export const getUserOrders = async (userEmail) => {
   try {
-    console.log('🔍 Fetching orders for:', userEmail);
+    const normalizedEmail = userEmail.trim().toLowerCase();
+    console.log('🔍 Fetching orders for:', normalizedEmail);
 
     const querySnapshot = await getDocs(collection(db, ORDERS_COLLECTION));
     
     const orders = [];
     querySnapshot.forEach((doc) => {
       const orderData = doc.data();
-      console.log('📄 Order - email:', orderData.userEmail, '| match:', orderData.userEmail === userEmail);
-      if (orderData.userEmail === userEmail) {
+      const orderEmail = (orderData.userEmail || '').trim().toLowerCase();
+      if (orderEmail === normalizedEmail) {
         orders.push({ id: doc.id, ...orderData });
       }
     });
     
-    console.log('✅ Orders fetched for user:', orders.length);
+    console.log('✅ Orders fetched:', orders.length);
     return { success: true, orders };
   } catch (error) {
     console.error('❌ Fetch orders error:', error.message);

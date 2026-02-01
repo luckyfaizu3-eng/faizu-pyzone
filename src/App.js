@@ -90,9 +90,14 @@ function App() {
   useEffect(() => {
     const loadOrders = async () => {
       if (user?.email) {
-        const result = await getUserOrders(user.email);
-        if (result.success) {
-          setOrders(result.orders);
+        try {
+          const result = await getUserOrders(user.email.trim().toLowerCase());
+          if (result.success) {
+            setOrders(result.orders);
+            window.showToast?.(`📦 ${result.orders.length} orders found`, 'info');
+          }
+        } catch (err) {
+          window.showToast?.('❌ Error loading orders: ' + err.message, 'error');
         }
       } else {
         setOrders([]);
