@@ -7,17 +7,15 @@ import {
   getAllProducts, 
   deleteProduct as deleteProductDB, 
   addOrder as addOrderDB, 
-  getUserOrders,
-  addReview as addReviewDB
+  getUserOrders
 } from './dbService';
 
 // Import Components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Background from './components/Background';
-import WhatsAppButton from './components/WhatsAppButton';
+import TelegramButton from './components/TelegramButton';
 import ToastContainer from './components/ToastContainer';
-import MobileBanner from './components/MobileBanner';
 
 // Import Pages
 import HomePage from './pages/HomePage';
@@ -36,8 +34,8 @@ export const useCart = () => React.useContext(CartContext);
 export const useAuth = () => React.useContext(AuthContext);
 export const useTheme = () => React.useContext(ThemeContext);
 
-// Constants - UPDATED TO LIVE KEY
-export const RAZORPAY_KEY_ID = process.env.REACT_APP_RAZORPAY_KEY_ID || "rzp_live_SAr5MEE3k1QCDz";
+// ✅ LIVE RAZORPAY KEY
+export const RAZORPAY_KEY_ID = "rzp_live_SAvdBqaaBDr2qS";
 
 export const CATEGORIES = [
   { id: 'all', name: 'All Notes', icon: '📚', color: '#6366f1' },
@@ -75,56 +73,24 @@ function App() {
     };
   }, []);
 
-  // ✅ ENHANCED: Load products from Firebase with auto-refresh
+  // Load products from Firebase
   useEffect(() => {
     const loadProducts = async () => {
-      console.log('📦 Loading products from Firebase...');
       const result = await getAllProducts();
       if (result.success) {
-        console.log(`✅ Products loaded: ${result.products.length} items`);
         setProducts(result.products);
-      } else {
-        console.error('❌ Failed to load products:', result.error);
       }
     };
-    
-    // Initial load
     loadProducts();
-    
-    // ✅ AUTO-REFRESH: Reload products every 30 seconds when on products page
-    const interval = setInterval(() => {
-      if (currentPage === 'products') {
-        console.log('🔄 Auto-refreshing products...');
-        loadProducts();
-      }
-    }, 30000); // 30 seconds
-    
-    return () => clearInterval(interval);
-  }, [currentPage]);
+  }, []);
 
-  // ✅ ENHANCED: Load user orders with email normalization and better logging
+  // Load user orders
   useEffect(() => {
     const loadOrders = async () => {
       if (user?.email) {
-        try {
-          const normalizedEmail = user.email.trim().toLowerCase();
-          console.log('🔍 Loading orders for:', normalizedEmail);
-          
-          const result = await getUserOrders(normalizedEmail);
-          if (result.success) {
-            setOrders(result.orders);
-            console.log('✅ Orders loaded:', result.orders.length);
-            
-            // Show success message only if orders exist
-            if (result.orders.length > 0) {
-              window.showToast?.(`📦 ${result.orders.length} order${result.orders.length > 1 ? 's' : ''} found`, 'success');
-            }
-          } else {
-            console.error('❌ Failed to load orders:', result.error);
-          }
-        } catch (err) {
-          console.error('❌ Error loading orders:', err);
-          window.showToast?.('❌ Error loading orders: ' + err.message, 'error');
+        const result = await getUserOrders(user.email);
+        if (result.success) {
+          setOrders(result.orders);
         }
       } else {
         setOrders([]);
@@ -143,10 +109,8 @@ function App() {
           uid: firebaseUser.uid,
           isAdmin: isAdmin(firebaseUser.email)
         });
-        console.log('👤 User logged in:', firebaseUser.email);
       } else {
         setUser(null);
-        console.log('👤 User logged out');
       }
     });
     return () => unsubscribe();
@@ -154,7 +118,7 @@ function App() {
 
   const initiatePayment = (amount, items, onSuccess) => {
     if (!window.Razorpay) {
-      window.showToast?.('Payment system loading... Please try again! ⏳', 'error');
+      window.showToast?.('⏳ Payment system loading... Please try again!', 'error');
       return;
     }
 
@@ -169,7 +133,7 @@ function App() {
         window.showToast?.('🎉 Payment Successful! Processing order...', 'success');
         setTimeout(async () => {
           await onSuccess(response);
-        }, 1500);
+        }, 1000);
       },
       prefill: {
         name: user?.displayName || user?.email?.split('@')[0] || "Student",
@@ -181,13 +145,14 @@ function App() {
       },
       modal: {
         ondismiss: function() {
-          window.showToast?.('Payment cancelled 🛒', 'info');
+          window.showToast?.('❌ Payment cancelled', 'info');
         }
       }
     };
 
     const rzp = new window.Razorpay(options);
-    rzp.on('payment.failed', function () {
+    rzp.on('payment.failed', function (response) {
+      console.error('Payment failed:', response);
       window.showToast?.('❌ Payment Failed! Please try again.', 'error');
     });
     rzp.open();
@@ -197,70 +162,60 @@ function App() {
     const existing = cart.find(item => item.id === product.id);
     if (existing) {
       setCart(cart.map(item => item.id === product.id ? {...item, quantity: item.quantity + 1} : item));
+      window.showToast?.('✅ Quantity updated!', 'success');
     } else {
       setCart([...cart, {...product, quantity: 1}]);
+      window.showToast?.('✅ Added to cart!', 'success');
     }
-    window.showToast?.('Added to cart! 🛒', 'success');
   };
 
   const removeFromCart = (productId) => {
     setCart(cart.filter(item => item.id !== productId));
-    window.showToast?.('Removed from cart', 'info');
+    window.showToast?.('🗑️ Removed from cart', 'info');
   };
 
-  const clearCart = () => {
-    setCart([]);
-  };
-
-  // ✅ ENHANCED: BUY NOW with email normalization and better order tracking
   const buyNow = async (product) => {
     if (!user) {
-      window.showToast?.('Please login first! 🔐', 'error');
+      window.showToast?.('⚠️ Please login first to purchase!', 'warning');
       setCurrentPage('login');
       return;
     }
 
     initiatePayment(product.price, [product], async (response) => {
-      const normalizedEmail = user.email.trim().toLowerCase();
-      
+      // Create item object and only include defined fields
+      const itemData = {
+        id: product.id,
+        title: product.title,
+        price: product.price
+      };
+
+      // Only add optional fields if they exist
+      if (product.pdfUrl) itemData.pdfUrl = product.pdfUrl;
+      if (product.pdfFileName) itemData.pdfFileName = product.pdfFileName;
+      if (product.thumbnail) itemData.thumbnail = product.thumbnail;
+
       const newOrder = {
-        userEmail: normalizedEmail, // ✅ NORMALIZED EMAIL
-        items: [{
-          id: product.id,
-          title: product.title,
-          price: product.price,
-          pdfUrl: product.pdfUrl,
-          pdfFileName: product.pdfFileName,
-          thumbnail: product.thumbnail
-        }],
+        userEmail: user.email,
+        items: [itemData],
         total: product.price,
-        date: new Date().toLocaleDateString(),
+        date: new Date().toLocaleDateString('en-IN', { 
+          day: '2-digit', 
+          month: 'short', 
+          year: 'numeric' 
+        }),
         status: 'completed',
         paymentId: response.razorpay_payment_id
       };
       
-      console.log('💾 Saving order:', JSON.stringify(newOrder, null, 2));
-      
       const result = await addOrderDB(newOrder);
       if (result.success) {
-        console.log('✅ Order saved successfully! Order ID:', result.id);
-        
-        // ✅ FORCE RELOAD ORDERS
-        const updatedOrders = await getUserOrders(normalizedEmail);
+        const updatedOrders = await getUserOrders(user.email);
         if (updatedOrders.success) {
           setOrders(updatedOrders.orders);
-          console.log('✅ Orders reloaded:', updatedOrders.orders.length);
         }
-        
-        // Navigate to orders page
         setCurrentPage('orders');
-        
-        // Show success message
-        setTimeout(() => {
-          window.showToast?.('🎊 Order placed! Download your PDF now!', 'success');
-        }, 500);
+        window.showToast?.('🎊 Order placed successfully! Download your PDF now!', 'success');
       } else {
-        console.error('❌ Order save failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -272,11 +227,11 @@ function App() {
   const login = async (email, password) => {
     const result = await loginUser(email, password);
     if (result.success) {
-      window.showToast?.('Welcome back! 🎉', 'success');
+      window.showToast?.('🎉 Welcome back!', 'success');
       setCurrentPage('home');
       return true;
     } else {
-      window.showToast?.('Login failed! Check credentials', 'error');
+      window.showToast?.('❌ Login failed! Check your credentials', 'error');
       return false;
     }
   };
@@ -284,11 +239,11 @@ function App() {
   const register = async (email, password, name) => {
     const result = await registerUser(email, password, name);
     if (result.success) {
-      window.showToast?.('Account created! 🎊', 'success');
+      window.showToast?.('🎊 Account created successfully!', 'success');
       setCurrentPage('home');
       return true;
     } else {
-      window.showToast?.('Registration failed: ' + result.error, 'error');
+      window.showToast?.('❌ Registration failed: ' + result.error, 'error');
       return false;
     }
   };
@@ -300,62 +255,62 @@ function App() {
       setCart([]);
       setOrders([]);
       setCurrentPage('home');
-      window.showToast?.('Logged out! 👋', 'info');
+      window.showToast?.('👋 Logged out successfully!', 'info');
     }
   };
 
-  // ✅ ENHANCED: COMPLETE ORDER with email normalization and force reload
   const completeOrder = () => {
     if (!user) {
-      window.showToast?.('⚠️ Please login first!', 'warning');
+      window.showToast?.('⚠️ Please login first to complete order!', 'warning');
       setCurrentPage('login');
       return;
     }
 
+    if (cart.length === 0) {
+      window.showToast?.('⚠️ Your cart is empty!', 'warning');
+      return;
+    }
+
     initiatePayment(cartTotal, cart, async (response) => {
-      const normalizedEmail = user.email.trim().toLowerCase();
-      
-      const newOrder = {
-        userEmail: normalizedEmail, // ✅ NORMALIZED EMAIL
-        items: cart.map(item => ({
+      // Map cart items and only include defined fields
+      const orderItems = cart.map(item => {
+        const itemData = {
           id: item.id,
           title: item.title,
-          price: item.price,
-          pdfUrl: item.pdfUrl,
-          pdfFileName: item.pdfFileName,
-          thumbnail: item.thumbnail
-        })),
+          price: item.price
+        };
+
+        // Only add optional fields if they exist
+        if (item.pdfUrl) itemData.pdfUrl = item.pdfUrl;
+        if (item.pdfFileName) itemData.pdfFileName = item.pdfFileName;
+        if (item.thumbnail) itemData.thumbnail = item.thumbnail;
+
+        return itemData;
+      });
+
+      const newOrder = {
+        userEmail: user.email,
+        items: orderItems,
         total: cartTotal,
-        date: new Date().toLocaleDateString(),
+        date: new Date().toLocaleDateString('en-IN', { 
+          day: '2-digit', 
+          month: 'short', 
+          year: 'numeric' 
+        }),
         status: 'completed',
         paymentId: response.razorpay_payment_id
       };
       
-      console.log('💾 Saving cart order:', JSON.stringify(newOrder, null, 2));
-      
       const result = await addOrderDB(newOrder);
       if (result.success) {
-        console.log('✅ Cart order saved successfully! Order ID:', result.id);
-        
-        // ✅ FORCE RELOAD ORDERS
-        const updatedOrders = await getUserOrders(normalizedEmail);
+        const updatedOrders = await getUserOrders(user.email);
         if (updatedOrders.success) {
           setOrders(updatedOrders.orders);
-          console.log('✅ Orders reloaded:', updatedOrders.orders.length);
         }
-        
-        // Clear cart
         setCart([]);
-        
-        // Navigate to orders
         setCurrentPage('orders');
-        
-        // Show success message
-        setTimeout(() => {
-          window.showToast?.('🎊 Order placed! Download your PDFs!', 'success');
-        }, 500);
+        window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
       } else {
-        console.error('❌ Cart order save failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -368,51 +323,28 @@ function App() {
       totalDownloads: 0
     };
     
-    console.log('📤 Adding product:', productData.title);
     const result = await addProductDB(productData);
     if (result.success) {
       setProducts([...products, { id: result.id, ...productData }]);
-      window.showToast?.('✅ Product uploaded!', 'success');
-      console.log('✅ Product added successfully! ID:', result.id);
+      window.showToast?.('✅ Product uploaded successfully!', 'success');
     } else {
       window.showToast?.('❌ Upload failed: ' + result.error, 'error');
-      console.error('❌ Product add failed:', result.error);
     }
   };
 
   const deleteProduct = async (id) => {
-    console.log('🗑️ Deleting product:', id);
     const result = await deleteProductDB(id);
     if (result.success) {
       setProducts(products.filter(p => p.id !== id));
-      window.showToast?.('✅ Product deleted!', 'success');
-      console.log('✅ Product deleted successfully');
+      window.showToast?.('✅ Product deleted successfully!', 'success');
     } else {
       window.showToast?.('❌ Delete failed: ' + result.error, 'error');
-      console.error('❌ Product delete failed:', result.error);
-    }
-  };
-
-  const addReview = async (productId, reviewData) => {
-    console.log('⭐ Adding review to product:', productId);
-    const result = await addReviewDB(productId, reviewData);
-    if (result.success) {
-      // Reload products to get updated reviews
-      const updatedProducts = await getAllProducts();
-      if (updatedProducts.success) {
-        setProducts(updatedProducts.products);
-      }
-      window.showToast?.('✅ Review added!', 'success');
-      console.log('✅ Review added successfully');
-    } else {
-      window.showToast?.('❌ Failed to add review: ' + result.error, 'error');
-      console.error('❌ Review add failed:', result.error);
     }
   };
 
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
-      <CartContext.Provider value={{ cart, addToCart, removeFromCart, clearCart, cartTotal, cartCount }}>
+      <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
         <ThemeContext.Provider value={{ isDark }}>
           <div style={{
             minHeight: '100vh',
@@ -424,8 +356,7 @@ function App() {
             
             <ToastContainer />
             <Background />
-            <WhatsAppButton />
-            <MobileBanner />
+            <TelegramButton />
             
             <Navbar 
               currentPage={currentPage} 
@@ -443,16 +374,14 @@ function App() {
               {currentPage === 'home' && <HomePage setCurrentPage={setCurrentPage} />}
               {currentPage === 'products' && (
                 <ProductsPage 
-                  products={products}
-                  setProducts={setProducts}  // ✅ ADDED: Allow manual refresh
+                  products={products} 
                   buyNow={buyNow} 
                   selectedCategory={selectedCategory} 
                   setSelectedCategory={setSelectedCategory} 
-                  searchQuery={searchQuery}
-                  addReview={addReview}
+                  searchQuery={searchQuery} 
                 />
               )}
-              {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
+              {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} />}
               {currentPage === 'login' && <LoginPage />}
               {currentPage === 'orders' && <OrdersPage orders={orders} />}
               {currentPage === 'admin' && user?.isAdmin && (

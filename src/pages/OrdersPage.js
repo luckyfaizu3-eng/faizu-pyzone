@@ -1,9 +1,15 @@
-import React, { useEffect } from 'react';
-import { Download, CheckCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Download, CheckCircle, Trash2, FileText, X } from 'lucide-react';
 import { useAuth } from '../App';
+import { db } from '../firebase';
+import { deleteDoc, doc } from 'firebase/firestore';
+import ConfirmModal from '../components/ConfirmModal';
 
-function OrdersPage({ orders }) {
+function OrdersPage({ orders: initialOrders }) {
   const { user } = useAuth();
+  const [orders, setOrders] = useState(initialOrders || []);
+  const [showReceipt, setShowReceipt] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   useEffect(() => {
     console.log('=== ORDERS PAGE DEBUG ===');
@@ -11,44 +17,63 @@ function OrdersPage({ orders }) {
     console.log('Orders:', orders?.length || 0);
   }, [orders, user]);
 
+  useEffect(() => {
+    // Sync with parent props only if initialOrders changes
+    if (initialOrders) {
+      setOrders(initialOrders);
+    }
+  }, [initialOrders]);
+
   const handleDownload = async (item) => {
     console.log('📥 Starting download for:', item.title);
-    console.log('Item data:', item);
+    console.log('PDF URL:', item.pdfUrl);
     
-    window.showToast?.('📥 Preparing download...', 'info');
-    
+    if (!item.pdfUrl) {
+      window.showToast?.('❌ No PDF available', 'error');
+      return;
+    }
+
+    window.showToast?.('📥 Downloading...', 'info');
+
     try {
-      let downloadUrl;
+      const response = await fetch(item.pdfUrl);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
       
-      // Method 1: Use publicId (BEST for raw files)
-      if (item.publicId) {
-        // For raw PDFs - use raw/upload with publicId
-        downloadUrl = `https://res.cloudinary.com/dwhkxqnd1/raw/upload/${item.publicId}.pdf`;
-        console.log('Using publicId method:', downloadUrl);
-      } 
-      // Method 2: Use existing URL
-      else if (item.pdfUrl) {
-        downloadUrl = item.pdfUrl;
-        console.log('Using pdfUrl method:', downloadUrl);
-      }
-      
-      // Direct download approach (works best for mobile)
       const link = document.createElement('a');
-      link.href = downloadUrl;
+      link.href = blobUrl;
       link.download = item.pdfFileName || `${item.title}.pdf`;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
       
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
       
-      console.log('✅ Download initiated');
-      window.showToast?.('✅ Download started!', 'success');
+      console.log('✅ Download complete');
+      window.showToast?.('✅ Download complete!', 'success');
       
     } catch (error) {
       console.error('❌ Download error:', error);
       window.showToast?.('❌ Download failed: ' + error.message, 'error');
+    }
+  };
+
+  const handleDeleteOrder = async (orderId) => {
+    try {
+      window.showToast?.('🗑️ Deleting order...', 'info');
+      
+      await deleteDoc(doc(db, 'orders', orderId));
+      
+      window.showToast?.('✅ Order deleted successfully!', 'success');
+      
+      // Reload page to refresh orders from database
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Delete error:', error);
+      window.showToast?.('❌ Failed to delete order. Please try again.', 'error');
     }
   };
 
@@ -150,21 +175,73 @@ function OrdersPage({ orders }) {
                   {order.date}
                 </p>
               </div>
-              <span style={{
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '50px',
-                fontSize: '0.95rem',
-                fontWeight: '700',
-                color: '#fff',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                height: 'fit-content'
-              }}>
-                <CheckCircle size={18} />
-                {order.status}
-              </span>
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <span style={{
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '50px',
+                  fontSize: '0.95rem',
+                  fontWeight: '700',
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  height: 'fit-content'
+                }}>
+                  <CheckCircle size={18} />
+                  {order.status}
+                </span>
+                
+                {/* View Receipt Button */}
+                <button
+                  onClick={() => setShowReceipt(order)}
+                  style={{
+                    background: 'rgba(99,102,241,0.1)',
+                    border: '2px solid rgba(99,102,241,0.3)',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '50px',
+                    cursor: 'pointer',
+                    fontWeight: '700',
+                    color: '#6366f1',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(99,102,241,0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(99,102,241,0.1)';
+                  }}
+                >
+                  <FileText size={18} />
+                  Receipt
+                </button>
+
+                {/* Delete Button */}
+                <button
+                  onClick={() => setConfirmDelete(order.id)}
+                  style={{
+                    background: 'rgba(239,68,68,0.1)',
+                    border: '2px solid rgba(239,68,68,0.2)',
+                    padding: '0.75rem',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
+                    e.currentTarget.style.transform = 'scale(1.1)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+                    e.currentTarget.style.transform = 'scale(1)';
+                  }}
+                >
+                  <Trash2 size={20} color="#ef4444" />
+                </button>
+              </div>
             </div>
             
             <div style={{
@@ -252,6 +329,161 @@ function OrdersPage({ orders }) {
           </div>
         ))}
       </div>
+
+      {/* Receipt Modal */}
+      {showReceipt && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}
+        onClick={() => setShowReceipt(null)}
+        >
+          <div style={{
+            background: '#fff',
+            borderRadius: '24px',
+            padding: '3rem',
+            maxWidth: '600px',
+            width: '100%',
+            maxHeight: '90vh',
+            overflow: 'auto',
+            position: 'relative'
+          }}
+          onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowReceipt(null)}
+              style={{
+                position: 'absolute',
+                top: '1.5rem',
+                right: '1.5rem',
+                background: 'rgba(239,68,68,0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={24} color="#ef4444" />
+            </button>
+
+            <h2 style={{
+              fontSize: '2rem',
+              fontWeight: '900',
+              marginBottom: '2rem',
+              color: '#1e293b',
+              textAlign: 'center'
+            }}>
+              Transaction Receipt
+            </h2>
+
+            <div style={{
+              background: 'rgba(99,102,241,0.05)',
+              border: '2px solid rgba(99,102,241,0.2)',
+              borderRadius: '16px',
+              padding: '2rem',
+              marginBottom: '2rem'
+            }}>
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Order ID</div>
+                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>#{showReceipt.id}</div>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Payment ID</div>
+                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b', wordBreak: 'break-all' }}>
+                  {showReceipt.paymentId || 'N/A'}
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Date</div>
+                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>{showReceipt.date}</div>
+              </div>
+
+              <div style={{ marginBottom: '1.5rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Customer</div>
+                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>{showReceipt.userEmail}</div>
+              </div>
+
+              <div style={{
+                borderTop: '2px dashed rgba(99,102,241,0.2)',
+                paddingTop: '1.5rem',
+                marginTop: '1.5rem'
+              }}>
+                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Items</div>
+                {showReceipt.items.map((item, idx) => (
+                  <div key={idx} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginBottom: '0.75rem',
+                    fontSize: '1rem'
+                  }}>
+                    <span>{item.title}</span>
+                    <span style={{ fontWeight: '700' }}>₹{item.price}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{
+                borderTop: '2px solid rgba(99,102,241,0.3)',
+                paddingTop: '1.5rem',
+                marginTop: '1.5rem',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#1e293b' }}>Total Paid</span>
+                <span style={{
+                  fontSize: '2rem',
+                  fontWeight: '900',
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent'
+                }}>
+                  ₹{showReceipt.total}
+                </span>
+              </div>
+            </div>
+
+            <div style={{
+              background: 'rgba(16,185,129,0.1)',
+              border: '2px solid rgba(16,185,129,0.3)',
+              borderRadius: '12px',
+              padding: '1rem',
+              textAlign: 'center',
+              color: '#10b981',
+              fontWeight: '700'
+            }}>
+              ✅ Payment Successful
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        show={confirmDelete !== null}
+        onConfirm={() => handleDeleteOrder(confirmDelete)}
+        onCancel={() => setConfirmDelete(null)}
+        title="Delete Order?"
+        message="Are you sure you want to delete this order? This action cannot be undone and all associated data will be permanently removed."
+        confirmText="Yes, Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
 
       <style>{`
         @keyframes fadeInUp {

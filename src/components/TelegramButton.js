@@ -1,11 +1,11 @@
 import React from 'react';
-import { MessageCircle } from 'lucide-react';
+import { Send } from 'lucide-react';
 
-const WhatsAppButton = () => {
+const TelegramButton = () => {
   return (
     <>
       <a
-        href="https://wa.me/918899843797"
+        href="https://t.me/faizu_pyzone"
         target="_blank"
         rel="noopener noreferrer"
         style={{
@@ -14,12 +14,12 @@ const WhatsAppButton = () => {
           right: '30px',
           width: '60px',
           height: '60px',
-          background: 'linear-gradient(135deg, #25d366, #128c7e)',
+          background: 'linear-gradient(135deg, #0088cc, #229ED9)',
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 8px 30px rgba(37, 211, 102, 0.4)',
+          boxShadow: '0 8px 30px rgba(0, 136, 204, 0.4)',
           zIndex: 999,
           animation: 'bounce 2s ease-in-out infinite',
           cursor: 'pointer',
@@ -28,7 +28,7 @@ const WhatsAppButton = () => {
         onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
         onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
       >
-        <MessageCircle size={30} color="#fff" />
+        <Send size={28} color="#fff" />
       </a>
       
       <style>{`
@@ -41,4 +41,4 @@ const WhatsAppButton = () => {
   );
 };
 
-export default WhatsAppButton;
+export default TelegramButton;

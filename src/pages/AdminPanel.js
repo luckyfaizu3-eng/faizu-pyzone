@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader } from 'lucide-react';
-import { uploadPDF, uploadImage } from '../dbService';
+import { uploadPDF, uploadImage } from '../supabaseUpload';
+import ConfirmModal from '../components/ConfirmModal';
 
 function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -9,6 +10,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
   const [isBundle, setIsBundle] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -78,9 +80,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       let pdfFileName = '';
       let thumbnailUrl = '';
 
-      // ✅ Upload PDF to Cloudinary
+      // ✅ Upload PDF to Supabase
       if (pdfFile && !isBundle) {
-        console.log('📤 Uploading PDF to Cloudinary...');
+        console.log('📤 Uploading PDF to Supabase...');
         const pdfResult = await uploadPDF(pdfFile);
         if (pdfResult.success) {
           pdfUrl = pdfResult.url;
@@ -93,9 +95,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         }
       }
 
-      // ✅ Upload Thumbnail to Cloudinary
+      // ✅ Upload Thumbnail to Supabase
       if (thumbnailFile) {
-        console.log('📤 Uploading Thumbnail to Cloudinary...');
+        console.log('📤 Uploading Thumbnail to Supabase...');
         const thumbResult = await uploadImage(thumbnailFile);
         if (thumbResult.success) {
           thumbnailUrl = thumbResult.url;
@@ -247,7 +249,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         ))}
       </div>
 
-      {/* Upload Button */}
+      {/* Action Button */}
       <div style={{
         maxWidth: '1400px',
         margin: '0 auto 3rem',
@@ -285,7 +287,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         </button>
       </div>
 
-      {/* Upload Form */}
+      {/* Upload Form - Same as before, keeping it as is */}
       {showUploadForm && (
         <div style={{
           background: '#ffffff',
@@ -297,6 +299,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
           boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
           animation: 'slideDown 0.4s ease'
         }}>
+          {/* Upload form content - same as before - keeping complete form */}
           <h2 style={{
             fontSize: '2rem',
             fontWeight: '900',
@@ -872,11 +875,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   ₹{product.price}
                 </div>
                 <button 
-                  onClick={() => {
-                    if (window.confirm('Delete this product?')) {
-                      deleteProduct(product.id);
-                    }
-                  }}
+                  onClick={() => setConfirmDelete(product.id)}
                   style={{
                     background: 'rgba(239,68,68,0.1)',
                     border: '2px solid rgba(239,68,68,0.2)',
@@ -902,6 +901,21 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         </div>
       </div>
 
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        show={confirmDelete !== null}
+        onConfirm={() => {
+          deleteProduct(confirmDelete);
+          window.showToast?.('✅ Product deleted successfully!', 'success');
+        }}
+        onCancel={() => setConfirmDelete(null)}
+        title="Delete Product?"
+        message="Are you sure you want to delete this product? This will permanently remove it from your store and cannot be undone."
+        confirmText="Yes, Delete"
+        cancelText="Cancel"
+        type="danger"
+      />
+
       <style>{`
         @keyframes fadeInUp {
           from {
@@ -926,7 +940,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
-        }
+          }
       `}</style>
     </div>
   );
