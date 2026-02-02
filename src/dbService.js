@@ -9,7 +9,8 @@ import {
   query,
   orderBy,
   serverTimestamp,
-  arrayUnion
+  arrayUnion,
+  where
 } from 'firebase/firestore';
 
 // Cloudinary Config
@@ -98,11 +99,16 @@ export const uploadImage = async (file) => {
   }
 };
 
-// Add Product
-export const addProduct = async (productData) => {
+// ✅ FIXED: Add Product with userId
+export const addProduct = async (productData, userId) => {
   try {
+    if (!userId) {
+      throw new Error('User ID is required to add product');
+    }
+
     const docRef = await addDoc(collection(db, PRODUCTS_COLLECTION), {
       ...productData,
+      userId: userId, // ✅ Store userId for security rules
       createdAt: serverTimestamp(),
       totalDownloads: 0,
       reviews: []
@@ -116,7 +122,7 @@ export const addProduct = async (productData) => {
   }
 };
 
-// Get All Products
+// ✅ FIXED: Get All Products (with better error handling)
 export const getAllProducts = async () => {
   try {
     const q = query(collection(db, PRODUCTS_COLLECTION), orderBy('createdAt', 'desc'));
@@ -131,10 +137,50 @@ export const getAllProducts = async () => {
     return { success: true, products };
   } catch (error) {
     console.error('❌ Fetch products error:', error.message);
-    if (error.message.includes('indexes')) {
-      console.log('⚠️ Creating indexes...');
-      return { success: true, products: [] };
+    
+    // If index error, try without ordering
+    if (error.message.includes('indexes') || error.message.includes('index')) {
+      console.log('⚠️ Fetching without ordering...');
+      try {
+        const querySnapshot = await getDocs(collection(db, PRODUCTS_COLLECTION));
+        const products = [];
+        querySnapshot.forEach((doc) => {
+          products.push({ id: doc.id, ...doc.data() });
+        });
+        return { success: true, products };
+      } catch (err) {
+        return { success: false, error: err.message, products: [] };
+      }
     }
+    
+    return { success: false, error: error.message, products: [] };
+  }
+};
+
+// ✅ FIXED: Get User's Products Only
+export const getUserProducts = async (userId) => {
+  try {
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
+
+    const q = query(
+      collection(db, PRODUCTS_COLLECTION),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const products = [];
+    
+    querySnapshot.forEach((doc) => {
+      products.push({ id: doc.id, ...doc.data() });
+    });
+    
+    console.log('✅ User products fetched:', products.length);
+    return { success: true, products };
+  } catch (error) {
+    console.error('❌ Fetch user products error:', error.message);
     return { success: false, error: error.message, products: [] };
   }
 };
@@ -153,22 +199,30 @@ export const deleteProduct = async (productId) => {
     console.error('❌ Delete error:', error);
     
     if (error.code === 'permission-denied') {
-      return { success: false, error: 'Permission denied. Logout and login again.' };
+      return { success: false, error: 'Permission denied. You can only delete your own products.' };
     }
     
     return { success: false, error: error.message };
   }
 };
 
-// Update Product
+// ✅ FIXED: Update Product
 export const updateProduct = async (productId, updates) => {
   try {
     const productRef = doc(db, PRODUCTS_COLLECTION, productId);
-    await updateDoc(productRef, updates);
+    await updateDoc(productRef, {
+      ...updates,
+      updatedAt: serverTimestamp() // Track when updated
+    });
     console.log('✅ Product updated:', productId);
     return { success: true };
   } catch (error) {
     console.error('❌ Update error:', error.message);
+    
+    if (error.code === 'permission-denied') {
+      return { success: false, error: 'Permission denied. You can only update your own products.' };
+    }
+    
     return { success: false, error: error.message };
   }
 };
@@ -188,13 +242,14 @@ export const addReview = async (productId, reviewData) => {
   }
 };
 
-// Add Order
-export const addOrder = async (orderData) => {
+// ✅ FIXED: Add Order with userId
+export const addOrder = async (orderData, userId) => {
   try {
     console.log('💾 Saving order:', JSON.stringify(orderData, null, 2));
 
     const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
       ...orderData,
+      userId: userId, // ✅ Store userId
       createdAt: serverTimestamp()
     });
     
@@ -206,27 +261,51 @@ export const addOrder = async (orderData) => {
   }
 };
 
-// Get User Orders
-export const getUserOrders = async (userEmail) => {
+// ✅ FIXED: Get User Orders
+export const getUserOrders = async (userId) => {
   try {
-    const normalizedEmail = userEmail.trim().toLowerCase();
-    console.log('🔍 Fetching orders for:', normalizedEmail);
+    if (!userId) {
+      throw new Error('User ID is required');
+    }
 
-    const querySnapshot = await getDocs(collection(db, ORDERS_COLLECTION));
+    console.log('🔍 Fetching orders for userId:', userId);
+
+    const q = query(
+      collection(db, ORDERS_COLLECTION),
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc')
+    );
     
+    const querySnapshot = await getDocs(q);
     const orders = [];
+    
     querySnapshot.forEach((doc) => {
-      const orderData = doc.data();
-      const orderEmail = (orderData.userEmail || '').trim().toLowerCase();
-      if (orderEmail === normalizedEmail) {
-        orders.push({ id: doc.id, ...orderData });
-      }
+      orders.push({ id: doc.id, ...doc.data() });
     });
     
     console.log('✅ Orders found:', orders.length);
     return { success: true, orders };
   } catch (error) {
     console.error('❌ Orders error:', error.message);
+    
+    // Fallback: try without ordering if index error
+    if (error.message.includes('index')) {
+      try {
+        const q = query(
+          collection(db, ORDERS_COLLECTION),
+          where('userId', '==', userId)
+        );
+        const querySnapshot = await getDocs(q);
+        const orders = [];
+        querySnapshot.forEach((doc) => {
+          orders.push({ id: doc.id, ...doc.data() });
+        });
+        return { success: true, orders };
+      } catch (err) {
+        return { success: false, error: err.message, orders: [] };
+      }
+    }
+    
     return { success: false, error: error.message, orders: [] };
   }
 };
@@ -246,6 +325,21 @@ export const getAllOrders = async () => {
     return { success: true, orders };
   } catch (error) {
     console.error('❌ All orders error:', error.message);
+    
+    // Fallback without ordering
+    if (error.message.includes('index')) {
+      try {
+        const querySnapshot = await getDocs(collection(db, ORDERS_COLLECTION));
+        const orders = [];
+        querySnapshot.forEach((doc) => {
+          orders.push({ id: doc.id, ...doc.data() });
+        });
+        return { success: true, orders };
+      } catch (err) {
+        return { success: false, error: err.message, orders: [] };
+      }
+    }
+    
     return { success: false, error: error.message, orders: [] };
   }
 };

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader } from 'lucide-react';
-import { uploadPDF, uploadImage } from '../supabaseUpload';
+import { uploadPDF, uploadImage } from '../supabaseUpload'; // ✅ Supabase for storage
+import { auth } from '../firebase'; // ✅ Firebase for auth
 import ConfirmModal from '../components/ConfirmModal';
 
 function AdminPanel({ products, addProduct, deleteProduct, orders }) {
@@ -11,6 +12,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
   const [isBundle, setIsBundle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null); // ✅ Track logged-in user
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -26,6 +28,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     discount: '',
     itemsIncluded: ''
   });
+
+  // ✅ Listen to Firebase auth state
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      setCurrentUser(user);
+      console.log('👤 Current user:', user?.email);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const handlePdfChange = (e) => {
     const file = e.target.files[0];
@@ -62,6 +73,12 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     
+    // ✅ Check if user is logged in
+    if (!currentUser) {
+      window.showToast?.('❌ Please login first!', 'error');
+      return;
+    }
+
     if (!pdfFile && !isBundle) {
       window.showToast?.('⚠️ Please upload PDF file!', 'error');
       return;
@@ -109,7 +126,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         }
       }
 
-      // Create product data
+      // ✅ Create product data with userId
       const productData = {
         title: formData.title,
         category: formData.category === 'custom' ? formData.customCategory : formData.category,
@@ -123,7 +140,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         pdfUrl: pdfUrl,
         pdfFileName: pdfFileName || null,
         thumbnail: thumbnailUrl || null,
-        isBundle: isBundle
+        isBundle: isBundle,
+        userId: currentUser.uid, // ✅ IMPORTANT: Add userId
+        userEmail: currentUser.email // ✅ Optional: for reference
       };
 
       // Add bundle-specific fields
@@ -141,6 +160,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       }
 
       console.log('📝 Product data to save:', productData);
+      
+      // ✅ Call addProduct (it will save to Firebase Firestore)
       await addProduct(productData);
       
       // Reset form
@@ -194,6 +215,24 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       }}>
         Admin Panel
       </h1>
+
+      {/* ✅ Show current user info */}
+      {currentUser && (
+        <div style={{
+          maxWidth: '1400px',
+          margin: '0 auto 2rem',
+          padding: '1rem',
+          background: 'rgba(99,102,241,0.1)',
+          border: '1px solid rgba(99,102,241,0.3)',
+          borderRadius: '12px',
+          textAlign: 'center',
+          fontSize: '1rem',
+          color: '#6366f1',
+          fontWeight: '600'
+        }}>
+          👤 Logged in as: <strong>{currentUser.email}</strong>
+        </div>
+      )}
 
       {/* Stats Dashboard */}
       <div style={{
@@ -257,7 +296,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         justifyContent: 'center'
       }}>
         <button 
-          onClick={() => setShowUploadForm(!showUploadForm)} 
+          onClick={() => {
+            if (!currentUser) {
+              window.showToast?.('❌ Please login first!', 'error');
+              return;
+            }
+            setShowUploadForm(!showUploadForm);
+          }}
           style={{
             background: 'linear-gradient(135deg, #6366f1, #ec4899)',
             border: 'none',
@@ -287,7 +332,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         </button>
       </div>
 
-      {/* Upload Form - Same as before, keeping it as is */}
+      {/* Upload Form */}
       {showUploadForm && (
         <div style={{
           background: '#ffffff',
@@ -299,7 +344,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
           boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
           animation: 'slideDown 0.4s ease'
         }}>
-          {/* Upload form content - same as before - keeping complete form */}
           <h2 style={{
             fontSize: '2rem',
             fontWeight: '900',
@@ -776,7 +820,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   display: 'flex',
                   alignItems: 'center',
                   gap: '0.75rem',
-                  marginBottom: '0.5rem'
+                  marginBottom: '0.5rem',
+                  flexWrap: 'wrap'
                 }}>
                   <h3 style={{
                     fontSize: '1.5rem',
@@ -822,6 +867,19 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       fontWeight: '600'
                     }}>
                       ❌ No PDF
+                    </span>
+                  )}
+                  {/* ✅ Owner indicator */}
+                  {currentUser && product.userId === currentUser.uid && (
+                    <span style={{
+                      background: 'rgba(99,102,241,0.1)',
+                      color: '#6366f1',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600'
+                    }}>
+                      👤 Your Product
                     </span>
                   )}
                 </div>
@@ -906,6 +964,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         show={confirmDelete !== null}
         onConfirm={() => {
           deleteProduct(confirmDelete);
+          setConfirmDelete(null);
           window.showToast?.('✅ Product deleted successfully!', 'success');
         }}
         onCancel={() => setConfirmDelete(null)}
@@ -940,7 +999,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
-          }
+        }
       `}</style>
     </div>
   );
