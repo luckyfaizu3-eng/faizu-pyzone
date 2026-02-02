@@ -84,33 +84,40 @@ function App() {
       console.error('Error loading products:', error);
       window.showToast?.('❌ Failed to load products', 'error');
     }
-  }, []); // ✅ No dependencies needed
+  }, []);
 
   // Load products from Firebase
   useEffect(() => {
     loadProducts();
-  }, [loadProducts]); // ✅ Now loadProducts is stable
+  }, [loadProducts]);
 
   // ✅ FIXED: Create loadOrders function with useCallback
   const loadOrders = useCallback(async () => {
     if (user?.uid) {
       try {
+        console.log('🔄 Loading orders for user:', user.uid);
         const result = await getUserOrders(user.uid);
         if (result.success) {
+          console.log('✅ Orders loaded:', result.orders.length);
           setOrders(result.orders);
+        } else {
+          console.error('❌ Failed to load orders:', result.error);
+          setOrders([]);
         }
       } catch (error) {
-        console.error('Error loading orders:', error);
+        console.error('❌ Error loading orders:', error);
+        setOrders([]);
       }
     } else {
+      console.log('ℹ️ No user, clearing orders');
       setOrders([]);
     }
-  }, [user?.uid]); // ✅ Only depends on user.uid
+  }, [user?.uid]);
 
   // Load user orders
   useEffect(() => {
     loadOrders();
-  }, [loadOrders]); // ✅ Now includes loadOrders
+  }, [loadOrders]);
 
   // Firebase Auth State
   useEffect(() => {
@@ -221,12 +228,21 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
+      console.log('💳 Creating order:', newOrder);
       const result = await addOrderDB(newOrder, user.uid);
+      
       if (result.success) {
+        console.log('✅ Order created successfully, reloading orders...');
+        // ✅ CRITICAL: Wait for orders to reload before changing page
         await loadOrders();
-        setCurrentPage('orders');
-        window.showToast?.('🎊 Order placed successfully! Download your PDF now!', 'success');
+        
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          setCurrentPage('orders');
+          window.showToast?.('🎊 Order placed successfully! Download your PDF now!', 'success');
+        }, 500);
       } else {
+        console.error('❌ Order creation failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -313,13 +329,22 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
+      console.log('💳 Creating cart order:', newOrder);
       const result = await addOrderDB(newOrder, user.uid);
+      
       if (result.success) {
+        console.log('✅ Cart order created successfully, reloading orders...');
+        // ✅ CRITICAL: Wait for orders to reload before changing page
         await loadOrders();
-        setCart([]);
-        setCurrentPage('orders');
-        window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
+        
+        // Small delay to ensure state is updated
+        setTimeout(() => {
+          setCart([]);
+          setCurrentPage('orders');
+          window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
+        }, 500);
       } else {
+        console.error('❌ Cart order creation failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -401,7 +426,13 @@ function App() {
               )}
               {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} />}
               {currentPage === 'login' && <LoginPage />}
-              {currentPage === 'orders' && <OrdersPage orders={orders} user={user} />}
+              {currentPage === 'orders' && (
+                <OrdersPage 
+                  orders={orders} 
+                  user={user}
+                  refreshOrders={loadOrders} // ✅ Pass refresh function
+                />
+              )}
               {currentPage === 'admin' && user?.isAdmin && (
                 <AdminPanel 
                   products={products} 

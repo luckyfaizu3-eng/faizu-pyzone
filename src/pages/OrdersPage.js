@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { deleteDoc, doc } from 'firebase/firestore';
 import ConfirmModal from '../components/ConfirmModal';
 
-function OrdersPage({ orders: initialOrders }) {
+function OrdersPage({ orders: initialOrders, refreshOrders }) {
   const { user } = useAuth();
   const [orders, setOrders] = useState(initialOrders || []);
   const [showReceipt, setShowReceipt] = useState(null);
@@ -14,12 +14,14 @@ function OrdersPage({ orders: initialOrders }) {
   useEffect(() => {
     console.log('=== ORDERS PAGE DEBUG ===');
     console.log('User:', user?.email);
-    console.log('Orders:', orders?.length || 0);
+    console.log('Orders received:', orders?.length || 0);
+    console.log('Orders data:', orders);
   }, [orders, user]);
 
   useEffect(() => {
-    // Sync with parent props only if initialOrders changes
+    // Sync with parent props whenever initialOrders changes
     if (initialOrders) {
+      console.log('📥 Orders updated from parent:', initialOrders.length);
       setOrders(initialOrders);
     }
   }, [initialOrders]);
@@ -66,10 +68,16 @@ function OrdersPage({ orders: initialOrders }) {
       
       window.showToast?.('✅ Order deleted successfully!', 'success');
       
-      // Reload page to refresh orders from database
-      setTimeout(() => {
-        window.location.reload();
-      }, 1000);
+      // ✅ FIXED: Use refreshOrders prop instead of page reload
+      if (refreshOrders) {
+        console.log('🔄 Refreshing orders after delete...');
+        await refreshOrders();
+      } else {
+        // Fallback: remove from local state
+        setOrders(orders.filter(order => order.id !== orderId));
+      }
+      
+      setConfirmDelete(null);
       
     } catch (error) {
       console.error('❌ Delete error:', error);
