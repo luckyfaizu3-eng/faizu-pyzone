@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw, TrendingUp, Flame } from 'lucide-react';
 import { useCart } from '../App';
 import { CATEGORIES } from '../App';
 import ProductDetailPage from '../components/ProductDetailPage';
@@ -11,20 +11,14 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // ✅ FIXED: Use refreshProducts prop instead of calling getAllProducts directly
   const handleRefresh = async () => {
     setRefreshing(true);
     window.showToast?.('🔄 Refreshing products...', 'info');
     
     try {
-      // ✅ Use the refreshProducts function passed from App.js
       if (refreshProducts) {
         await refreshProducts();
         window.showToast?.(`✅ Refreshed! ${products.length} products loaded`, 'success');
-        console.log('✅ Manual refresh successful:', products.length);
-      } else {
-        console.error('❌ refreshProducts function not provided');
-        window.showToast?.('❌ Refresh function not available', 'error');
       }
     } catch (error) {
       console.error('❌ Refresh error:', error);
@@ -32,6 +26,24 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
     } finally {
       setRefreshing(false);
     }
+  };
+
+  // Function to determine if product is new (uploaded in last 7 days)
+  const isNewProduct = (product) => {
+    if (!product.uploadDate) return false;
+    const uploadDate = new Date(product.uploadDate);
+    const daysSinceUpload = (Date.now() - uploadDate.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceUpload <= 7;
+  };
+
+  // Function to determine if product is hot (high rating or downloads)
+  const isHotProduct = (product) => {
+    return product.rating >= 4.7 || product.totalDownloads >= 50;
+  };
+
+  // Function to determine if product is trending
+  const isTrendingProduct = (product) => {
+    return product.totalDownloads >= 100 || product.rating >= 4.8;
   };
 
   const customCategories = [...new Set(products.filter(p => p.customCategory).map(p => p.customCategory))];
@@ -52,6 +64,57 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
   });
 
   const selectedCat = allCategories.find(c => c.id === selectedCategory) || allCategories[0];
+
+  // Badge component
+  const Badge = ({ type, style = {} }) => {
+    const badges = {
+      new: { 
+        icon: '✨', 
+        text: 'NEW', 
+        bg: 'linear-gradient(135deg, #10b981, #059669)',
+        shadow: '0 4px 12px rgba(16,185,129,0.4)'
+      },
+      hot: { 
+        icon: '🔥', 
+        text: 'HOT', 
+        bg: 'linear-gradient(135deg, #ef4444, #dc2626)',
+        shadow: '0 4px 12px rgba(239,68,68,0.4)'
+      },
+      trending: { 
+        icon: '📈', 
+        text: 'TRENDING', 
+        bg: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+        shadow: '0 4px 12px rgba(139,92,246,0.4)'
+      }
+    };
+
+    const badge = badges[type];
+    if (!badge) return null;
+
+    return (
+      <div style={{
+        position: 'absolute',
+        top: '1rem',
+        right: '1rem',
+        background: badge.bg,
+        color: '#fff',
+        padding: '0.4rem 0.75rem',
+        borderRadius: '20px',
+        fontSize: '0.7rem',
+        fontWeight: '800',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.25rem',
+        boxShadow: badge.shadow,
+        zIndex: 10,
+        animation: 'badgePulse 2s ease-in-out infinite',
+        ...style
+      }}>
+        <span>{badge.icon}</span>
+        <span>{badge.text}</span>
+      </div>
+    );
+  };
 
   return (
     <div style={{
@@ -184,7 +247,7 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
           )}
         </div>
 
-        {/* ✅ Refresh Button */}
+        {/* Refresh Button */}
         <button
           onClick={handleRefresh}
           disabled={refreshing}
@@ -286,7 +349,7 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
       ) : (
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))',
           gap: '2rem',
           maxWidth: '1400px',
           margin: '0 auto'
@@ -308,11 +371,17 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
                   boxShadow: hoveredCard === index 
                     ? '0 25px 60px rgba(99,102,241,0.2)' 
                     : '0 4px 20px rgba(0,0,0,0.05)',
-                  animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`
+                  animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`,
+                  position: 'relative'
                 }}
                 onMouseEnter={() => setHoveredCard(index)}
                 onMouseLeave={() => setHoveredCard(null)}
               >
+                {/* Premium Badges */}
+                {isTrendingProduct(product) && <Badge type="trending" />}
+                {!isTrendingProduct(product) && isHotProduct(product) && <Badge type="hot" />}
+                {!isTrendingProduct(product) && !isHotProduct(product) && isNewProduct(product) && <Badge type="new" />}
+
                 {/* Category Badge at Top */}
                 <div style={{
                   display: 'inline-block',
@@ -551,6 +620,14 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        @keyframes badgePulse {
+          0%, 100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.05);
+          }
         }
       `}</style>
     </div>

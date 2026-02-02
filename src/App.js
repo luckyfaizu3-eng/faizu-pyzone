@@ -16,6 +16,7 @@ import Footer from './components/Footer';
 import Background from './components/Background';
 import TelegramButton from './components/TelegramButton';
 import ToastContainer from './components/ToastContainer';
+import SplashScreen from './components/SplashScreen';
 
 // Import Pages
 import HomePage from './pages/HomePage';
@@ -59,6 +60,16 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [isDark] = useState(false); // Always light theme
+  const [showSplash, setShowSplash] = useState(() => {
+    // Check if splash was shown before
+    const splashShown = sessionStorage.getItem('splashShown');
+    return !splashShown;
+  });
+
+  const handleSplashComplete = () => {
+    setShowSplash(false);
+    sessionStorage.setItem('splashShown', 'true');
+  };
 
   // Load Razorpay Script
   useEffect(() => {
@@ -387,6 +398,9 @@ function App() {
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
         <ThemeContext.Provider value={{ isDark }}>
+          {showSplash ? (
+            <SplashScreen onComplete={handleSplashComplete} />
+          ) : (
           <div style={{
             minHeight: '100vh',
             background: '#ffffff',
@@ -445,6 +459,7 @@ function App() {
             
             <Footer setCurrentPage={setCurrentPage} />
           </div>
+          )}
         </ThemeContext.Provider>
       </CartContext.Provider>
     </AuthContext.Provider>

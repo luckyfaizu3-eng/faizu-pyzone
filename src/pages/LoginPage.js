@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../App';
-import { LogIn, UserPlus, Mail, Lock, User as UserIcon } from 'lucide-react';
+import { LogIn, UserPlus, Mail, Lock, User as UserIcon, Eye, EyeOff } from 'lucide-react';
 
 function LoginPage() {
   const { login, register } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -27,49 +28,50 @@ function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '2rem'
+      padding: '2rem 1rem'
     }}>
       <div style={{
         background: '#ffffff',
         border: '1px solid #e2e8f0',
         borderRadius: '32px',
-        padding: 'clamp(2.5rem, 5vw, 4rem)',
-        maxWidth: '500px',
+        padding: 'clamp(2rem, 5vw, 3rem)',
+        maxWidth: '480px',
         width: '100%',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.08)',
-        animation: 'fadeInUp 0.6s ease'
+        boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
+        animation: 'fadeInUp 0.5s ease'
       }}>
+        {/* Logo */}
         <div style={{
           textAlign: 'center',
-          marginBottom: '3rem'
+          marginBottom: '2rem'
         }}>
           <div style={{
-            width: '80px',
-            height: '80px',
+            width: '70px',
+            height: '70px',
             background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-            borderRadius: '20px',
+            borderRadius: '18px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            margin: '0 auto 1.5rem',
-            fontSize: '2.5rem',
-            boxShadow: '0 10px 30px rgba(99,102,241,0.3)'
+            margin: '0 auto 1rem',
+            fontSize: '2rem',
+            boxShadow: '0 8px 24px rgba(99,102,241,0.3)'
           }}>
             🎓
           </div>
           <h2 style={{
-            fontSize: '2.5rem',
+            fontSize: 'clamp(1.8rem, 5vw, 2.2rem)',
             fontWeight: '900',
             background: 'linear-gradient(135deg, #6366f1, #ec4899)',
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             marginBottom: '0.5rem'
           }}>
-            {isLogin ? 'Welcome Back' : 'Create Account'}
+            {isLogin ? 'Welcome Back!' : 'Create Account'}
           </h2>
           <p style={{
             color: '#64748b',
-            fontSize: '1.1rem'
+            fontSize: '1rem'
           }}>
             {isLogin ? 'Login to access your notes' : 'Join FaizUpyZone today'}
           </p>
@@ -85,7 +87,7 @@ function LoginPage() {
               <label style={{
                 display: 'block',
                 marginBottom: '0.5rem',
-                fontSize: '0.95rem',
+                fontSize: '0.9rem',
                 fontWeight: '600',
                 color: '#1e293b'
               }}>
@@ -93,8 +95,8 @@ function LoginPage() {
               </label>
               <div style={{ position: 'relative' }}>
                 <UserIcon 
-                  size={20} 
-                  color="#64748b"
+                  size={18} 
+                  color="#94a3b8"
                   style={{
                     position: 'absolute',
                     left: '1rem',
@@ -110,12 +112,14 @@ function LoginPage() {
                   required={!isLogin}
                   style={{
                     width: '100%',
-                    padding: '1rem 1rem 1rem 3rem',
+                    padding: '0.9rem 1rem 0.9rem 2.75rem',
                     border: '2px solid #e2e8f0',
-                    borderRadius: '14px',
-                    fontSize: '1.05rem',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
                     transition: 'all 0.3s ease',
-                    outline: 'none'
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    fontFamily: 'inherit'
                   }}
                   onFocus={(e) => {
                     e.target.style.borderColor = '#6366f1';
@@ -134,7 +138,7 @@ function LoginPage() {
             <label style={{
               display: 'block',
               marginBottom: '0.5rem',
-              fontSize: '0.95rem',
+              fontSize: '0.9rem',
               fontWeight: '600',
               color: '#1e293b'
             }}>
@@ -142,8 +146,8 @@ function LoginPage() {
             </label>
             <div style={{ position: 'relative' }}>
               <Mail 
-                size={20} 
-                color="#64748b"
+                size={18} 
+                color="#94a3b8"
                 style={{
                   position: 'absolute',
                   left: '1rem',
@@ -159,12 +163,14 @@ function LoginPage() {
                 required
                 style={{
                   width: '100%',
-                  padding: '1rem 1rem 1rem 3rem',
+                  padding: '0.9rem 1rem 0.9rem 2.75rem',
                   border: '2px solid #e2e8f0',
-                  borderRadius: '14px',
-                  fontSize: '1.05rem',
+                  borderRadius: '12px',
+                  fontSize: '1rem',
                   transition: 'all 0.3s ease',
-                  outline: 'none'
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  fontFamily: 'inherit'
                 }}
                 onFocus={(e) => {
                   e.target.style.borderColor = '#6366f1';
@@ -182,7 +188,7 @@ function LoginPage() {
             <label style={{
               display: 'block',
               marginBottom: '0.5rem',
-              fontSize: '0.95rem',
+              fontSize: '0.9rem',
               fontWeight: '600',
               color: '#1e293b'
             }}>
@@ -190,8 +196,8 @@ function LoginPage() {
             </label>
             <div style={{ position: 'relative' }}>
               <Lock 
-                size={20} 
-                color="#64748b"
+                size={18} 
+                color="#94a3b8"
                 style={{
                   position: 'absolute',
                   left: '1rem',
@@ -200,19 +206,21 @@ function LoginPage() {
                 }}
               />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => setFormData({...formData, password: e.target.value})}
                 placeholder="••••••••"
                 required
                 style={{
                   width: '100%',
-                  padding: '1rem 1rem 1rem 3rem',
+                  padding: '0.9rem 2.75rem 0.9rem 2.75rem',
                   border: '2px solid #e2e8f0',
-                  borderRadius: '14px',
-                  fontSize: '1.05rem',
+                  borderRadius: '12px',
+                  fontSize: '1rem',
                   transition: 'all 0.3s ease',
-                  outline: 'none'
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  fontFamily: 'inherit'
                 }}
                 onFocus={(e) => {
                   e.target.style.borderColor = '#6366f1';
@@ -223,6 +231,28 @@ function LoginPage() {
                   e.target.style.boxShadow = 'none';
                 }}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '1rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                {showPassword ? 
+                  <EyeOff size={18} color="#94a3b8" /> : 
+                  <Eye size={18} color="#94a3b8" />
+                }
+              </button>
             </div>
           </div>
 
@@ -233,44 +263,42 @@ function LoginPage() {
               background: 'linear-gradient(135deg, #6366f1, #ec4899)',
               border: 'none',
               color: 'white',
-              padding: '1.25rem',
-              fontSize: '1.15rem',
-              borderRadius: '14px',
+              padding: '1rem',
+              fontSize: '1.05rem',
+              borderRadius: '12px',
               cursor: 'pointer',
               fontWeight: '700',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '0.75rem',
-              boxShadow: '0 10px 30px rgba(99,102,241,0.4)',
+              gap: '0.5rem',
+              boxShadow: '0 4px 15px rgba(99,102,241,0.3)',
               transition: 'all 0.3s ease',
               marginTop: '0.5rem'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 15px 40px rgba(99,102,241,0.5)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(99,102,241,0.4)';
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 10px 30px rgba(99,102,241,0.4)';
+              e.currentTarget.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
             }}
-            onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-            onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            {isLogin ? <LogIn size={22} /> : <UserPlus size={22} />}
+            {isLogin ? <LogIn size={20} /> : <UserPlus size={20} />}
             {isLogin ? 'Login' : 'Create Account'}
           </button>
         </form>
 
         <div style={{
           textAlign: 'center',
-          marginTop: '2rem',
-          paddingTop: '2rem',
+          marginTop: '1.75rem',
+          paddingTop: '1.75rem',
           borderTop: '1px solid #e2e8f0'
         }}>
           <p style={{
             color: '#64748b',
-            fontSize: '1rem'
+            fontSize: '0.95rem'
           }}>
             {isLogin ? "Don't have an account?" : 'Already have an account?'}
             {' '}
@@ -282,7 +310,7 @@ function LoginPage() {
                 color: '#6366f1',
                 cursor: 'pointer',
                 fontWeight: '700',
-                fontSize: '1rem',
+                fontSize: '0.95rem',
                 textDecoration: 'underline'
               }}
             >
