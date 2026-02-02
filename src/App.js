@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { registerUser, loginUser, logoutUser, isAdmin, resetPassword } from './authService';
@@ -73,8 +73,8 @@ function App() {
     };
   }, []);
 
-  // ✅ FIXED: Create loadProducts function
-  const loadProducts = async () => {
+  // ✅ FIXED: Create loadProducts function with useCallback
+  const loadProducts = useCallback(async () => {
     try {
       const result = await getAllProducts();
       if (result.success) {
@@ -84,18 +84,18 @@ function App() {
       console.error('Error loading products:', error);
       window.showToast?.('❌ Failed to load products', 'error');
     }
-  };
+  }, []); // ✅ No dependencies needed
 
   // Load products from Firebase
   useEffect(() => {
     loadProducts();
-  }, []);
+  }, [loadProducts]); // ✅ Now loadProducts is stable
 
-  // ✅ FIXED: Create loadOrders function
-  const loadOrders = async () => {
+  // ✅ FIXED: Create loadOrders function with useCallback
+  const loadOrders = useCallback(async () => {
     if (user?.uid) {
       try {
-        const result = await getUserOrders(user.uid); // ✅ Use uid instead of email
+        const result = await getUserOrders(user.uid);
         if (result.success) {
           setOrders(result.orders);
         }
@@ -105,12 +105,12 @@ function App() {
     } else {
       setOrders([]);
     }
-  };
+  }, [user?.uid]); // ✅ Only depends on user.uid
 
   // Load user orders
   useEffect(() => {
     loadOrders();
-  }, [user]);
+  }, [loadOrders]); // ✅ Now includes loadOrders
 
   // Firebase Auth State
   useEffect(() => {
@@ -209,7 +209,7 @@ function App() {
 
       const newOrder = {
         userEmail: user.email,
-        userId: user.uid, // ✅ Add userId
+        userId: user.uid,
         items: [itemData],
         total: product.price,
         date: new Date().toLocaleDateString('en-IN', { 
@@ -221,9 +221,9 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
-      const result = await addOrderDB(newOrder, user.uid); // ✅ Pass userId
+      const result = await addOrderDB(newOrder, user.uid);
       if (result.success) {
-        await loadOrders(); // ✅ Reload orders
+        await loadOrders();
         setCurrentPage('orders');
         window.showToast?.('🎊 Order placed successfully! Download your PDF now!', 'success');
       } else {
@@ -301,7 +301,7 @@ function App() {
 
       const newOrder = {
         userEmail: user.email,
-        userId: user.uid, // ✅ Add userId
+        userId: user.uid,
         items: orderItems,
         total: cartTotal,
         date: new Date().toLocaleDateString('en-IN', { 
@@ -313,9 +313,9 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
-      const result = await addOrderDB(newOrder, user.uid); // ✅ Pass userId
+      const result = await addOrderDB(newOrder, user.uid);
       if (result.success) {
-        await loadOrders(); // ✅ Reload orders
+        await loadOrders();
         setCart([]);
         setCurrentPage('orders');
         window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
@@ -333,15 +333,15 @@ function App() {
 
     const productData = { 
       ...product,
-      userId: user.uid, // ✅ Add userId
-      userEmail: user.email, // ✅ Add userEmail
+      userId: user.uid,
+      userEmail: user.email,
       uploadDate: new Date().toISOString(),
       totalDownloads: 0
     };
     
-    const result = await addProductDB(productData, user.uid); // ✅ Pass userId
+    const result = await addProductDB(productData, user.uid);
     if (result.success) {
-      await loadProducts(); // ✅ Reload products
+      await loadProducts();
       window.showToast?.('✅ Product uploaded successfully!', 'success');
     } else {
       window.showToast?.('❌ Upload failed: ' + result.error, 'error');
@@ -351,7 +351,7 @@ function App() {
   const deleteProduct = async (id) => {
     const result = await deleteProductDB(id);
     if (result.success) {
-      await loadProducts(); // ✅ Reload products after delete
+      await loadProducts();
       window.showToast?.('✅ Product deleted successfully!', 'success');
     } else {
       window.showToast?.('❌ Delete failed: ' + result.error, 'error');
@@ -391,8 +391,8 @@ function App() {
               {currentPage === 'products' && (
                 <ProductsPage 
                   products={products}
-                  setProducts={setProducts} // ✅ FIXED: Pass setProducts
-                  refreshProducts={loadProducts} // ✅ FIXED: Pass refresh function
+                  setProducts={setProducts}
+                  refreshProducts={loadProducts}
                   buyNow={buyNow} 
                   selectedCategory={selectedCategory} 
                   setSelectedCategory={setSelectedCategory} 
