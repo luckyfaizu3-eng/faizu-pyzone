@@ -424,7 +424,7 @@ function App() {
                   searchQuery={searchQuery} 
                 />
               )}
-              {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} />}
+              {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
               {currentPage === 'login' && <LoginPage />}
               {currentPage === 'orders' && (
                 <OrdersPage 
