@@ -2,29 +2,29 @@ import React, { useState } from 'react';
 import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw } from 'lucide-react';
 import { useCart } from '../App';
 import { CATEGORIES } from '../App';
-import { getAllProducts } from '../dbService';
 import ProductDetailPage from '../components/ProductDetailPage';
 
-function ProductsPage({ products, setProducts, buyNow, selectedCategory, setSelectedCategory, searchQuery, addReview }) {
+function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, setSelectedCategory, searchQuery, addReview }) {
   const { addToCart } = useCart();
   const [hoveredCard, setHoveredCard] = useState(null);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // ✅ Manual Refresh Function
+  // ✅ FIXED: Use refreshProducts prop instead of calling getAllProducts directly
   const handleRefresh = async () => {
     setRefreshing(true);
     window.showToast?.('🔄 Refreshing products...', 'info');
     
     try {
-      const result = await getAllProducts();
-      if (result.success) {
-        setProducts(result.products);
-        window.showToast?.(`✅ Refreshed! ${result.products.length} products loaded`, 'success');
-        console.log('✅ Manual refresh successful:', result.products.length);
+      // ✅ Use the refreshProducts function passed from App.js
+      if (refreshProducts) {
+        await refreshProducts();
+        window.showToast?.(`✅ Refreshed! ${products.length} products loaded`, 'success');
+        console.log('✅ Manual refresh successful:', products.length);
       } else {
-        window.showToast?.('❌ Refresh failed: ' + result.error, 'error');
+        console.error('❌ refreshProducts function not provided');
+        window.showToast?.('❌ Refresh function not available', 'error');
       }
     } catch (error) {
       console.error('❌ Refresh error:', error);
@@ -258,22 +258,29 @@ function ProductsPage({ products, setProducts, buyNow, selectedCategory, setSele
           </p>
           <button
             onClick={handleRefresh}
+            disabled={refreshing}
             style={{
               background: 'linear-gradient(135deg, #6366f1, #ec4899)',
               border: 'none',
               color: '#fff',
               padding: '1rem 2rem',
               borderRadius: '12px',
-              cursor: 'pointer',
+              cursor: refreshing ? 'not-allowed' : 'pointer',
               fontWeight: '700',
               fontSize: '1rem',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: '0.75rem'
+              gap: '0.75rem',
+              opacity: refreshing ? 0.6 : 1
             }}
           >
-            <RefreshCw size={20} />
-            Refresh Products
+            <RefreshCw 
+              size={20} 
+              style={{
+                animation: refreshing ? 'spin 1s linear infinite' : 'none'
+              }}
+            />
+            {refreshing ? 'Refreshing...' : 'Refresh Products'}
           </button>
         </div>
       ) : (
@@ -516,7 +523,7 @@ function ProductsPage({ products, setProducts, buyNow, selectedCategory, setSele
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
           onBuyNow={() => buyNow(selectedProduct)}
-          onAddReview={(reviewData) => addReview(selectedProduct.id, reviewData)}
+          onAddReview={(reviewData) => addReview && addReview(selectedProduct.id, reviewData)}
         />
       )}
 

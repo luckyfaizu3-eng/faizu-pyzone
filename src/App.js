@@ -73,29 +73,42 @@ function App() {
     };
   }, []);
 
-  // Load products from Firebase
-  useEffect(() => {
-    const loadProducts = async () => {
+  // ✅ FIXED: Create loadProducts function
+  const loadProducts = async () => {
+    try {
       const result = await getAllProducts();
       if (result.success) {
         setProducts(result.products);
       }
-    };
+    } catch (error) {
+      console.error('Error loading products:', error);
+      window.showToast?.('❌ Failed to load products', 'error');
+    }
+  };
+
+  // Load products from Firebase
+  useEffect(() => {
     loadProducts();
   }, []);
 
-  // Load user orders
-  useEffect(() => {
-    const loadOrders = async () => {
-      if (user?.email) {
-        const result = await getUserOrders(user.email);
+  // ✅ FIXED: Create loadOrders function
+  const loadOrders = async () => {
+    if (user?.uid) {
+      try {
+        const result = await getUserOrders(user.uid); // ✅ Use uid instead of email
         if (result.success) {
           setOrders(result.orders);
         }
-      } else {
-        setOrders([]);
+      } catch (error) {
+        console.error('Error loading orders:', error);
       }
-    };
+    } else {
+      setOrders([]);
+    }
+  };
+
+  // Load user orders
+  useEffect(() => {
     loadOrders();
   }, [user]);
 
@@ -196,6 +209,7 @@ function App() {
 
       const newOrder = {
         userEmail: user.email,
+        userId: user.uid, // ✅ Add userId
         items: [itemData],
         total: product.price,
         date: new Date().toLocaleDateString('en-IN', { 
@@ -207,12 +221,9 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
-      const result = await addOrderDB(newOrder);
+      const result = await addOrderDB(newOrder, user.uid); // ✅ Pass userId
       if (result.success) {
-        const updatedOrders = await getUserOrders(user.email);
-        if (updatedOrders.success) {
-          setOrders(updatedOrders.orders);
-        }
+        await loadOrders(); // ✅ Reload orders
         setCurrentPage('orders');
         window.showToast?.('🎊 Order placed successfully! Download your PDF now!', 'success');
       } else {
@@ -290,6 +301,7 @@ function App() {
 
       const newOrder = {
         userEmail: user.email,
+        userId: user.uid, // ✅ Add userId
         items: orderItems,
         total: cartTotal,
         date: new Date().toLocaleDateString('en-IN', { 
@@ -301,12 +313,9 @@ function App() {
         paymentId: response.razorpay_payment_id
       };
       
-      const result = await addOrderDB(newOrder);
+      const result = await addOrderDB(newOrder, user.uid); // ✅ Pass userId
       if (result.success) {
-        const updatedOrders = await getUserOrders(user.email);
-        if (updatedOrders.success) {
-          setOrders(updatedOrders.orders);
-        }
+        await loadOrders(); // ✅ Reload orders
         setCart([]);
         setCurrentPage('orders');
         window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
@@ -317,15 +326,22 @@ function App() {
   };
 
   const addProduct = async (product) => {
+    if (!user) {
+      window.showToast?.('❌ Please login first!', 'error');
+      return;
+    }
+
     const productData = { 
-      ...product, 
+      ...product,
+      userId: user.uid, // ✅ Add userId
+      userEmail: user.email, // ✅ Add userEmail
       uploadDate: new Date().toISOString(),
       totalDownloads: 0
     };
     
-    const result = await addProductDB(productData);
+    const result = await addProductDB(productData, user.uid); // ✅ Pass userId
     if (result.success) {
-      setProducts([...products, { id: result.id, ...productData }]);
+      await loadProducts(); // ✅ Reload products
       window.showToast?.('✅ Product uploaded successfully!', 'success');
     } else {
       window.showToast?.('❌ Upload failed: ' + result.error, 'error');
@@ -335,7 +351,7 @@ function App() {
   const deleteProduct = async (id) => {
     const result = await deleteProductDB(id);
     if (result.success) {
-      setProducts(products.filter(p => p.id !== id));
+      await loadProducts(); // ✅ Reload products after delete
       window.showToast?.('✅ Product deleted successfully!', 'success');
     } else {
       window.showToast?.('❌ Delete failed: ' + result.error, 'error');
@@ -374,7 +390,9 @@ function App() {
               {currentPage === 'home' && <HomePage setCurrentPage={setCurrentPage} />}
               {currentPage === 'products' && (
                 <ProductsPage 
-                  products={products} 
+                  products={products}
+                  setProducts={setProducts} // ✅ FIXED: Pass setProducts
+                  refreshProducts={loadProducts} // ✅ FIXED: Pass refresh function
                   buyNow={buyNow} 
                   selectedCategory={selectedCategory} 
                   setSelectedCategory={setSelectedCategory} 
@@ -383,7 +401,7 @@ function App() {
               )}
               {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} />}
               {currentPage === 'login' && <LoginPage />}
-              {currentPage === 'orders' && <OrdersPage orders={orders} />}
+              {currentPage === 'orders' && <OrdersPage orders={orders} user={user} />}
               {currentPage === 'admin' && user?.isAdmin && (
                 <AdminPanel 
                   products={products} 
