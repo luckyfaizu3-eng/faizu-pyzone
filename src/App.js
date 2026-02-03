@@ -51,7 +51,11 @@ export const CATEGORIES = [
 ];
 
 function App() {
-  const [cart, setCart] = useState([]);
+  const [cart, setCart] = useState(() => {
+    // Load cart from localStorage
+    const savedCart = localStorage.getItem('faizupyzone_cart');
+    return savedCart ? JSON.parse(savedCart) : [];
+  });
   const [user, setUser] = useState(null);
   const [currentPage, setCurrentPage] = useState('home');
   const [products, setProducts] = useState([]);
@@ -70,6 +74,11 @@ function App() {
     setShowSplash(false);
     sessionStorage.setItem('splashShown', 'true');
   };
+
+  // Save cart to localStorage whenever it changes
+  useEffect(() => {
+    localStorage.setItem('faizupyzone_cart', JSON.stringify(cart));
+  }, [cart]);
 
   // Load Razorpay Script
   useEffect(() => {
@@ -292,9 +301,19 @@ function App() {
       setUser(null);
       setCart([]);
       setOrders([]);
+      localStorage.removeItem('faizupyzone_cart'); // Clear cart from localStorage
       setCurrentPage('home');
       window.showToast?.('👋 Logged out successfully!', 'info');
     }
+  };
+
+  // Check if product is already purchased by user
+  const isProductPurchased = (productId) => {
+    if (!user || !orders || orders.length === 0) return false;
+    
+    return orders.some(order => 
+      order.items && order.items.some(item => item.id === productId)
+    );
   };
 
   const completeOrder = () => {
@@ -435,7 +454,9 @@ function App() {
                   buyNow={buyNow} 
                   selectedCategory={selectedCategory} 
                   setSelectedCategory={setSelectedCategory} 
-                  searchQuery={searchQuery} 
+                  searchQuery={searchQuery}
+                  isProductPurchased={isProductPurchased}
+                  user={user}
                 />
               )}
               {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}

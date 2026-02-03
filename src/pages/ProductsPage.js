@@ -4,7 +4,7 @@ import { useCart } from '../App';
 import { CATEGORIES } from '../App';
 import ProductDetailPage from '../components/ProductDetailPage';
 
-function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, setSelectedCategory, searchQuery, addReview }) {
+function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, setSelectedCategory, searchQuery, addReview, isProductPurchased, user }) {
   const { addToCart } = useCart();
   const [hoveredCard, setHoveredCard] = useState(null);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -85,6 +85,12 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
         text: 'TRENDING', 
         bg: 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
         shadow: '0 4px 12px rgba(139,92,246,0.4)'
+      },
+      purchased: {
+        icon: '✅',
+        text: 'PURCHASED',
+        bg: 'linear-gradient(135deg, #06b6d4, #0891b2)',
+        shadow: '0 4px 12px rgba(6,182,212,0.4)'
       }
     };
 
@@ -378,9 +384,15 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
                 onMouseLeave={() => setHoveredCard(null)}
               >
                 {/* Premium Badges */}
-                {isTrendingProduct(product) && <Badge type="trending" />}
-                {!isTrendingProduct(product) && isHotProduct(product) && <Badge type="hot" />}
-                {!isTrendingProduct(product) && !isHotProduct(product) && isNewProduct(product) && <Badge type="new" />}
+                {isProductPurchased && isProductPurchased(product.id) ? (
+                  <Badge type="purchased" />
+                ) : (
+                  <>
+                    {isTrendingProduct(product) && <Badge type="trending" />}
+                    {!isTrendingProduct(product) && isHotProduct(product) && <Badge type="hot" />}
+                    {!isTrendingProduct(product) && !isHotProduct(product) && isNewProduct(product) && <Badge type="new" />}
+                  </>
+                )}
 
                 {/* Category Badge at Top */}
                 <div style={{
@@ -548,36 +560,46 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
                   
                   <button 
                     onClick={() => setSelectedProduct(product)}
+                    disabled={isProductPurchased && isProductPurchased(product.id)}
                     style={{
                       width: '100%',
-                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      background: isProductPurchased && isProductPurchased(product.id)
+                        ? 'rgba(100,116,139,0.2)'
+                        : 'linear-gradient(135deg, #10b981, #059669)',
                       border: 'none',
-                      color: '#fff',
+                      color: isProductPurchased && isProductPurchased(product.id) ? '#64748b' : '#fff',
                       padding: '1rem',
                       borderRadius: '14px',
-                      cursor: 'pointer',
+                      cursor: isProductPurchased && isProductPurchased(product.id) ? 'not-allowed' : 'pointer',
                       fontWeight: '700',
                       fontSize: '1rem',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       gap: '0.5rem',
-                      boxShadow: '0 4px 15px rgba(16,185,129,0.3)',
-                      transition: 'all 0.3s ease'
+                      boxShadow: isProductPurchased && isProductPurchased(product.id) 
+                        ? 'none' 
+                        : '0 4px 15px rgba(16,185,129,0.3)',
+                      transition: 'all 0.3s ease',
+                      opacity: isProductPurchased && isProductPurchased(product.id) ? 0.6 : 1
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
+                      if (!isProductPurchased || !isProductPurchased(product.id)) {
+                        e.currentTarget.style.transform = 'translateY(-2px)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
+                      }
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(16,185,129,0.3)';
+                      if (!isProductPurchased || !isProductPurchased(product.id)) {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(16,185,129,0.3)';
+                      }
                     }}
-                    onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
-                    onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                    onMouseDown={(e) => !isProductPurchased || !isProductPurchased(product.id) ? e.currentTarget.style.transform = 'scale(0.95)' : null}
+                    onMouseUp={(e) => !isProductPurchased || !isProductPurchased(product.id) ? e.currentTarget.style.transform = 'scale(1)' : null}
                   >
                     <Zap size={20} />
-                    Buy Now
+                    {isProductPurchased && isProductPurchased(product.id) ? 'Already Purchased' : 'Buy Now'}
                   </button>
                 </div>
               </div>
