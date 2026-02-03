@@ -271,27 +271,31 @@ function App() {
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  // ✅ Simple Login - No verification check
   const login = async (email, password) => {
     const result = await loginUser(email, password);
+    
     if (result.success) {
       window.showToast?.('🎉 Welcome back!', 'success');
       setCurrentPage('home');
-      return true;
+      return { success: true };
     } else {
-      window.showToast?.('❌ Login failed! Check your credentials', 'error');
-      return false;
+      window.showToast?.('❌ ' + result.error, 'error');
+      return { success: false };
     }
   };
 
+  // ✅ Simple Register - No verification needed
   const register = async (email, password, name) => {
     const result = await registerUser(email, password, name);
+    
     if (result.success) {
       window.showToast?.('🎊 Account created successfully!', 'success');
       setCurrentPage('home');
-      return true;
+      return { success: true };
     } else {
-      window.showToast?.('❌ Registration failed: ' + result.error, 'error');
-      return false;
+      window.showToast?.('❌ ' + result.error, 'error');
+      return { success: false };
     }
   };
 
@@ -465,7 +469,7 @@ function App() {
                 <OrdersPage 
                   orders={orders} 
                   user={user}
-                  refreshOrders={loadOrders} // ✅ Pass refresh function
+                  refreshOrders={loadOrders}
                 />
               )}
               {currentPage === 'admin' && user?.isAdmin && (
