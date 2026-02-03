@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw, TrendingUp, Flame } from 'lucide-react';
+import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw, TrendingUp } from 'lucide-react';
 import { useCart } from '../App';
 import { CATEGORIES } from '../App';
 import ProductDetailPage from '../components/ProductDetailPage';
