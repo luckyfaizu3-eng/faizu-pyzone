@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Download, CheckCircle, Trash2, FileText, X } from 'lucide-react';
+import { Download, CheckCircle, Trash2, FileText, X, Receipt } from 'lucide-react';
 import { useAuth } from '../App';
 import { db } from '../firebase';
 import { deleteDoc, doc, updateDoc, increment } from 'firebase/firestore';
@@ -149,26 +149,24 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
   if (!orders || orders.length === 0) {
     return (
       <div style={{
-        paddingTop: '120px',
+        paddingTop: '100px',
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        padding: '100px 1.5rem 2rem'
       }}>
         <div style={{
           textAlign: 'center',
           animation: 'fadeInUp 0.6s ease'
         }}>
-          <Download 
-            size={120} 
-            color="#cbd5e1" 
-            style={{
-              margin: '0 auto 2rem',
-              opacity: 0.5
-            }} 
-          />
+          <div style={{
+            fontSize: '5rem',
+            marginBottom: '1.5rem',
+            opacity: 0.3
+          }}>📦</div>
           <h2 style={{
-            fontSize: '2.5rem',
+            fontSize: '2rem',
             fontWeight: '900',
             marginBottom: '1rem',
             color: '#1e293b'
@@ -177,7 +175,7 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
           </h2>
           <p style={{
             color: '#64748b',
-            fontSize: '1.2rem'
+            fontSize: '1.1rem'
           }}>
             Start shopping to see your orders here!
           </p>
@@ -188,237 +186,229 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
 
   return (
     <div style={{
-      paddingTop: '120px',
-      paddingBottom: '5rem',
+      paddingTop: '100px',
+      paddingBottom: '3rem',
       minHeight: '100vh',
-      padding: '120px 1.5rem 5rem'
+      padding: '100px 1.5rem 3rem'
     }}>
       <div style={{
-        maxWidth: '1000px',
+        maxWidth: '900px',
         margin: '0 auto'
       }}>
+        {/* Header */}
         <h1 style={{
-          fontSize: 'clamp(2.5rem, 6vw, 4rem)',
+          fontSize: 'clamp(2rem, 6vw, 3rem)',
           fontWeight: '900',
           textAlign: 'center',
-          marginBottom: '3rem',
+          marginBottom: '2rem',
           background: 'linear-gradient(135deg, #6366f1, #ec4899)',
           WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent'
+          WebkitTextFillColor: 'transparent',
+          animation: 'fadeInUp 0.6s ease'
         }}>
           My Orders ({orders.length})
         </h1>
         
+        {/* Orders List */}
         {orders.map((order, index) => (
           <div 
             key={order.id} 
             style={{
               background: '#ffffff',
               border: '1px solid #e2e8f0',
-              borderRadius: '24px',
-              padding: '2.5rem',
-              marginBottom: '2rem',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-              animation: 'fadeInUp 0.6s ease ' + (index * 0.1) + 's backwards'
+              borderRadius: '20px',
+              padding: '1.5rem',
+              marginBottom: '1.5rem',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+              animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`
             }}
           >
+            {/* Order Header */}
             <div style={{
               display: 'flex',
               justifyContent: 'space-between',
-              marginBottom: '2rem',
-              flexWrap: 'wrap',
-              gap: '1rem'
+              alignItems: 'flex-start',
+              marginBottom: '1.5rem',
+              gap: '0.75rem'
             }}>
-              <div>
+              <div style={{ flex: 1 }}>
                 <h3 style={{
-                  fontSize: '1.5rem',
-                  fontWeight: '900',
-                  color: '#1e293b'
+                  fontSize: '1.1rem',
+                  fontWeight: '800',
+                  color: '#1e293b',
+                  marginBottom: '0.25rem'
                 }}>
                   Order #{order.id?.substring(0, 8)}
                 </h3>
                 <p style={{
                   color: '#64748b',
-                  marginTop: '0.5rem'
+                  fontSize: '0.85rem'
                 }}>
                   {order.date}
                 </p>
               </div>
-              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                <span style={{
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '50px',
-                  fontSize: '0.95rem',
-                  fontWeight: '700',
-                  color: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  height: 'fit-content'
-                }}>
-                  <CheckCircle size={18} />
-                  {order.status}
-                </span>
-                
+              
+              {/* Action Buttons - Mobile Friendly */}
+              <div style={{ 
+                display: 'flex', 
+                gap: '0.5rem',
+                flexShrink: 0
+              }}>
                 <button
                   onClick={() => setShowReceipt(order)}
                   style={{
                     background: 'rgba(99,102,241,0.1)',
-                    border: '2px solid rgba(99,102,241,0.3)',
-                    padding: '0.75rem 1.5rem',
-                    borderRadius: '50px',
+                    border: '1px solid rgba(99,102,241,0.3)',
+                    padding: '0.6rem',
+                    borderRadius: '12px',
                     cursor: 'pointer',
-                    fontWeight: '700',
-                    color: '#6366f1',
+                    transition: 'all 0.3s ease',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(99,102,241,0.2)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(99,102,241,0.1)';
+                    justifyContent: 'center'
                   }}
                 >
-                  <FileText size={18} />
-                  Receipt
+                  <Receipt size={18} color="#6366f1" />
                 </button>
 
                 <button
                   onClick={() => setConfirmDelete(order.id)}
                   style={{
                     background: 'rgba(239,68,68,0.1)',
-                    border: '2px solid rgba(239,68,68,0.2)',
-                    padding: '0.75rem',
+                    border: '1px solid rgba(239,68,68,0.2)',
+                    padding: '0.6rem',
                     borderRadius: '12px',
                     cursor: 'pointer',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
-                    e.currentTarget.style.transform = 'scale(1.1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                    e.currentTarget.style.transform = 'scale(1)';
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                   }}
                 >
-                  <Trash2 size={20} color="#ef4444" />
+                  <Trash2 size={18} color="#ef4444" />
                 </button>
               </div>
             </div>
+
+            {/* Status Badge */}
+            <div style={{
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              padding: '0.6rem 1rem',
+              borderRadius: '30px',
+              fontSize: '0.85rem',
+              fontWeight: '700',
+              color: '#fff',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '1.5rem'
+            }}>
+              <CheckCircle size={16} />
+              {order.status}
+            </div>
             
+            {/* Order Items */}
             <div style={{
               borderTop: '1px solid #e2e8f0',
-              paddingTop: '2rem'
+              paddingTop: '1.5rem'
             }}>
+              {/* Total */}
               <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '2rem',
-                flexWrap: 'wrap',
-                gap: '1rem'
+                marginBottom: '1.5rem',
+                textAlign: 'center'
               }}>
-                <span style={{
+                <div style={{
+                  fontSize: '0.85rem',
+                  color: '#64748b',
+                  marginBottom: '0.25rem',
+                  fontWeight: '600'
+                }}>
+                  Total Amount
+                </div>
+                <div style={{
                   fontSize: '2rem',
                   fontWeight: '900',
                   background: 'linear-gradient(135deg, #10b981, #059669)',
                   WebkitBackgroundClip: 'text',
                   WebkitTextFillColor: 'transparent'
                 }}>
-                  Total: ₹{order.total}
-                </span>
+                  ₹{order.total}
+                </div>
               </div>
 
+              {/* Items */}
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '1.5rem'
+                gap: '1rem'
               }}>
                 {order.items.map(item => (
                   <div key={item.id} style={{
-                    background: 'rgba(99,102,241,0.02)',
+                    background: 'rgba(99,102,241,0.03)',
                     border: '1px solid #e2e8f0',
                     borderRadius: '16px',
-                    padding: '1.5rem',
+                    padding: '1.25rem',
                   }}>
+                    {/* Item Header */}
                     <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: '1rem',
-                      flexWrap: 'wrap',
-                      gap: '1rem'
+                      marginBottom: '1rem'
                     }}>
-                      <div>
-                        <h4 style={{
-                          fontSize: '1.25rem',
-                          fontWeight: '700',
-                          color: '#1e293b',
-                          marginBottom: '0.25rem'
+                      <h4 style={{
+                        fontSize: '1.05rem',
+                        fontWeight: '700',
+                        color: '#1e293b',
+                        marginBottom: '0.5rem',
+                        lineHeight: 1.3
+                      }}>
+                        📄 {item.title}
+                      </h4>
+                      {item.pdfFiles && (
+                        <div style={{
+                          fontSize: '0.85rem',
+                          color: '#64748b',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.5rem'
                         }}>
-                          📄 {item.title}
-                        </h4>
-                        {item.pdfFiles && (
-                          <div style={{
-                            fontSize: '0.9rem',
-                            color: '#64748b',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem'
-                          }}>
-                            <FileText size={16} />
-                            {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
-                          </div>
-                        )}
-                      </div>
-                      
-                      {/* ✅ Download All Button */}
-                      {item.pdfFiles && item.pdfFiles.length > 0 && (
-                        <button
-                          onClick={() => handleDownloadAll(item)}
-                          disabled={downloading[item.id]}
-                          style={{
-                            background: downloading[item.id] 
-                              ? 'rgba(99,102,241,0.3)' 
-                              : 'linear-gradient(135deg, #10b981, #059669)',
-                            border: 'none',
-                            color: 'white',
-                            padding: '0.75rem 1.5rem',
-                            borderRadius: '12px',
-                            cursor: downloading[item.id] ? 'not-allowed' : 'pointer',
-                            fontWeight: '700',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem',
-                            transition: 'all 0.3s ease',
-                            fontSize: '0.95rem',
-                            opacity: downloading[item.id] ? 0.7 : 1
-                          }}
-                          onMouseEnter={(e) => {
-                            if (!downloading[item.id]) {
-                              e.currentTarget.style.transform = 'translateY(-2px)';
-                              e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!downloading[item.id]) {
-                              e.currentTarget.style.transform = 'translateY(0)';
-                              e.currentTarget.style.boxShadow = 'none';
-                            }
-                          }}
-                        >
-                          <Download size={18} /> 
-                          {downloading[item.id] ? 'Downloading...' : `Download All (${item.pdfFiles.length})`}
-                        </button>
+                          <FileText size={14} />
+                          {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
+                        </div>
                       )}
                     </div>
+                      
+                    {/* Download All Button */}
+                    {item.pdfFiles && item.pdfFiles.length > 0 && (
+                      <button
+                        onClick={() => handleDownloadAll(item)}
+                        disabled={downloading[item.id]}
+                        style={{
+                          width: '100%',
+                          background: downloading[item.id] 
+                            ? 'rgba(99,102,241,0.2)' 
+                            : 'linear-gradient(135deg, #10b981, #059669)',
+                          border: 'none',
+                          color: 'white',
+                          padding: '1rem',
+                          borderRadius: '14px',
+                          cursor: downloading[item.id] ? 'not-allowed' : 'pointer',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '0.5rem',
+                          transition: 'all 0.3s ease',
+                          fontSize: '0.95rem',
+                          opacity: downloading[item.id] ? 0.7 : 1,
+                          marginBottom: '1rem',
+                          boxShadow: downloading[item.id] ? 'none' : '0 4px 12px rgba(16,185,129,0.3)'
+                        }}
+                      >
+                        <Download size={18} /> 
+                        {downloading[item.id] ? 'Downloading...' : `Download All (${item.pdfFiles.length})`}
+                      </button>
+                    )}
 
-                    {/* ✅ Individual PDF List */}
+                    {/* Individual PDF List */}
                     {item.pdfFiles && item.pdfFiles.length > 0 && (
                       <div style={{
                         display: 'flex',
@@ -430,11 +420,10 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            padding: '1rem',
+                            padding: '0.9rem',
                             background: '#ffffff',
                             border: '1px solid #e2e8f0',
-                            borderRadius: '10px',
-                            flexWrap: 'wrap',
+                            borderRadius: '12px',
                             gap: '0.75rem'
                           }}>
                             <div style={{
@@ -442,20 +431,26 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                               alignItems: 'center',
                               gap: '0.75rem',
                               flex: 1,
-                              minWidth: '200px'
+                              minWidth: 0
                             }}>
-                              <FileText size={20} color="#6366f1" />
-                              <div>
+                              <FileText size={18} color="#6366f1" style={{ flexShrink: 0 }} />
+                              <div style={{
+                                flex: 1,
+                                minWidth: 0
+                              }}>
                                 <div style={{
                                   fontWeight: '600',
                                   color: '#1e293b',
-                                  fontSize: '0.95rem'
+                                  fontSize: '0.9rem',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap'
                                 }}>
                                   {pdf.fileName}
                                 </div>
                                 {pdf.size && (
                                   <div style={{
-                                    fontSize: '0.8rem',
+                                    fontSize: '0.75rem',
                                     color: '#64748b'
                                   }}>
                                     {pdf.size}
@@ -471,31 +466,22 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                                 background: downloading[`${item.id}-${pdfIndex}`]
                                   ? 'rgba(99,102,241,0.2)'
                                   : 'rgba(99,102,241,0.1)',
-                                border: '2px solid rgba(99,102,241,0.3)',
+                                border: '1px solid rgba(99,102,241,0.3)',
                                 color: '#6366f1',
-                                padding: '0.5rem 1rem',
-                                borderRadius: '8px',
+                                padding: '0.6rem 0.9rem',
+                                borderRadius: '10px',
                                 cursor: downloading[`${item.id}-${pdfIndex}`] ? 'not-allowed' : 'pointer',
                                 fontWeight: '600',
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '0.5rem',
-                                fontSize: '0.85rem',
-                                transition: 'all 0.3s ease'
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!downloading[`${item.id}-${pdfIndex}`]) {
-                                  e.currentTarget.style.background = 'rgba(99,102,241,0.2)';
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!downloading[`${item.id}-${pdfIndex}`]) {
-                                  e.currentTarget.style.background = 'rgba(99,102,241,0.1)';
-                                }
+                                gap: '0.4rem',
+                                fontSize: '0.8rem',
+                                transition: 'all 0.3s ease',
+                                flexShrink: 0
                               }}
                             >
-                              <Download size={16} />
-                              {downloading[`${item.id}-${pdfIndex}`] ? 'Downloading...' : 'Download'}
+                              <Download size={14} />
+                              {downloading[`${item.id}-${pdfIndex}`] ? '...' : 'Get'}
                             </button>
                           </div>
                         ))}
@@ -509,7 +495,7 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
         ))}
       </div>
 
-      {/* Receipt Modal */}
+      {/* Receipt Modal - Mobile Optimized */}
       {showReceipt && (
         <div style={{
           position: 'fixed',
@@ -517,33 +503,39 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
           left: 0,
           right: 0,
           bottom: 0,
-          background: 'rgba(0,0,0,0.7)',
+          background: 'rgba(0,0,0,0.8)',
+          backdropFilter: 'blur(10px)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 1000,
-          padding: '1rem'
+          zIndex: 2000,
+          padding: '1rem',
+          overflowY: 'auto',
+          animation: 'fadeIn 0.3s ease'
         }}
         onClick={() => setShowReceipt(null)}
         >
           <div style={{
             background: '#fff',
             borderRadius: '24px',
-            padding: '3rem',
-            maxWidth: '600px',
+            padding: '2rem 1.5rem',
+            maxWidth: '500px',
             width: '100%',
             maxHeight: '90vh',
             overflow: 'auto',
-            position: 'relative'
+            position: 'relative',
+            animation: 'slideUp 0.3s ease',
+            margin: '1rem 0'
           }}
           onClick={(e) => e.stopPropagation()}
           >
+            {/* Close Button */}
             <button
               onClick={() => setShowReceipt(null)}
               style={{
                 position: 'absolute',
-                top: '1.5rem',
-                right: '1.5rem',
+                top: '1rem',
+                right: '1rem',
                 background: 'rgba(239,68,68,0.1)',
                 border: 'none',
                 borderRadius: '50%',
@@ -552,81 +544,105 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                transition: 'all 0.3s ease'
               }}
             >
-              <X size={24} color="#ef4444" />
+              <X size={20} color="#ef4444" />
             </button>
 
+            {/* Title */}
             <h2 style={{
-              fontSize: '2rem',
+              fontSize: '1.5rem',
               fontWeight: '900',
-              marginBottom: '2rem',
+              marginBottom: '1.5rem',
               color: '#1e293b',
-              textAlign: 'center'
+              textAlign: 'center',
+              paddingRight: '2rem'
             }}>
-              Transaction Receipt
+              🧾 Receipt
             </h2>
 
+            {/* Receipt Content */}
             <div style={{
-              background: 'rgba(99,102,241,0.05)',
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.05))',
               border: '2px solid rgba(99,102,241,0.2)',
               borderRadius: '16px',
-              padding: '2rem',
-              marginBottom: '2rem'
+              padding: '1.5rem',
+              marginBottom: '1.5rem'
             }}>
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Order ID</div>
-                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>#{showReceipt.id}</div>
+              {/* Order ID */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Order ID</div>
+                <div style={{ fontWeight: '700', fontSize: '1rem', color: '#1e293b' }}>#{showReceipt.id}</div>
               </div>
 
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Payment ID</div>
-                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b', wordBreak: 'break-all' }}>
+              {/* Payment ID */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Payment ID</div>
+                <div style={{ 
+                  fontWeight: '700', 
+                  fontSize: '0.85rem', 
+                  color: '#1e293b', 
+                  wordBreak: 'break-all'
+                }}>
                   {showReceipt.paymentId || 'N/A'}
                 </div>
               </div>
 
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Date</div>
-                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>{showReceipt.date}</div>
+              {/* Date */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Date</div>
+                <div style={{ fontWeight: '700', fontSize: '1rem', color: '#1e293b' }}>{showReceipt.date}</div>
               </div>
 
-              <div style={{ marginBottom: '1.5rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Customer</div>
-                <div style={{ fontWeight: '700', fontSize: '1.1rem', color: '#1e293b' }}>{showReceipt.userEmail}</div>
+              {/* Customer */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Customer</div>
+                <div style={{ 
+                  fontWeight: '700', 
+                  fontSize: '0.9rem', 
+                  color: '#1e293b',
+                  wordBreak: 'break-all'
+                }}>
+                  {showReceipt.userEmail}
+                </div>
               </div>
 
+              {/* Items */}
               <div style={{
                 borderTop: '2px dashed rgba(99,102,241,0.2)',
-                paddingTop: '1.5rem',
-                marginTop: '1.5rem'
+                paddingTop: '1.25rem',
+                marginTop: '1.25rem'
               }}>
-                <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Items</div>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.75rem', fontWeight: '600' }}>Items</div>
                 {showReceipt.items.map((item, idx) => (
                   <div key={idx} style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     marginBottom: '0.75rem',
-                    fontSize: '1rem'
+                    fontSize: '0.9rem',
+                    gap: '1rem'
                   }}>
-                    <span>{item.title}</span>
-                    <span style={{ fontWeight: '700' }}>₹{item.price}</span>
+                    <span style={{ flex: 1 }}>{item.title}</span>
+                    <span style={{ fontWeight: '700', flexShrink: 0 }}>₹{item.price}</span>
                   </div>
                 ))}
               </div>
 
+              {/* Total */}
               <div style={{
                 borderTop: '2px solid rgba(99,102,241,0.3)',
-                paddingTop: '1.5rem',
-                marginTop: '1.5rem',
+                paddingTop: '1.25rem',
+                marginTop: '1.25rem',
                 display: 'flex',
                 justifyContent: 'space-between',
-                alignItems: 'center'
+                alignItems: 'center',
+                gap: '1rem'
               }}>
-                <span style={{ fontSize: '1.5rem', fontWeight: '900', color: '#1e293b' }}>Total Paid</span>
+                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#1e293b' }}>Total Paid</span>
                 <span style={{
-                  fontSize: '2rem',
+                  fontSize: '1.75rem',
                   fontWeight: '900',
                   background: 'linear-gradient(135deg, #10b981, #059669)',
                   WebkitBackgroundClip: 'text',
@@ -637,14 +653,16 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
               </div>
             </div>
 
+            {/* Success Badge */}
             <div style={{
-              background: 'rgba(16,185,129,0.1)',
+              background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.1))',
               border: '2px solid rgba(16,185,129,0.3)',
               borderRadius: '12px',
               padding: '1rem',
               textAlign: 'center',
               color: '#10b981',
-              fontWeight: '700'
+              fontWeight: '700',
+              fontSize: '0.95rem'
             }}>
               ✅ Payment Successful
             </div>
@@ -652,17 +670,19 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
         </div>
       )}
 
+      {/* Confirm Delete Modal */}
       <ConfirmModal
         show={confirmDelete !== null}
         onConfirm={() => handleDeleteOrder(confirmDelete)}
         onCancel={() => setConfirmDelete(null)}
         title="Delete Order?"
-        message="Are you sure you want to delete this order? This action cannot be undone and all associated data will be permanently removed."
-        confirmText="Yes, Delete"
+        message="Are you sure you want to delete this order? This action cannot be undone."
+        confirmText="Delete"
         cancelText="Cancel"
         type="danger"
       />
 
+      {/* Animations */}
       <style>{`
         @keyframes fadeInUp {
           from {
@@ -672,6 +692,20 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
           to {
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from {
+            opacity: 0;
+            transform: translateY(50px) scale(0.9);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
           }
         }
       `}</style>

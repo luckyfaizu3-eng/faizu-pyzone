@@ -7,7 +7,8 @@ import {
   getAllProducts, 
   deleteProduct as deleteProductDB, 
   addOrder as addOrderDB, 
-  getUserOrders
+  getUserOrders,
+  updateProduct as updateProductDB
 } from './dbService';
 
 // Import Components
@@ -420,7 +421,8 @@ function App() {
       userEmail: user.email,
       uploadDate: new Date().toISOString(),
       totalDownloads: 0,
-      totalRevenue: 0
+      totalRevenue: 0,
+      reviews: [] // ✅ Initialize empty reviews array
     };
     
     const result = await addProductDB(productData, user.uid);
@@ -439,6 +441,60 @@ function App() {
       window.showToast?.('✅ Product deleted successfully!', 'success');
     } else {
       window.showToast?.('❌ Delete failed: ' + result.error, 'error');
+    }
+  };
+
+  // ✅ NEW: Add review function with proper state update
+  const handleAddReview = async (productId, reviewData) => {
+    if (!user) {
+      window.showToast?.('⚠️ Please login to add review!', 'error');
+      return;
+    }
+
+    try {
+      // Find the product
+      const product = products.find(p => p.id === productId);
+      if (!product) {
+        window.showToast?.('❌ Product not found!', 'error');
+        return;
+      }
+
+      // Create new review object
+      const newReview = {
+        ...reviewData,
+        id: Date.now(),
+        date: new Date().toLocaleDateString('en-IN', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        }),
+        likes: 0
+      };
+
+      // Update product with new review
+      const updatedProduct = {
+        ...product,
+        reviews: [...(product.reviews || []), newReview]
+      };
+
+      // Update in database
+      const result = await updateProductDB(productId, updatedProduct);
+
+      if (result.success) {
+        // ✅ Update local state immediately
+        setProducts(prevProducts =>
+          prevProducts.map(p =>
+            p.id === productId ? updatedProduct : p
+          )
+        );
+
+        window.showToast?.('✅ Review added successfully!', 'success');
+      } else {
+        window.showToast?.('❌ Failed to add review: ' + result.error, 'error');
+      }
+    } catch (error) {
+      console.error('Error adding review:', error);
+      window.showToast?.('❌ Failed to add review!', 'error');
     }
   };
 
@@ -489,6 +545,7 @@ function App() {
                   searchQuery={searchQuery}
                   isProductPurchased={isProductPurchased}
                   user={user}
+                  onAddReview={handleAddReview}
                 />
               )}
               {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}

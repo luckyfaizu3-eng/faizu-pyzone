@@ -1,21 +1,27 @@
 import React from 'react';
-import { X, Star, Download, ShoppingCart, Zap, CheckCircle, Shield, ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, Star, Download, ShoppingCart, Zap, CheckCircle, Shield, ArrowLeft, ChevronLeft, ChevronRight, MessageCircle, Send } from 'lucide-react';
 import { useCart } from '../App';
+import { useAuth } from '../App';
 import ReviewSection from './ReviewSection';
 
 function ProductDetailPage({ product, onClose, onBuyNow, onAddReview }) {
   const { addToCart } = useCart();
+  const { user } = useAuth();
   const [selectedPreviewPage, setSelectedPreviewPage] = React.useState(0);
   const [addingToCart, setAddingToCart] = React.useState(false);
   const [touchStart, setTouchStart] = React.useState(0);
   const [touchEnd, setTouchEnd] = React.useState(0);
+  const [showReviewForm, setShowReviewForm] = React.useState(false);
+  const [newReview, setNewReview] = React.useState({
+    rating: 5,
+    comment: ''
+  });
 
   if (!product) return null;
 
   const hasPreviewPages = product.previewPages && product.previewPages.length > 0;
 
   // Touch swipe handler for preview
-
   const handleTouchStart = (e) => {
     setTouchStart(e.targetTouches[0].clientX);
   };
@@ -28,14 +34,12 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview }) {
     if (!hasPreviewPages) return;
     
     if (touchStart - touchEnd > 75) {
-      // Swipe left - next
       setSelectedPreviewPage((prev) => 
         prev < product.previewPages.length - 1 ? prev + 1 : prev
       );
     }
 
     if (touchStart - touchEnd < -75) {
-      // Swipe right - previous
       setSelectedPreviewPage((prev) => prev > 0 ? prev - 1 : prev);
     }
   };
@@ -47,6 +51,35 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview }) {
       setAddingToCart(false);
       onClose();
     }, 800);
+  };
+
+  const handleSubmitReview = (e) => {
+    e.preventDefault();
+    
+    if (!user) {
+      window.showToast?.('Please login to add review!', 'error');
+      return;
+    }
+
+    if (!newReview.comment.trim()) {
+      window.showToast?.('Please write a review comment!', 'error');
+      return;
+    }
+
+    // Create review data
+    const reviewData = {
+      rating: newReview.rating,
+      comment: newReview.comment.trim(),
+      userName: user.displayName || user.email.split('@')[0],
+      userEmail: user.email
+    };
+
+    // Call parent handler
+    onAddReview(reviewData);
+
+    // Reset form
+    setNewReview({ rating: 5, comment: '' });
+    setShowReviewForm(false);
   };
 
   return (
@@ -629,6 +662,169 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview }) {
             </div>
           ))}
         </div>
+
+        {/* Write Review Button */}
+        {user && (
+          <button
+            onClick={() => setShowReviewForm(!showReviewForm)}
+            style={{
+              width: '100%',
+              background: showReviewForm 
+                ? 'linear-gradient(135deg, #ef4444, #dc2626)' 
+                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+              color: '#fff',
+              padding: '1.15rem',
+              borderRadius: '20px',
+              cursor: 'pointer',
+              fontWeight: '700',
+              fontSize: '1.05rem',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.75rem',
+              boxShadow: '0 12px 40px rgba(99,102,241,0.4)',
+              transition: 'all 0.3s ease',
+              marginBottom: '1.5rem'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <MessageCircle size={22} />
+            {showReviewForm ? 'Cancel Review' : 'Write a Review'}
+          </button>
+        )}
+
+        {/* Review Form */}
+        {showReviewForm && user && (
+          <form onSubmit={handleSubmitReview} style={{
+            background: 'linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.05))',
+            border: '2px solid rgba(99,102,241,0.2)',
+            borderRadius: '20px',
+            padding: '1.5rem',
+            marginBottom: '1.5rem',
+            animation: 'slideDown 0.3s ease'
+          }}>
+            <h3 style={{
+              fontSize: '1.1rem',
+              fontWeight: '800',
+              color: '#1e293b',
+              marginBottom: '1rem'
+            }}>
+              Share Your Experience
+            </h3>
+
+            {/* Rating Selector */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.85rem',
+                fontWeight: '700',
+                color: '#475569',
+                marginBottom: '0.5rem'
+              }}>
+                Your Rating
+              </label>
+              <div style={{
+                display: 'flex',
+                gap: '0.5rem'
+              }}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setNewReview({ ...newReview, rating: star })}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '0.25rem',
+                      transition: 'transform 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
+                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                  >
+                    <Star
+                      size={32}
+                      fill={star <= newReview.rating ? '#f59e0b' : 'none'}
+                      color="#f59e0b"
+                    />
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Comment Input */}
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{
+                display: 'block',
+                fontSize: '0.85rem',
+                fontWeight: '700',
+                color: '#475569',
+                marginBottom: '0.5rem'
+              }}>
+                Your Review
+              </label>
+              <textarea
+                value={newReview.comment}
+                onChange={(e) => setNewReview({ ...newReview, comment: e.target.value })}
+                placeholder="Tell us what you think about this product..."
+                required
+                rows={4}
+                style={{
+                  width: '100%',
+                  padding: '0.875rem',
+                  borderRadius: '12px',
+                  border: '2px solid #e2e8f0',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  resize: 'vertical',
+                  fontFamily: 'inherit',
+                  transition: 'all 0.3s ease'
+                }}
+                onFocus={(e) => e.target.style.borderColor = '#6366f1'}
+                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+              />
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              style={{
+                width: '100%',
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                border: 'none',
+                color: '#fff',
+                padding: '1rem',
+                borderRadius: '12px',
+                fontSize: '0.95rem',
+                fontWeight: '700',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                boxShadow: '0 4px 16px rgba(16,185,129,0.3)',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 16px rgba(16,185,129,0.3)';
+              }}
+            >
+              <Send size={18} />
+              Submit Review
+            </button>
+          </form>
+        )}
         </div>
         {/* End of padded content */}
       </div>
@@ -654,6 +850,17 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview }) {
           }
           to { 
             opacity: 1;
+          }
+        }
+
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-20px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
           }
         }
 

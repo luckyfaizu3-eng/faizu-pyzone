@@ -4,31 +4,6 @@ import { useAuth } from '../App';
 
 function ReviewSection({ product, reviews, onAddReview }) {
   const { user } = useAuth();
-  const [showReviewForm, setShowReviewForm] = useState(false);
-  const [newReview, setNewReview] = useState({
-    rating: 5,
-    comment: ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!user) {
-      window.showToast?.('Please login to add review!', 'error');
-      return;
-    }
-    
-    onAddReview({
-      ...newReview,
-      userName: user.displayName || user.email.split('@')[0],
-      userEmail: user.email,
-      date: new Date().toLocaleDateString(),
-      likes: 0
-    });
-    
-    setNewReview({ rating: 5, comment: '' });
-    setShowReviewForm(false);
-    window.showToast?.('✅ Review added successfully!', 'success');
-  };
 
   const averageRating = reviews && reviews.length > 0
     ? (reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length).toFixed(1)
@@ -42,12 +17,7 @@ function ReviewSection({ product, reviews, onAddReview }) {
       marginTop: '2rem'
     }}>
       <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '2rem',
-        flexWrap: 'wrap',
-        gap: '1rem'
+        marginBottom: '2rem'
       }}>
         <div>
           <h3 style={{
@@ -92,143 +62,7 @@ function ReviewSection({ product, reviews, onAddReview }) {
             </span>
           </div>
         </div>
-
-        {user && (
-          <button
-            onClick={() => setShowReviewForm(!showReviewForm)}
-            style={{
-              background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-              border: 'none',
-              color: '#fff',
-              padding: '0.9rem 2rem',
-              borderRadius: '12px',
-              cursor: 'pointer',
-              fontWeight: '700',
-              fontSize: '1rem',
-              transition: 'all 0.3s ease',
-              boxShadow: '0 4px 15px rgba(99,102,241,0.3)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(99,102,241,0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
-            }}
-          >
-            {showReviewForm ? 'Cancel' : 'Write a Review'}
-          </button>
-        )}
       </div>
-
-      {/* Review Form */}
-      {showReviewForm && (
-        <form onSubmit={handleSubmit} style={{
-          background: '#ffffff',
-          borderRadius: '16px',
-          padding: '2rem',
-          marginBottom: '2rem',
-          border: '1px solid #e2e8f0',
-          animation: 'slideDown 0.3s ease'
-        }}>
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '0.75rem',
-              fontSize: '1rem',
-              fontWeight: '700',
-              color: '#1e293b'
-            }}>
-              Your Rating
-            </label>
-            <div style={{
-              display: 'flex',
-              gap: '0.5rem'
-            }}>
-              {[1, 2, 3, 4, 5].map(rating => (
-                <button
-                  key={rating}
-                  type="button"
-                  onClick={() => setNewReview({...newReview, rating})}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: '0.25rem',
-                    transition: 'transform 0.2s ease'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.2)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                >
-                  <Star 
-                    size={36}
-                    fill={rating <= newReview.rating ? '#fbbf24' : 'none'}
-                    color="#fbbf24"
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '0.75rem',
-              fontSize: '1rem',
-              fontWeight: '700',
-              color: '#1e293b'
-            }}>
-              Your Review
-            </label>
-            <textarea
-              value={newReview.comment}
-              onChange={(e) => setNewReview({...newReview, comment: e.target.value})}
-              placeholder="Share your experience with this product..."
-              required
-              rows="4"
-              style={{
-                width: '100%',
-                padding: '1rem',
-                border: '2px solid #e2e8f0',
-                borderRadius: '12px',
-                fontSize: '1rem',
-                resize: 'vertical',
-                outline: 'none',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#6366f1'}
-              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-            />
-          </div>
-
-          <button
-            type="submit"
-            style={{
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              border: 'none',
-              color: '#fff',
-              padding: '1rem 2.5rem',
-              borderRadius: '12px',
-              cursor: 'pointer',
-              fontWeight: '700',
-              fontSize: '1.05rem',
-              transition: 'all 0.3s ease',
-              boxShadow: '0 4px 15px rgba(16,185,129,0.3)'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 15px rgba(16,185,129,0.3)';
-            }}
-          >
-            Submit Review
-          </button>
-        </form>
-      )}
 
       {/* Reviews List */}
       <div style={{
@@ -368,19 +202,6 @@ function ReviewSection({ product, reviews, onAddReview }) {
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-20px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
     </div>
   );
 }
