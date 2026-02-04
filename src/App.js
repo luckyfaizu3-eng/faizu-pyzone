@@ -34,7 +34,7 @@ export const ThemeContext = React.createContext();
 
 export const useCart = () => React.useContext(CartContext);
 export const useAuth = () => React.useContext(AuthContext);
-export const useTheme = () => React.useContext(ThemeContext);
+export const useTheme = () => React.createContext(ThemeContext);
 
 export const RAZORPAY_KEY_ID = "rzp_live_SAvdBqaaBDr2qS";
 
@@ -63,20 +63,47 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
-  // ✅ BROWSER BACK BUTTON FIX - History API
+  // ✅ COMPLETE BROWSER BACK BUTTON FIX
   useEffect(() => {
+    // Get initial page from URL hash or default to home
+    const getInitialPage = () => {
+      const hash = window.location.hash.slice(1); // Remove #
+      if (!hash) return 'home';
+      
+      // Handle product detail URLs like #products/product-123
+      if (hash.startsWith('products/')) {
+        return 'products';
+      }
+      
+      // Handle main pages
+      const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login'];
+      return validPages.includes(hash) ? hash : 'home';
+    };
+
+    const initialPage = getInitialPage();
+    setCurrentPage(initialPage);
+
     // Initialize history state if not present
-    if (!window.history.state) {
-      window.history.replaceState({ page: 'home' }, '', '#home');
+    if (!window.history.state || !window.history.state.page) {
+      window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
     }
 
     // Handle browser back/forward button
     const handlePopState = (event) => {
+      console.log('🔙 Browser back/forward button pressed');
+      console.log('Event state:', event.state);
+      
       if (event.state && event.state.page) {
-        console.log('🔙 Browser back button - Going to:', event.state.page);
+        console.log('📄 Navigating to page:', event.state.page);
         setCurrentPage(event.state.page);
+        
+        // If navigating away from products page, reset category
+        if (event.state.page !== 'products') {
+          setSelectedCategory('all');
+        }
       } else {
-        console.log('🔙 Browser back button - Going to home');
+        // Fallback to home if no state
+        console.log('📄 No state found, navigating to home');
         setCurrentPage('home');
       }
     };
@@ -88,10 +115,18 @@ function App() {
     };
   }, []);
 
-  // ✅ Update browser history when page changes
+  // ✅ Update browser history when page changes (but not for product details)
   useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    
+    // Don't update history for product detail URLs (they're handled in ProductsPage)
+    if (hash.startsWith('products/')) {
+      return;
+    }
+
+    // Only update if the page has actually changed
     if (currentPage !== window.history.state?.page) {
-      console.log('📄 Page changed to:', currentPage);
+      console.log('📝 Updating history - Current page:', currentPage);
       window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
   }, [currentPage]);
@@ -422,7 +457,7 @@ function App() {
       uploadDate: new Date().toISOString(),
       totalDownloads: 0,
       totalRevenue: 0,
-      reviews: [] // ✅ Initialize empty reviews array
+      reviews: []
     };
     
     const result = await addProductDB(productData, user.uid);
@@ -444,7 +479,6 @@ function App() {
     }
   };
 
-  // ✅ NEW: Add review function with proper state update
   const handleAddReview = async (productId, reviewData) => {
     if (!user) {
       window.showToast?.('⚠️ Please login to add review!', 'error');
@@ -452,14 +486,12 @@ function App() {
     }
 
     try {
-      // Find the product
       const product = products.find(p => p.id === productId);
       if (!product) {
         window.showToast?.('❌ Product not found!', 'error');
         return;
       }
 
-      // Create new review object
       const newReview = {
         ...reviewData,
         id: Date.now(),
@@ -471,17 +503,14 @@ function App() {
         likes: 0
       };
 
-      // Update product with new review
       const updatedProduct = {
         ...product,
         reviews: [...(product.reviews || []), newReview]
       };
 
-      // Update in database
       const result = await updateProductDB(productId, updatedProduct);
 
       if (result.success) {
-        // ✅ Update local state immediately
         setProducts(prevProducts =>
           prevProducts.map(p =>
             p.id === productId ? updatedProduct : p
@@ -567,7 +596,6 @@ function App() {
               )}
             </main>
             
-            {/* ✅ Footer SIRF HomePage mein dikhega */}
             {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
           </div>
           )}

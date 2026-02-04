@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Download, CheckCircle, Trash2, FileText, X, Receipt } from 'lucide-react';
+import { Download, CheckCircle, Trash2, FileText, X, Receipt, Package } from 'lucide-react';
 import { useAuth } from '../App';
 import { db } from '../firebase';
 import { deleteDoc, doc, updateDoc, increment } from 'firebase/firestore';
@@ -40,7 +40,87 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
     }
   };
 
-  // ✅ Handle multi-PDF download
+  // ✅ Handle Bundle Download - Downloads all PDFs from all bundled products
+  const handleDownloadBundle = async (item) => {
+    console.log('📦 Starting bundle download:', item.title);
+    console.log('Bundled products:', item.bundledProducts);
+    
+    if (!item.bundledProducts || item.bundledProducts.length === 0) {
+      window.showToast?.('❌ No products in bundle', 'error');
+      return;
+    }
+
+    // Count total PDFs
+    let totalPdfs = 0;
+    item.bundledProducts.forEach(product => {
+      if (product.pdfFiles && product.pdfFiles.length > 0) {
+        totalPdfs += product.pdfFiles.length;
+      }
+    });
+
+    if (totalPdfs === 0) {
+      window.showToast?.('❌ No PDFs available in bundle', 'error');
+      return;
+    }
+
+    setDownloading(prev => ({ ...prev, [item.id]: true }));
+    window.showToast?.(`📦 Downloading ${totalPdfs} PDF(s) from ${item.bundledProducts.length} products...`, 'info');
+
+    try {
+      // Update stats once for the bundle
+      await updateProductStats(item.id, item.price);
+
+      let downloadedCount = 0;
+
+      // Download PDFs from each bundled product
+      for (let productIndex = 0; productIndex < item.bundledProducts.length; productIndex++) {
+        const product = item.bundledProducts[productIndex];
+        
+        if (!product.pdfFiles || product.pdfFiles.length === 0) {
+          console.log(`⏭️ Skipping ${product.title} - no PDFs`);
+          continue;
+        }
+
+        console.log(`📥 Downloading PDFs from: ${product.title}`);
+
+        for (let pdfIndex = 0; pdfIndex < product.pdfFiles.length; pdfIndex++) {
+          const pdf = product.pdfFiles[pdfIndex];
+          console.log(`Downloading: ${pdf.fileName}`);
+          
+          const response = await fetch(pdf.url);
+          const blob = await response.blob();
+          const blobUrl = window.URL.createObjectURL(blob);
+          
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = `${product.title}_${pdf.fileName}`;
+          
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(blobUrl);
+          
+          downloadedCount++;
+          
+          // Small delay between downloads
+          if (downloadedCount < totalPdfs) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        }
+      }
+      
+      console.log(`✅ All ${downloadedCount} PDFs downloaded from bundle`);
+      window.showToast?.(`✅ Downloaded ${downloadedCount} PDF(s) from bundle!`, 'success');
+      
+    } catch (error) {
+      console.error('❌ Bundle download error:', error);
+      window.showToast?.('❌ Download failed: ' + error.message, 'error');
+    } finally {
+      setDownloading(prev => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  // ✅ Handle multi-PDF download (for single products)
   const handleDownloadAll = async (item) => {
     console.log('📥 Starting download for:', item.title);
     console.log('PDFs:', item.pdfFiles);
@@ -248,7 +328,7 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                 </p>
               </div>
               
-              {/* Action Buttons - Mobile Friendly */}
+              {/* Action Buttons */}
               <div style={{ 
                 display: 'flex', 
                 gap: '0.5rem',
@@ -353,16 +433,37 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                     <div style={{
                       marginBottom: '1rem'
                     }}>
-                      <h4 style={{
-                        fontSize: '1.05rem',
-                        fontWeight: '700',
-                        color: '#1e293b',
-                        marginBottom: '0.5rem',
-                        lineHeight: 1.3
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        marginBottom: '0.5rem'
                       }}>
-                        📄 {item.title}
-                      </h4>
-                      {item.pdfFiles && (
+                        <h4 style={{
+                          fontSize: '1.05rem',
+                          fontWeight: '700',
+                          color: '#1e293b',
+                          lineHeight: 1.3,
+                          flex: 1
+                        }}>
+                          {item.isBundle ? '📦' : '📄'} {item.title}
+                        </h4>
+                        {item.isBundle && (
+                          <span style={{
+                            background: 'rgba(139,92,246,0.1)',
+                            color: '#8b5cf6',
+                            padding: '0.25rem 0.6rem',
+                            borderRadius: '12px',
+                            fontSize: '0.75rem',
+                            fontWeight: '700'
+                          }}>
+                            BUNDLE
+                          </span>
+                        )}
+                      </div>
+                      
+                      {/* Bundle or Single Product Info */}
+                      {item.isBundle ? (
                         <div style={{
                           fontSize: '0.85rem',
                           color: '#64748b',
@@ -370,22 +471,37 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                           alignItems: 'center',
                           gap: '0.5rem'
                         }}>
-                          <FileText size={14} />
-                          {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
+                          <Package size={14} />
+                          {item.bundledProducts?.length || 0} products included
                         </div>
+                      ) : (
+                        item.pdfFiles && (
+                          <div style={{
+                            fontSize: '0.85rem',
+                            color: '#64748b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                          }}>
+                            <FileText size={14} />
+                            {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
+                          </div>
+                        )
                       )}
                     </div>
                       
                     {/* Download All Button */}
-                    {item.pdfFiles && item.pdfFiles.length > 0 && (
+                    {((item.pdfFiles && item.pdfFiles.length > 0) || (item.isBundle && item.bundledProducts)) && (
                       <button
-                        onClick={() => handleDownloadAll(item)}
+                        onClick={() => item.isBundle ? handleDownloadBundle(item) : handleDownloadAll(item)}
                         disabled={downloading[item.id]}
                         style={{
                           width: '100%',
                           background: downloading[item.id] 
                             ? 'rgba(99,102,241,0.2)' 
-                            : 'linear-gradient(135deg, #10b981, #059669)',
+                            : item.isBundle
+                              ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)'
+                              : 'linear-gradient(135deg, #10b981, #059669)',
                           border: 'none',
                           color: 'white',
                           padding: '1rem',
@@ -399,17 +515,19 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                           transition: 'all 0.3s ease',
                           fontSize: '0.95rem',
                           opacity: downloading[item.id] ? 0.7 : 1,
-                          marginBottom: '1rem',
-                          boxShadow: downloading[item.id] ? 'none' : '0 4px 12px rgba(16,185,129,0.3)'
+                          marginBottom: item.isBundle ? '0' : '1rem',
+                          boxShadow: downloading[item.id] ? 'none' : item.isBundle ? '0 4px 12px rgba(139,92,246,0.3)' : '0 4px 12px rgba(16,185,129,0.3)'
                         }}
                       >
                         <Download size={18} /> 
-                        {downloading[item.id] ? 'Downloading...' : `Download All (${item.pdfFiles.length})`}
+                        {downloading[item.id] ? 'Downloading...' : 
+                          item.isBundle ? `Download All Bundle Files` : `Download All (${item.pdfFiles.length})`
+                        }
                       </button>
                     )}
 
-                    {/* Individual PDF List */}
-                    {item.pdfFiles && item.pdfFiles.length > 0 && (
+                    {/* Individual PDF List (only for non-bundle products) */}
+                    {!item.isBundle && item.pdfFiles && item.pdfFiles.length > 0 && (
                       <div style={{
                         display: 'flex',
                         flexDirection: 'column',
@@ -487,6 +605,56 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                         ))}
                       </div>
                     )}
+                    
+                    {/* Bundle Products List */}
+                    {item.isBundle && item.bundledProducts && item.bundledProducts.length > 0 && (
+                      <div style={{
+                        marginTop: '1rem',
+                        padding: '1rem',
+                        background: 'rgba(139,92,246,0.05)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(139,92,246,0.2)'
+                      }}>
+                        <div style={{
+                          fontSize: '0.9rem',
+                          fontWeight: '700',
+                          color: '#8b5cf6',
+                          marginBottom: '0.75rem'
+                        }}>
+                          📦 Included Products:
+                        </div>
+                        {item.bundledProducts.map((bundledProduct, idx) => (
+                          <div key={idx} style={{
+                            padding: '0.75rem',
+                            background: '#ffffff',
+                            borderRadius: '8px',
+                            marginBottom: idx < item.bundledProducts.length - 1 ? '0.5rem' : '0',
+                            border: '1px solid #e2e8f0'
+                          }}>
+                            <div style={{
+                              fontWeight: '600',
+                              color: '#1e293b',
+                              fontSize: '0.9rem',
+                              marginBottom: '0.25rem'
+                            }}>
+                              {bundledProduct.title}
+                            </div>
+                            {bundledProduct.pdfFiles && bundledProduct.pdfFiles.length > 0 && (
+                              <div style={{
+                                fontSize: '0.75rem',
+                                color: '#64748b',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.25rem'
+                              }}>
+                                <FileText size={12} />
+                                {bundledProduct.pdfFiles.length} PDF file{bundledProduct.pdfFiles.length > 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -495,7 +663,7 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
         ))}
       </div>
 
-      {/* Receipt Modal - Mobile Optimized */}
+      {/* Receipt Modal */}
       {showReceipt && (
         <div style={{
           position: 'fixed',
@@ -624,7 +792,9 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                     fontSize: '0.9rem',
                     gap: '1rem'
                   }}>
-                    <span style={{ flex: 1 }}>{item.title}</span>
+                    <span style={{ flex: 1 }}>
+                      {item.isBundle && '📦 '}{item.title}
+                    </span>
                     <span style={{ fontWeight: '700', flexShrink: 0 }}>₹{item.price}</span>
                   </div>
                 ))}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Shield, Zap, Instagram, BookOpen } from 'lucide-react';
-import { useTheme } from '../App';
+import { Download, Shield, Zap, Instagram, BookOpen, LogIn, LogOut } from 'lucide-react';
+import { useTheme, useAuth } from '../App';
 
 function HomePage({ setCurrentPage }) {
   const [currentText, setCurrentText] = useState('');
@@ -9,6 +9,7 @@ function HomePage({ setCurrentPage }) {
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const { isDark } = useTheme();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -203,11 +204,19 @@ function HomePage({ setCurrentPage }) {
             { icon: '📚', label: 'Browse Notes', page: 'products', gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)' },
             { icon: '🛒', label: 'My Cart', page: 'cart', gradient: 'linear-gradient(135deg, #ec4899, #f472b6)' },
             { icon: '📦', label: 'My Orders', page: 'orders', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
-            { icon: '🔐', label: 'Login', page: 'login', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }
+            user ? 
+              { icon: '👤', label: 'Logout', page: null, gradient: 'linear-gradient(135deg, #ef4444, #dc2626)', action: logout } :
+              { icon: '🔐', label: 'Login', page: 'login', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' }
           ].map((card, i) => (
             <button
               key={i}
-              onClick={() => setCurrentPage(card.page)}
+              onClick={() => {
+                if (card.action) {
+                  card.action();
+                } else {
+                  setCurrentPage(card.page);
+                }
+              }}
               style={{
                 background: isDark ? '#1e293b' : '#ffffff',
                 border: isDark ? '1.5px solid #334155' : '1.5px solid #e8ecf0',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader, Edit, Save, Zap } from 'lucide-react';
+import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader, Edit, Save, Zap, Search } from 'lucide-react';
 import { uploadPDF, uploadImage } from '../supabaseUpload';
 import { auth } from '../firebase';
 import { db } from '../firebase';
@@ -24,6 +24,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [previewPages, setPreviewPages] = useState([]);
   const [generatingPreview, setGeneratingPreview] = useState(false);
   
+  // ✅ Bundle Product Selection
+  const [selectedProducts, setSelectedProducts] = useState([]);
+  const [showProductSelector, setShowProductSelector] = useState(false);
+  
+  // ✅ Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -38,7 +45,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     individualPrice: '',
     discount: '',
     itemsIncluded: '',
-    previewPageCount: '3' // How many pages to show in preview
+    previewPageCount: '3',
+    discountPercent: '' // ✅ Individual product discount
   });
 
   useEffect(() => {
@@ -84,7 +92,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       individualPrice: product.bundleInfo?.individualPrice?.toString() || '',
       discount: product.bundleInfo?.discount?.toString() || '',
       itemsIncluded: product.bundleInfo?.itemsIncluded || '',
-      previewPageCount: product.previewPageCount?.toString() || '3'
+      previewPageCount: product.previewPageCount?.toString() || '3',
+      discountPercent: product.discountPercent?.toString() || ''
     });
     
     setIsBundle(product.isBundle || false);
@@ -99,7 +108,10 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       setPreviewPages(product.previewPages);
     }
     
-    // Note: We don't pre-load PDFs, user can add new ones if needed
+    // ✅ Set selected products for bundle
+    if (product.isBundle && product.bundledProducts) {
+      setSelectedProducts(product.bundledProducts);
+    }
   };
 
   // ✅ Cancel Edit
@@ -126,7 +138,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       individualPrice: '',
       discount: '',
       itemsIncluded: '',
-      previewPageCount: '3'
+      previewPageCount: '3',
+      discountPercent: ''
     });
     setPdfFiles([]);
     setThumbnailFile(null);
@@ -134,6 +147,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     setIsBundle(false);
     setPreviewPages([]);
     setGeneratingPreview(false);
+    setSelectedProducts([]);
   };
 
   const handlePdfChange = (e) => {
@@ -163,7 +177,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     }
 
     const pageCount = parseInt(formData.previewPageCount) || 3;
-    const firstPdf = pdfFiles[0]; // Use first uploaded PDF
+    const firstPdf = pdfFiles[0];
     
     setGeneratingPreview(true);
     window.showToast?.(`⏳ Generating ${pageCount} preview pages from ${firstPdf.name}...`, 'info');
@@ -244,7 +258,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     window.showToast?.(`⏳ Downloading and generating ${pageCount} preview pages from ${firstPdfName}...`, 'info');
     
     try {
-      // Fetch PDF from URL
       const response = await fetch(firstPdfUrl);
       const blob = await response.blob();
       const arrayBuffer = await blob.arrayBuffer();
@@ -329,13 +342,35 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     }
   };
 
+  // ✅ Calculate Price with Discount
+  const calculateDiscountedPrice = () => {
+    if (formData.price && formData.discountPercent) {
+      const original = parseFloat(formData.price);
+      const discount = parseFloat(formData.discountPercent);
+      return Math.round(original - (original * discount / 100));
+    }
+    return formData.price;
+  };
+
   const calculateBundlePrice = () => {
-    if (formData.individualPrice && formData.discount) {
-      const individual = parseFloat(formData.individualPrice);
-      const discount = parseFloat(formData.discount);
-      return Math.round(individual - (individual * discount / 100));
+    if (isBundle && selectedProducts.length > 0) {
+      const total = selectedProducts.reduce((sum, product) => sum + product.price, 0);
+      const discount = parseFloat(formData.discount) || 0;
+      return Math.round(total - (total * discount / 100));
     }
     return '';
+  };
+
+  // ✅ Toggle Product Selection for Bundle
+  const toggleProductSelection = (product) => {
+    setSelectedProducts(prev => {
+      const isSelected = prev.some(p => p.id === product.id);
+      if (isSelected) {
+        return prev.filter(p => p.id !== product.id);
+      } else {
+        return [...prev, product];
+      }
+    });
   };
 
   // ✅ Update Existing Product
@@ -360,7 +395,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       let thumbnailUrl = editingProduct.thumbnail || '';
 
       // ✅ Upload new PDFs if any
-      if (pdfFiles.length > 0) {
+      if (pdfFiles.length > 0 && !isBundle) {
         console.log(`📤 Uploading ${pdfFiles.length} new PDFs...`);
         
         for (let i = 0; i < pdfFiles.length; i++) {
@@ -395,17 +430,22 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       }
 
       // ✅ Prepare updated product data
+      const finalPrice = isBundle ? calculateBundlePrice() : (formData.discountPercent ? calculateDiscountedPrice() : parseInt(formData.price));
+      
       const updatedData = {
         title: formData.title,
-        category: formData.category === 'custom' ? formData.customCategory : formData.category,
-        price: isBundle ? calculateBundlePrice() : parseInt(formData.price),
+        category: formData.category,
+        customCategory: formData.customCategory || null,
+        price: finalPrice,
+        originalPrice: formData.discountPercent ? parseInt(formData.price) : null,
+        discountPercent: formData.discountPercent ? parseFloat(formData.discountPercent) : null,
         description: formData.description,
         pages: parseInt(formData.pages),
         rating: parseFloat(formData.rating),
         fileSize: formData.fileSize,
         language: formData.language,
         image: formData.image,
-        pdfFiles: updatedPdfFiles,
+        pdfFiles: isBundle ? [] : updatedPdfFiles,
         thumbnail: thumbnailUrl,
         isBundle: isBundle,
         previewPages: previewPages.length > 0 ? previewPages : (editingProduct.previewPages || []),
@@ -414,16 +454,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       };
 
       if (isBundle) {
+        const totalOriginal = selectedProducts.reduce((sum, p) => sum + p.price, 0);
+        updatedData.bundledProducts = selectedProducts;
         updatedData.bundleInfo = {
-          individualPrice: parseFloat(formData.individualPrice),
+          individualPrice: totalOriginal,
           discount: parseFloat(formData.discount),
-          savings: parseFloat(formData.individualPrice) - calculateBundlePrice(),
-          itemsIncluded: formData.itemsIncluded
+          savings: totalOriginal - calculateBundlePrice(),
+          itemsIncluded: formData.itemsIncluded,
+          productCount: selectedProducts.length
         };
-      }
-
-      if (formData.category === 'custom' && formData.customCategory) {
-        updatedData.customCategory = formData.customCategory;
       }
 
       console.log('📝 Updating product in Firestore:', updatedData);
@@ -434,11 +473,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       
       window.showToast?.('✅ Product updated successfully!', 'success');
       
-      // Reset and close
       cancelEdit();
-      
-      // Reload products (you might want to pass a refresh function)
-      window.location.reload(); // Simple reload for now
+      window.location.reload();
       
     } catch (error) {
       console.error('❌ Update error:', error);
@@ -461,13 +497,18 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       return;
     }
 
+    if (isBundle && selectedProducts.length === 0) {
+      window.showToast?.('⚠️ Please select products for the bundle!', 'error');
+      return;
+    }
+
     if (!formData.category && !formData.customCategory) {
-      window.showToast?.('⚠️ Please select a category!', 'error');
+      window.showToast?.('⚠️ Please select or enter a category!', 'error');
       return;
     }
 
     setUploading(true);
-    window.showToast?.(`⏳ Uploading ${pdfFiles.length} PDF(s)... Please wait!`, 'info');
+    window.showToast?.(`⏳ Uploading ${isBundle ? 'bundle' : `${pdfFiles.length} PDF(s)`}... Please wait!`, 'info');
 
     try {
       let pdfUrls = [];
@@ -506,17 +547,22 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         }
       }
 
+      const finalPrice = isBundle ? calculateBundlePrice() : (formData.discountPercent ? calculateDiscountedPrice() : parseInt(formData.price));
+
       const productData = {
         title: formData.title,
-        category: formData.category === 'custom' ? formData.customCategory : formData.category,
-        price: isBundle ? calculateBundlePrice() : parseInt(formData.price),
+        category: formData.category,
+        customCategory: formData.customCategory || null,
+        price: finalPrice,
+        originalPrice: formData.discountPercent ? parseInt(formData.price) : null,
+        discountPercent: formData.discountPercent ? parseFloat(formData.discountPercent) : null,
         description: formData.description,
         pages: parseInt(formData.pages),
         rating: parseFloat(formData.rating),
         fileSize: formData.fileSize,
         language: formData.language,
         image: formData.image,
-        pdfFiles: pdfUrls,
+        pdfFiles: isBundle ? [] : pdfUrls,
         thumbnail: thumbnailUrl || null,
         isBundle: isBundle,
         userId: currentUser.uid,
@@ -528,16 +574,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       };
 
       if (isBundle) {
+        const totalOriginal = selectedProducts.reduce((sum, p) => sum + p.price, 0);
+        productData.bundledProducts = selectedProducts;
         productData.bundleInfo = {
-          individualPrice: parseFloat(formData.individualPrice),
+          individualPrice: totalOriginal,
           discount: parseFloat(formData.discount),
-          savings: parseFloat(formData.individualPrice) - calculateBundlePrice(),
-          itemsIncluded: formData.itemsIncluded
+          savings: totalOriginal - calculateBundlePrice(),
+          itemsIncluded: formData.itemsIncluded,
+          productCount: selectedProducts.length
         };
-      }
-
-      if (formData.category === 'custom' && formData.customCategory) {
-        productData.customCategory = formData.customCategory;
       }
 
       console.log('📝 Product data to save:', productData);
@@ -559,6 +604,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
 
   const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
   const totalDownloads = products.reduce((sum, product) => sum + (product.totalDownloads || 0), 0);
+
+  // ✅ Filter products by search query
+  const filteredProducts = products.filter(product => 
+    product.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    product.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <div style={{
@@ -750,7 +802,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   Create Bundle Package
                 </div>
                 <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                  Offer multiple items at discounted price
+                  Select multiple products to bundle together
                 </div>
               </div>
             </div>
@@ -814,7 +866,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            {/* ✅ Category Selection - Show "All Notes" in dropdown */}
+            <div style={{ display: 'grid', gridTemplateColumns: formData.category === 'custom' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({...formData, category: e.target.value})}
@@ -836,13 +889,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 <option value="data">Data Science</option>
                 <option value="ai">AI & ML</option>
                 <option value="marketing">Digital Marketing</option>
-                <option value="custom">Custom Category</option>
+                <option value="custom">✏️ Custom Category</option>
               </select>
 
               {formData.category === 'custom' && (
                 <input
                   type="text"
-                  placeholder="Enter category name"
+                  placeholder="Enter custom category name *"
                   value={formData.customCategory}
                   onChange={(e) => setFormData({...formData, customCategory: e.target.value})}
                   required
@@ -856,7 +909,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               )}
             </div>
 
-            {/* Bundle Pricing or Regular Price */}
+            {/* Bundle Product Selection or Regular Product Options */}
             {isBundle ? (
               <div style={{
                 background: 'rgba(16,185,129,0.05)',
@@ -871,27 +924,112 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   marginBottom: '1rem',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.5rem'
+                  justifyContent: 'space-between'
                 }}>
-                  <Package size={20} /> Bundle Pricing
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <Package size={20} /> Bundle Configuration
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowProductSelector(!showProductSelector)}
+                    style={{
+                      background: '#10b981',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '0.5rem 1rem',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.9rem',
+                      fontWeight: '600'
+                    }}
+                  >
+                    {showProductSelector ? 'Hide' : 'Select'} Products
+                  </button>
                 </div>
+
+                {/* Selected Products */}
+                {selectedProducts.length > 0 && (
+                  <div style={{
+                    marginBottom: '1rem',
+                    padding: '1rem',
+                    background: '#ffffff',
+                    borderRadius: '8px'
+                  }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#64748b', marginBottom: '0.5rem' }}>
+                      Selected Products ({selectedProducts.length})
+                    </div>
+                    {selectedProducts.map(product => (
+                      <div key={product.id} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '0.5rem',
+                        borderBottom: '1px solid #e2e8f0'
+                      }}>
+                        <span style={{ fontSize: '0.9rem' }}>{product.title}</span>
+                        <span style={{ fontWeight: '700', color: '#10b981' }}>₹{product.price}</span>
+                      </div>
+                    ))}
+                    <div style={{
+                      marginTop: '0.75rem',
+                      padding: '0.75rem',
+                      background: 'rgba(16,185,129,0.1)',
+                      borderRadius: '6px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      fontWeight: '700'
+                    }}>
+                      <span>Total Original Price:</span>
+                      <span style={{ color: '#10b981' }}>
+                        ₹{selectedProducts.reduce((sum, p) => sum + p.price, 0)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Product Selector Modal */}
+                {showProductSelector && (
+                  <div style={{
+                    marginBottom: '1rem',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '8px',
+                    padding: '1rem',
+                    background: '#ffffff'
+                  }}>
+                    {products.filter(p => !p.isBundle).map(product => (
+                      <label key={product.id} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '0.75rem',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f1f5f9',
+                        transition: 'background 0.2s'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99,102,241,0.05)'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedProducts.some(p => p.id === product.id)}
+                          onChange={() => toggleProductSelection(product)}
+                          style={{ marginRight: '1rem' }}
+                        />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{product.title}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{product.category}</div>
+                        </div>
+                        <div style={{ fontWeight: '700', color: '#6366f1' }}>₹{product.price}</div>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                   <input
                     type="number"
-                    placeholder="Individual Price ₹"
-                    value={formData.individualPrice}
-                    onChange={(e) => setFormData({...formData, individualPrice: e.target.value})}
-                    required
-                    style={{
-                      padding: '1rem',
-                      border: '2px solid #e2e8f0',
-                      borderRadius: '12px',
-                      fontSize: '1.05rem'
-                    }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Discount %"
+                    placeholder="Discount % *"
                     value={formData.discount}
                     onChange={(e) => setFormData({...formData, discount: e.target.value})}
                     required
@@ -904,29 +1042,24 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       fontSize: '1.05rem'
                     }}
                   />
-                </div>
-                {formData.individualPrice && formData.discount && (
                   <div style={{
-                    marginTop: '1rem',
                     padding: '1rem',
                     background: '#ffffff',
-                    borderRadius: '8px',
+                    border: '2px solid #10b981',
+                    borderRadius: '12px',
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    fontSize: '1.1rem',
-                    fontWeight: '700'
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: '900',
+                    fontSize: '1.2rem',
+                    color: '#10b981'
                   }}>
-                    <span style={{ color: '#64748b' }}>Bundle Price:</span>
-                    <span style={{ color: '#10b981' }}>
-                      ₹{calculateBundlePrice()} 
-                      <span style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: '600' }}>
-                        {' '}(Save ₹{formData.individualPrice - calculateBundlePrice()})
-                      </span>
-                    </span>
+                    ₹{calculateBundlePrice() || '0'}
                   </div>
-                )}
+                </div>
+
                 <textarea
-                  placeholder="What's included in bundle? (e.g., All 20 chapters, Practice questions, Lifetime access)"
+                  placeholder="What's included? (e.g., All chapters, Practice sets, Solutions) *"
                   value={formData.itemsIncluded}
                   onChange={(e) => setFormData({...formData, itemsIncluded: e.target.value})}
                   required
@@ -944,19 +1077,68 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 />
               </div>
             ) : (
-              <input
-                type="number"
-                placeholder="Price (₹) *"
-                value={formData.price}
-                onChange={(e) => setFormData({...formData, price: e.target.value})}
-                required
-                style={{
-                  padding: '1rem',
-                  border: '2px solid #e2e8f0',
+              <>
+                {/* Regular Product Price with Discount */}
+                <div style={{
+                  background: 'rgba(99,102,241,0.05)',
+                  border: '1px solid rgba(99,102,241,0.2)',
                   borderRadius: '12px',
-                  fontSize: '1.05rem'
-                }}
-              />
+                  padding: '1.5rem'
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <input
+                      type="number"
+                      placeholder="Price (₹) *"
+                      value={formData.price}
+                      onChange={(e) => setFormData({...formData, price: e.target.value})}
+                      required
+                      style={{
+                        padding: '1rem',
+                        border: '2px solid #e2e8f0',
+                        borderRadius: '12px',
+                        fontSize: '1.05rem'
+                      }}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Discount % (Optional)"
+                      value={formData.discountPercent}
+                      onChange={(e) => setFormData({...formData, discountPercent: e.target.value})}
+                      min="0"
+                      max="100"
+                      style={{
+                        padding: '1rem',
+                        border: '2px solid #e2e8f0',
+                        borderRadius: '12px',
+                        fontSize: '1.05rem'
+                      }}
+                    />
+                  </div>
+                  {formData.price && formData.discountPercent && (
+                    <div style={{
+                      marginTop: '1rem',
+                      padding: '1rem',
+                      background: '#ffffff',
+                      borderRadius: '8px',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center'
+                    }}>
+                      <span style={{ color: '#64748b', textDecoration: 'line-through' }}>₹{formData.price}</span>
+                      <span style={{
+                        fontSize: '1.5rem',
+                        fontWeight: '900',
+                        color: '#10b981'
+                      }}>
+                        ₹{calculateDiscountedPrice()}
+                        <span style={{ fontSize: '0.9rem', marginLeft: '0.5rem', color: '#6366f1' }}>
+                          ({formData.discountPercent}% OFF)
+                        </span>
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             <textarea
@@ -1001,8 +1183,11 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               />
             </div>
 
+            {/* Continue with the rest of the form (PDFs, thumbnails, etc.) - keeping the existing code from your original file */}
+            {/* ... (I'll include this in the next part to stay within length limits) ... */}
+
             {/* ✅ Existing PDFs (Edit Mode) */}
-            {editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0 && (
+            {editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0 && !isBundle && (
               <div>
                 <label style={{
                   display: 'block',
@@ -1214,7 +1399,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               </label>
             </div>
 
-            {/* ✅ Preview Pages Section */}
+            {/* Preview Pages - keeping your existing code */}
             {!isBundle && (pdfFiles.length > 0 || (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0)) && (
               <div style={{
                 background: 'rgba(139,92,246,0.05)',
@@ -1249,7 +1434,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   </p>
                 </div>
 
-                {/* Show existing preview pages in edit mode */}
                 {editMode && editingProduct && editingProduct.previewPages && editingProduct.previewPages.length > 0 && (
                   <div style={{
                     marginBottom: '1.5rem',
@@ -1343,7 +1527,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   flexDirection: 'column',
                   gap: '1.5rem'
                 }}>
-                  {/* Preview Page Count */}
                   <div style={{
                     display: 'grid',
                     gridTemplateColumns: '1fr auto',
@@ -1381,15 +1564,12 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       </select>
                     </div>
 
-                    {/* Generate Button */}
                     <button
                       type="button"
                       onClick={async () => {
-                        // ✅ Generate from newly uploaded PDF or existing PDF
                         if (pdfFiles.length > 0) {
                           await generatePreviewFromUploadedPDF();
                         } else if (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0) {
-                          // ✅ Generate from existing product PDF
                           await generatePreviewFromExistingPDF();
                         } else {
                           window.showToast?.('⚠️ No PDF available to generate preview!', 'warning');
@@ -1415,16 +1595,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         minWidth: '180px',
                         alignSelf: 'end'
                       }}
-                      onMouseEnter={(e) => {
-                        if (!generatingPreview) {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!generatingPreview) {
-                          e.currentTarget.style.transform = 'translateY(0)';
-                        }
-                      }}
                     >
                       {generatingPreview ? (
                         <>
@@ -1440,7 +1610,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     </button>
                   </div>
 
-                  {/* Preview Pages Display */}
                   {previewPages.length > 0 && (
                     <div>
                       <div style={{
@@ -1530,8 +1699,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                                 justifyContent: 'center',
                                 transition: 'transform 0.2s ease'
                               }}
-                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
-                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
                             >
                               <X size={14} color="#fff" />
                             </button>
@@ -1541,7 +1708,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     </div>
                   )}
 
-                  {/* Help Text */}
                   {previewPages.length === 0 && (!editMode || !editingProduct?.previewPages || editingProduct.previewPages.length === 0) && (
                     <div style={{
                       padding: '1rem',
@@ -1590,7 +1756,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               {uploading ? (
                 <>
                   <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} />
-                  {editMode ? 'Updating...' : `Uploading ${pdfFiles.length} PDF(s)...`}
+                  {editMode ? 'Updating...' : (isBundle ? 'Creating Bundle...' : `Uploading ${pdfFiles.length} PDF(s)...`)}
                 </>
               ) : (
                 <>
@@ -1603,25 +1769,66 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         </div>
       )}
 
-      {/* Products List */}
+      {/* Products List with Search */}
       <div style={{
         maxWidth: '1400px',
         margin: '0 auto'
       }}>
-        <h2 style={{
-          fontSize: '2rem',
-          fontWeight: '900',
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           marginBottom: '2rem',
-          color: '#1e293b'
+          gap: '1rem',
+          flexWrap: 'wrap'
         }}>
-          All Products ({products.length})
-        </h2>
+          <h2 style={{
+            fontSize: '2rem',
+            fontWeight: '900',
+            color: '#1e293b',
+            margin: 0
+          }}>
+            All Products ({filteredProducts.length})
+          </h2>
+          
+          {/* Search Bar */}
+          <div style={{
+            position: 'relative',
+            flex: '1',
+            maxWidth: '400px',
+            minWidth: '250px'
+          }}>
+            <Search size={20} color="#64748b" style={{
+              position: 'absolute',
+              left: '1rem',
+              top: '50%',
+              transform: 'translateY(-50%)'
+            }} />
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem 0.75rem 3rem',
+                border: '2px solid #e2e8f0',
+                borderRadius: '12px',
+                fontSize: '1rem',
+                outline: 'none',
+                transition: 'border-color 0.3s'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#6366f1'}
+              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+            />
+          </div>
+        </div>
 
         <div style={{
           display: 'grid',
           gap: '1.5rem'
         }}>
-          {products.map((product, index) => (
+          {filteredProducts.map((product, index) => (
             <div 
               key={product.id} 
               style={{
@@ -1686,6 +1893,18 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       <Package size={14} /> BUNDLE
                     </span>
                   )}
+                  {product.discountPercent && (
+                    <span style={{
+                      background: 'rgba(239,68,68,0.1)',
+                      color: '#ef4444',
+                      padding: '0.3rem 0.75rem',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: '700'
+                    }}>
+                      {product.discountPercent}% OFF
+                    </span>
+                  )}
                   {product.pdfFiles && product.pdfFiles.length > 0 ? (
                     <span style={{
                       background: 'rgba(16,185,129,0.1)',
@@ -1696,6 +1915,17 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       fontWeight: '600'
                     }}>
                       ✅ {product.pdfFiles.length} PDF{product.pdfFiles.length > 1 ? 's' : ''}
+                    </span>
+                  ) : product.isBundle ? (
+                    <span style={{
+                      background: 'rgba(99,102,241,0.1)',
+                      color: '#6366f1',
+                      padding: '0.2rem 0.6rem',
+                      borderRadius: '20px',
+                      fontSize: '0.75rem',
+                      fontWeight: '600'
+                    }}>
+                      📦 {product.bundledProducts?.length || 0} Items
                     </span>
                   ) : (
                     <span style={{
@@ -1736,7 +1966,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   fontSize: '0.9rem',
                   color: '#64748b'
                 }}>
-                  <span>Category: {product.category}</span>
+                  <span>Category: {product.customCategory || product.category}</span>
                   <span>•</span>
                   <span>{product.pages} pages</span>
                   <span>•</span>
@@ -1764,64 +1994,80 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '1rem'
+                gap: '1rem',
+                flexDirection: 'column'
               }}>
                 <div style={{
-                  fontSize: '2.5rem',
-                  fontWeight: '900',
-                  background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent'
+                  textAlign: 'center'
                 }}>
-                  ₹{product.price}
+                  {product.originalPrice && (
+                    <div style={{
+                      fontSize: '1rem',
+                      color: '#94a3b8',
+                      textDecoration: 'line-through',
+                      marginBottom: '0.25rem'
+                    }}>
+                      ₹{product.originalPrice}
+                    </div>
+                  )}
+                  <div style={{
+                    fontSize: '2.5rem',
+                    fontWeight: '900',
+                    background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent'
+                  }}>
+                    ₹{product.price}
+                  </div>
                 </div>
                 
-                {/* ✅ Edit Button */}
-                {currentUser && product.userId === currentUser.uid && (
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {currentUser && product.userId === currentUser.uid && (
+                    <button 
+                      onClick={() => startEditProduct(product)}
+                      style={{
+                        background: 'rgba(245,158,11,0.1)',
+                        border: '2px solid rgba(245,158,11,0.2)',
+                        padding: '0.75rem',
+                        borderRadius: '12px',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(245,158,11,0.2)';
+                        e.currentTarget.style.transform = 'scale(1.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(245,158,11,0.1)';
+                        e.currentTarget.style.transform = 'scale(1)';
+                      }}
+                    >
+                      <Edit size={24} color="#f59e0b" />
+                    </button>
+                  )}
+                  
                   <button 
-                    onClick={() => startEditProduct(product)}
+                    onClick={() => setConfirmDelete(product.id)}
                     style={{
-                      background: 'rgba(245,158,11,0.1)',
-                      border: '2px solid rgba(245,158,11,0.2)',
+                      background: 'rgba(239,68,68,0.1)',
+                      border: '2px solid rgba(239,68,68,0.2)',
                       padding: '0.75rem',
                       borderRadius: '12px',
                       cursor: 'pointer',
                       transition: 'all 0.3s ease'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(245,158,11,0.2)';
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
                       e.currentTarget.style.transform = 'scale(1.1)';
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(245,158,11,0.1)';
+                      e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
                       e.currentTarget.style.transform = 'scale(1)';
                     }}
                   >
-                    <Edit size={24} color="#f59e0b" />
+                    <Trash2 size={24} color="#ef4444" />
                   </button>
-                )}
-                
-                <button 
-                  onClick={() => setConfirmDelete(product.id)}
-                  style={{
-                    background: 'rgba(239,68,68,0.1)',
-                    border: '2px solid rgba(239,68,68,0.2)',
-                    padding: '0.75rem',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
-                    e.currentTarget.style.transform = 'scale(1.1)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                    e.currentTarget.style.transform = 'scale(1)';
-                  }}
-                >
-                  <Trash2 size={24} color="#ef4444" />
-                </button>
+                </div>
               </div>
             </div>
           ))}
