@@ -6,7 +6,6 @@ import ReviewSection from './ReviewSection';
 function ProductDetailPage({ product, onClose, onBuyNow, onAddReview }) {
   const { addToCart } = useCart();
   const [selectedPreviewPage, setSelectedPreviewPage] = React.useState(0);
-  const [imageLoaded, setImageLoaded] = React.useState(false);
   const [addingToCart, setAddingToCart] = React.useState(false);
   const [touchStart, setTouchStart] = React.useState(0);
   const [touchEnd, setTouchEnd] = React.useState(0);
@@ -142,7 +141,6 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview }) {
             position: 'relative',
             boxShadow: '0 4px 20px rgba(0,0,0,0.1)'
           }}
-          onLoad={() => setImageLoaded(true)}
         >
           {!product.thumbnail && (product.image || '📚')}
           
