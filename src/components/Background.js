@@ -1,7 +1,9 @@
 import React, { useEffect, useRef } from 'react';
+import { useTheme } from '../App';
 
 const Background = () => {
   const canvasRef = useRef(null);
+  const { isDark } = useTheme();
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -26,16 +28,25 @@ const Background = () => {
         speedX: (Math.random() - 0.5) * 0.3,
         speedY: (Math.random() - 0.5) * 0.3,
         speedZ: Math.random() * 0.5 + 0.2,
-        color: Math.random() > 0.5 ? 'rgba(99, 102, 241, 0.4)' : 'rgba(236, 72, 153, 0.4)'
+        color: Math.random() > 0.5 
+          ? (isDark ? 'rgba(139, 92, 246, 0.5)' : 'rgba(99, 102, 241, 0.4)') 
+          : (isDark ? 'rgba(236, 72, 153, 0.5)' : 'rgba(236, 72, 153, 0.4)')
       }));
     };
 
     const draw = () => {
-      // Clean gradient background
+      // Background gradient based on theme
       const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-      gradient.addColorStop(0, '#f8fafc');
-      gradient.addColorStop(0.5, '#f1f5f9');
-      gradient.addColorStop(1, '#e2e8f0');
+      
+      if (isDark) {
+        gradient.addColorStop(0, '#0f172a');
+        gradient.addColorStop(0.5, '#1e1b4b');
+        gradient.addColorStop(1, '#0f172a');
+      } else {
+        gradient.addColorStop(0, '#f8fafc');
+        gradient.addColorStop(0.5, '#f1f5f9');
+        gradient.addColorStop(1, '#e2e8f0');
+      }
       
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -66,7 +77,7 @@ const Background = () => {
         ctx.beginPath();
         ctx.arc(x2d, y2d, size, 0, Math.PI * 2);
         ctx.fillStyle = particle.color;
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = isDark ? 10 : 8;
         ctx.shadowColor = particle.color;
         ctx.fill();
         ctx.shadowBlur = 0;
@@ -85,7 +96,9 @@ const Background = () => {
             ctx.beginPath();
             ctx.moveTo(x2d, y2d);
             ctx.lineTo(otherX, otherY);
-            ctx.strokeStyle = `rgba(99, 102, 241, ${0.15 * (1 - distance / 100)})`;
+            ctx.strokeStyle = isDark 
+              ? `rgba(139, 92, 246, ${0.2 * (1 - distance / 100)})`
+              : `rgba(99, 102, 241, ${0.15 * (1 - distance / 100)})`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }
@@ -104,7 +117,7 @@ const Background = () => {
       cancelAnimationFrame(animationId);
       window.removeEventListener('resize', resize);
     };
-  }, []);
+  }, [isDark]);
 
   return (
     <canvas

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Search, Menu, X, User, LogOut } from 'lucide-react';
+import { ShoppingCart, Search, Menu, X, User, LogOut, Moon, Sun } from 'lucide-react';
+import { useTheme } from '../App';
 
 const Navbar = ({ 
   currentPage, 
@@ -15,6 +16,7 @@ const Navbar = ({
   const [scrolled, setScrolled] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const { isDark, toggleTheme } = useTheme();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -41,12 +43,19 @@ const Navbar = ({
         top: 0,
         left: 0,
         right: 0,
-        background: 'rgba(255, 255, 255, 0.95)',
+        background: isDark 
+          ? 'rgba(15, 23, 42, 0.95)' 
+          : 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(20px) saturate(180%)',
-        borderBottom: '1px solid rgba(226, 232, 240, 0.8)',
-        boxShadow: scrolled ? '0 4px 20px rgba(0,0,0,0.08)' : 'none',
+        borderBottom: isDark
+          ? '1px solid rgba(99, 102, 241, 0.2)'
+          : '1px solid rgba(226, 232, 240, 0.8)',
+        boxShadow: scrolled ? (isDark 
+          ? '0 4px 20px rgba(0,0,0,0.5)' 
+          : '0 4px 20px rgba(0,0,0,0.08)') 
+          : 'none',
         zIndex: 1000,
-        padding: '0.75rem 1.5rem',
+        padding: isMobile ? '0.6rem 1rem' : '0.75rem 1.5rem',
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
       }}>
         <div style={{
@@ -72,17 +81,17 @@ const Navbar = ({
             onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
             <div style={{
-              width: '42px',
-              height: '42px',
+              width: isMobile ? '36px' : '42px',
+              height: isMobile ? '36px' : '42px',
               background: 'linear-gradient(135deg, #6366f1, #ec4899)',
               borderRadius: '10px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '20px',
+              fontSize: isMobile ? '18px' : '20px',
               boxShadow: '0 4px 15px rgba(99,102,241,0.3)'
             }}>🎓</div>
-            <div style={{ display: isMobile ? 'none' : 'block' }}>
+            {!isMobile && (
               <div style={{
                 fontSize: '1.3rem',
                 fontWeight: '900',
@@ -90,15 +99,12 @@ const Navbar = ({
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent'
               }}>FaizUpyZone</div>
-            </div>
+            )}
           </div>
 
-          {/* Search Bar - Desktop */}
+          {/* Search Bar - Desktop only */}
           {!isMobile && (
-            <div style={{
-              flex: 1,
-              maxWidth: '500px'
-            }}>
+            <div style={{ flex: 1, maxWidth: '500px' }}>
               <div style={{position: 'relative'}}>
                 <Search 
                   size={18} 
@@ -107,7 +113,7 @@ const Navbar = ({
                     left: '1rem',
                     top: '50%',
                     transform: 'translateY(-50%)',
-                    color: '#64748b'
+                    color: isDark ? '#94a3b8' : '#64748b'
                   }} 
                 />
                 <input
@@ -118,20 +124,22 @@ const Navbar = ({
                   style={{
                     width: '100%',
                     padding: '0.7rem 1rem 0.7rem 2.75rem',
-                    background: '#f8fafc',
-                    border: '1.5px solid #e2e8f0',
+                    background: isDark ? '#1e293b' : '#f8fafc',
+                    border: isDark 
+                      ? '1.5px solid #334155' 
+                      : '1.5px solid #e2e8f0',
                     borderRadius: '25px',
-                    color: '#1e293b',
+                    color: isDark ? '#e2e8f0' : '#1e293b',
                     fontSize: '0.95rem',
                     outline: 'none',
                     transition: 'all 0.3s ease'
                   }}
                   onFocus={(e) => {
                     e.target.style.borderColor = '#6366f1';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.1)';
+                    e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)';
                   }}
                   onBlur={(e) => {
-                    e.target.style.borderColor = '#e2e8f0';
+                    e.target.style.borderColor = isDark ? '#334155' : '#e2e8f0';
                     e.target.style.boxShadow = 'none';
                   }}
                 />
@@ -146,12 +154,41 @@ const Navbar = ({
               alignItems: 'center',
               gap: '0.5rem'
             }}>
+              {/* Dark Mode Toggle */}
+              <button
+                onClick={toggleTheme}
+                style={{
+                  background: isDark ? '#1e293b' : '#f1f5f9',
+                  border: isDark ? '1.5px solid #334155' : '1.5px solid #e2e8f0',
+                  borderRadius: '12px',
+                  width: '38px',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.1)';
+                  e.currentTarget.style.borderColor = '#6366f1';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.borderColor = isDark ? '#334155' : '#e2e8f0';
+                }}
+              >
+                {isDark ? <Sun size={18} color="#fbbf24" /> : <Moon size={18} color="#6366f1" />}
+              </button>
+
               <button 
                 onClick={() => setCurrentPage('products')} 
                 style={{
-                  background: currentPage === 'products' ? 'rgba(99,102,241,0.1)' : 'transparent',
+                  background: currentPage === 'products' 
+                    ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                    : 'transparent',
                   border: 'none',
-                  color: currentPage === 'products' ? '#6366f1' : '#64748b',
+                  color: currentPage === 'products' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
                   cursor: 'pointer',
                   fontSize: '0.95rem',
                   fontWeight: '600',
@@ -167,9 +204,11 @@ const Navbar = ({
                 <button 
                   onClick={() => setCurrentPage('admin')} 
                   style={{
-                    background: currentPage === 'admin' ? 'rgba(99,102,241,0.1)' : 'transparent',
+                    background: currentPage === 'admin' 
+                      ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                      : 'transparent',
                     border: 'none',
-                    color: currentPage === 'admin' ? '#6366f1' : '#64748b',
+                    color: currentPage === 'admin' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
                     cursor: 'pointer',
                     fontSize: '0.95rem',
                     fontWeight: '600',
@@ -187,9 +226,11 @@ const Navbar = ({
                   <button 
                     onClick={() => setCurrentPage('orders')} 
                     style={{
-                      background: currentPage === 'orders' ? 'rgba(99,102,241,0.1)' : 'transparent',
+                      background: currentPage === 'orders' 
+                        ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                        : 'transparent',
                       border: 'none',
-                      color: currentPage === 'orders' ? '#6366f1' : '#64748b',
+                      color: currentPage === 'orders' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
                       cursor: 'pointer',
                       fontSize: '0.95rem',
                       fontWeight: '600',
@@ -205,7 +246,7 @@ const Navbar = ({
                     <button
                       onClick={() => setShowUserMenu(!showUserMenu)}
                       style={{
-                        background: 'rgba(99,102,241,0.1)',
+                        background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
                         border: '1.5px solid rgba(99,102,241,0.3)',
                         borderRadius: '50%',
                         width: '38px',
@@ -225,21 +266,25 @@ const Navbar = ({
                         position: 'absolute',
                         top: '50px',
                         right: 0,
-                        background: '#fff',
-                        border: '1px solid #e2e8f0',
+                        background: isDark ? '#1e293b' : '#fff',
+                        border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
                         borderRadius: '12px',
-                        boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+                        boxShadow: isDark 
+                          ? '0 10px 40px rgba(0,0,0,0.5)' 
+                          : '0 10px 40px rgba(0,0,0,0.1)',
                         padding: '0.5rem',
                         minWidth: '200px',
                         zIndex: 1000
                       }}>
                         <div style={{
                           padding: '0.75rem 1rem',
-                          borderBottom: '1px solid #e2e8f0',
+                          borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
                           marginBottom: '0.5rem'
                         }}>
-                          <div style={{ fontSize: '0.9rem', color: '#64748b' }}>Signed in as</div>
-                          <div style={{ fontSize: '1rem', fontWeight: '600', color: '#1e293b' }}>
+                          <div style={{ fontSize: '0.9rem', color: isDark ? '#94a3b8' : '#64748b' }}>
+                            Signed in as
+                          </div>
+                          <div style={{ fontSize: '1rem', fontWeight: '600', color: isDark ? '#e2e8f0' : '#1e293b' }}>
                             {user.email}
                           </div>
                         </div>
@@ -264,7 +309,7 @@ const Navbar = ({
                             fontWeight: '600',
                             transition: 'background 0.2s'
                           }}
-                          onMouseEnter={(e) => e.currentTarget.style.background = '#fef2f2'}
+                          onMouseEnter={(e) => e.currentTarget.style.background = isDark ? '#991b1b' : '#fef2f2'}
                           onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                         >
                           <LogOut size={16} /> Logout
@@ -355,23 +400,41 @@ const Navbar = ({
 
           {/* Mobile Menu Icons */}
           {isMobile && (
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <button 
-                onClick={() => setCurrentPage('cart')} 
+            <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              {/* Dark Mode Toggle - Mobile */}
+              <button
+                onClick={toggleTheme}
                 style={{
-                  position: 'relative',
-                  background: 'rgba(99,102,241,0.1)',
-                  border: '1.5px solid rgba(99,102,241,0.3)',
+                  background: isDark ? '#1e293b' : 'rgba(99,102,241,0.1)',
+                  border: isDark ? '1.5px solid #334155' : '1.5px solid rgba(99,102,241,0.3)',
                   borderRadius: '10px',
-                  width: '40px',
-                  height: '40px',
+                  width: '38px',
+                  height: '38px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer'
                 }}
               >
-                <ShoppingCart size={20} color="#6366f1" />
+                {isDark ? <Sun size={18} color="#fbbf24" /> : <Moon size={18} color="#6366f1" />}
+              </button>
+
+              <button 
+                onClick={() => setCurrentPage('cart')} 
+                style={{
+                  position: 'relative',
+                  background: isDark ? '#1e293b' : 'rgba(99,102,241,0.1)',
+                  border: isDark ? '1.5px solid #334155' : '1.5px solid rgba(99,102,241,0.3)',
+                  borderRadius: '10px',
+                  width: '38px',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <ShoppingCart size={18} color="#6366f1" />
                 {cartCount > 0 && (
                   <span style={{
                     position: 'absolute',
@@ -397,18 +460,18 @@ const Navbar = ({
               <button 
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 style={{
-                  background: 'rgba(99,102,241,0.1)',
-                  border: '1.5px solid rgba(99,102,241,0.3)',
+                  background: isDark ? '#1e293b' : 'rgba(99,102,241,0.1)',
+                  border: isDark ? '1.5px solid #334155' : '1.5px solid rgba(99,102,241,0.3)',
                   borderRadius: '10px',
-                  width: '40px',
-                  height: '40px',
+                  width: '38px',
+                  height: '38px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer'
                 }}
               >
-                {mobileMenuOpen ? <X size={24} color="#6366f1" /> : <Menu size={24} color="#6366f1" />}
+                {mobileMenuOpen ? <X size={22} color="#6366f1" /> : <Menu size={22} color="#6366f1" />}
               </button>
             </div>
           )}
@@ -419,16 +482,22 @@ const Navbar = ({
       {isMobile && mobileMenuOpen && (
         <div style={{
           position: 'fixed',
-          top: '70px',
+          top: '62px',
           left: 0,
           right: 0,
-          background: 'rgba(255, 255, 255, 0.98)',
+          background: isDark 
+            ? 'rgba(15, 23, 42, 0.98)' 
+            : 'rgba(255, 255, 255, 0.98)',
           backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid #e2e8f0',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
+          borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+          boxShadow: isDark 
+            ? '0 10px 30px rgba(0,0,0,0.5)' 
+            : '0 10px 30px rgba(0,0,0,0.1)',
           zIndex: 999,
           padding: '1rem',
-          animation: 'slideDown 0.3s ease'
+          animation: 'slideDown 0.3s ease',
+          maxHeight: '85vh',
+          overflowY: 'auto'
         }}>
           {/* Mobile Search */}
           <div style={{ marginBottom: '1rem' }}>
@@ -440,7 +509,7 @@ const Navbar = ({
                   left: '1rem',
                   top: '50%',
                   transform: 'translateY(-50%)',
-                  color: '#64748b'
+                  color: isDark ? '#94a3b8' : '#64748b'
                 }} 
               />
               <input
@@ -451,10 +520,10 @@ const Navbar = ({
                 style={{
                   width: '100%',
                   padding: '0.75rem 1rem 0.75rem 2.75rem',
-                  background: '#f8fafc',
-                  border: '1.5px solid #e2e8f0',
+                  background: isDark ? '#1e293b' : '#f8fafc',
+                  border: isDark ? '1.5px solid #334155' : '1.5px solid #e2e8f0',
                   borderRadius: '12px',
-                  color: '#1e293b',
+                  color: isDark ? '#e2e8f0' : '#1e293b',
                   fontSize: '0.95rem',
                   outline: 'none'
                 }}
@@ -467,9 +536,11 @@ const Navbar = ({
             <button 
               onClick={() => handleNavClick('products')} 
               style={{
-                background: currentPage === 'products' ? 'rgba(99,102,241,0.1)' : 'transparent',
+                background: currentPage === 'products' 
+                  ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                  : 'transparent',
                 border: 'none',
-                color: currentPage === 'products' ? '#6366f1' : '#64748b',
+                color: currentPage === 'products' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
                 cursor: 'pointer',
                 fontSize: '1rem',
                 fontWeight: '600',
@@ -486,9 +557,11 @@ const Navbar = ({
               <button 
                 onClick={() => handleNavClick('admin')} 
                 style={{
-                  background: currentPage === 'admin' ? 'rgba(99,102,241,0.1)' : 'transparent',
+                  background: currentPage === 'admin' 
+                    ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                    : 'transparent',
                   border: 'none',
-                  color: currentPage === 'admin' ? '#6366f1' : '#64748b',
+                  color: currentPage === 'admin' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
                   cursor: 'pointer',
                   fontSize: '1rem',
                   fontWeight: '600',
@@ -507,9 +580,11 @@ const Navbar = ({
                 <button 
                   onClick={() => handleNavClick('orders')} 
                   style={{
-                    background: currentPage === 'orders' ? 'rgba(99,102,241,0.1)' : 'transparent',
+                    background: currentPage === 'orders' 
+                      ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                      : 'transparent',
                     border: 'none',
-                    color: currentPage === 'orders' ? '#6366f1' : '#64748b',
+                    color: currentPage === 'orders' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
                     cursor: 'pointer',
                     fontSize: '1rem',
                     fontWeight: '600',
@@ -523,15 +598,15 @@ const Navbar = ({
                 </button>
                 
                 <div style={{
-                  background: '#f8fafc',
+                  background: isDark ? '#1e293b' : '#f8fafc',
                   padding: '1rem',
                   borderRadius: '12px',
                   marginTop: '0.5rem'
                 }}>
-                  <div style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '0.25rem' }}>
+                  <div style={{ fontSize: '0.85rem', color: isDark ? '#94a3b8' : '#64748b', marginBottom: '0.25rem' }}>
                     Signed in as
                   </div>
-                  <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#1e293b', marginBottom: '0.75rem' }}>
+                  <div style={{ fontSize: '0.95rem', fontWeight: '600', color: isDark ? '#e2e8f0' : '#1e293b', marginBottom: '0.75rem' }}>
                     {user.email}
                   </div>
                   <button
@@ -542,7 +617,7 @@ const Navbar = ({
                     style={{
                       width: '100%',
                       padding: '0.75rem',
-                      background: '#fef2f2',
+                      background: isDark ? '#991b1b' : '#fef2f2',
                       border: '1px solid #fecaca',
                       color: '#ef4444',
                       cursor: 'pointer',
@@ -581,6 +656,19 @@ const Navbar = ({
           </div>
         </div>
       )}
+      
+      <style>{`
+        @keyframes slideDown {
+          from {
+            opacity: 0;
+            transform: translateY(-10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
     </>
   );
 };

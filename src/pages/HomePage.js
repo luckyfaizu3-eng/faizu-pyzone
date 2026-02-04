@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Download, Shield, Zap, Instagram, BookOpen } from 'lucide-react';
+import { useTheme } from '../App';
 
 function HomePage({ setCurrentPage }) {
   const [currentText, setCurrentText] = useState('');
@@ -7,6 +8,7 @@ function HomePage({ setCurrentPage }) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [phraseIndex, setPhraseIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const { isDark } = useTheme();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -45,35 +47,43 @@ function HomePage({ setCurrentPage }) {
   }, [currentIndex, isDeleting, phraseIndex, phrases]);
 
   return (
-    <div style={{ paddingTop: '70px', minHeight: '100vh', overflowX: 'hidden' }}>
+    <div style={{ paddingTop: isMobile ? '62px' : '70px', minHeight: '100vh', overflowX: 'hidden' }}>
 
       {/* ===== HERO SECTION ===== */}
       <section style={{
-        padding: isMobile ? '32px 18px 28px' : '80px 24px 60px',
+        padding: isMobile ? '32px 16px 28px' : '80px 24px 60px',
         textAlign: 'center',
         position: 'relative',
-        background: 'linear-gradient(180deg, #f0f4ff 0%, #ffffff 70%)',
+        background: isDark 
+          ? 'linear-gradient(180deg, rgba(30,27,75,0.6) 0%, transparent 70%)'
+          : 'linear-gradient(180deg, #f0f4ff 0%, transparent 70%)',
         borderRadius: '0 0 32px 32px'
       }}>
         {/* Decorative blobs */}
         <div style={{
           position: 'absolute', top: '-20px', left: '-40px',
-          width: '200px', height: '200px',
-          background: 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)',
+          width: isMobile ? '150px' : '200px', 
+          height: isMobile ? '150px' : '200px',
+          background: isDark 
+            ? 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%)'
+            : 'radial-gradient(circle, rgba(99,102,241,0.12) 0%, transparent 70%)',
           borderRadius: '50%', pointerEvents: 'none'
         }} />
         <div style={{
           position: 'absolute', bottom: '10px', right: '-30px',
-          width: '180px', height: '180px',
-          background: 'radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%)',
+          width: isMobile ? '140px' : '180px', 
+          height: isMobile ? '140px' : '180px',
+          background: isDark
+            ? 'radial-gradient(circle, rgba(236,72,153,0.12) 0%, transparent 70%)'
+            : 'radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%)',
           borderRadius: '50%', pointerEvents: 'none'
         }} />
 
         {/* Logo badge */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: '8px',
-          background: 'rgba(99,102,241,0.08)',
-          border: '1px solid rgba(99,102,241,0.2)',
+          background: isDark ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)',
+          border: isDark ? '1px solid rgba(99,102,241,0.3)' : '1px solid rgba(99,102,241,0.2)',
           borderRadius: '50px',
           padding: '6px 14px 6px 6px',
           marginBottom: isMobile ? '16px' : '24px'
@@ -90,41 +100,43 @@ function HomePage({ setCurrentPage }) {
 
         {/* Typing heading */}
         <h1 style={{
-          fontSize: isMobile ? '2.2rem' : '3.8rem',
+          fontSize: isMobile ? '1.8rem' : '3.8rem',
           fontWeight: '900',
           marginBottom: '10px',
           background: 'linear-gradient(135deg, #1e40af, #6366f1, #ec4899)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
           lineHeight: 1.2,
-          minHeight: isMobile ? '58px' : '96px',
-          display: 'flex', alignItems: 'center', justifyContent: 'center'
+          minHeight: isMobile ? '50px' : '96px',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '0 10px'
         }}>
           {currentText}
           <span style={{
             borderRight: '3px solid #6366f1',
             animation: 'blink 0.7s infinite',
             marginLeft: '6px',
-            height: isMobile ? '34px' : '56px',
+            height: isMobile ? '28px' : '56px',
             display: 'inline-block'
           }} />
         </h1>
 
         <p style={{
-          fontSize: isMobile ? '0.95rem' : '1.15rem',
-          color: '#64748b',
+          fontSize: isMobile ? '0.9rem' : '1.15rem',
+          color: isDark ? '#94a3b8' : '#64748b',
           maxWidth: '560px',
           margin: '0 auto 20px',
           lineHeight: 1.6,
-          fontWeight: '500'
+          fontWeight: '500',
+          padding: '0 10px'
         }}>
           Quality study materials for JKBOSE, Python & Job Prep — delivered instantly after payment.
         </p>
 
         {/* Trust badges */}
         <div style={{
-          display: 'flex', gap: '10px', justifyContent: 'center',
-          flexWrap: 'wrap', marginBottom: '24px'
+          display: 'flex', gap: '8px', justifyContent: 'center',
+          flexWrap: 'wrap', marginBottom: '24px', padding: '0 10px'
         }}>
           {[
             { icon: Shield, color: '#10b981', text: 'Secure Payment' },
@@ -133,13 +145,17 @@ function HomePage({ setCurrentPage }) {
           ].map((badge, i) => (
             <div key={i} style={{
               display: 'flex', alignItems: 'center', gap: '6px',
-              background: `${badge.color}10`,
-              padding: '7px 14px',
+              background: `${badge.color}${isDark ? '18' : '10'}`,
+              padding: isMobile ? '6px 12px' : '7px 14px',
               borderRadius: '50px',
-              border: `1px solid ${badge.color}30`
+              border: `1px solid ${badge.color}${isDark ? '40' : '30'}`
             }}>
-              <badge.icon size={15} color={badge.color} />
-              <span style={{ fontSize: '0.82rem', fontWeight: '600', color: badge.color }}>
+              <badge.icon size={isMobile ? 14 : 15} color={badge.color} />
+              <span style={{ 
+                fontSize: isMobile ? '0.75rem' : '0.82rem', 
+                fontWeight: '600', 
+                color: badge.color 
+              }}>
                 {badge.text}
               </span>
             </div>
@@ -152,8 +168,8 @@ function HomePage({ setCurrentPage }) {
           style={{
             background: 'linear-gradient(135deg, #6366f1, #ec4899)',
             border: 'none', color: 'white',
-            padding: isMobile ? '14px 32px' : '16px 40px',
-            fontSize: isMobile ? '1rem' : '1.15rem',
+            padding: isMobile ? '12px 28px' : '16px 40px',
+            fontSize: isMobile ? '0.95rem' : '1.15rem',
             borderRadius: '50px', cursor: 'pointer', fontWeight: '700',
             display: 'inline-flex', alignItems: 'center', gap: '8px',
             boxShadow: '0 8px 30px rgba(99,102,241,0.35)',
@@ -168,14 +184,14 @@ function HomePage({ setCurrentPage }) {
             e.currentTarget.style.boxShadow = '0 8px 30px rgba(99,102,241,0.35)';
           }}
         >
-          <Download size={20} />
+          <Download size={isMobile ? 18 : 20} />
           Browse Notes Now
         </button>
       </section>
 
-      {/* ===== QUICK ACTION CARDS (Mobile highlight) ===== */}
+      {/* ===== QUICK ACTION CARDS ===== */}
       <section style={{
-        padding: isMobile ? '20px 18px' : '40px 24px',
+        padding: isMobile ? '20px 16px' : '40px 24px',
         maxWidth: '1000px', margin: '0 auto'
       }}>
         <div style={{
@@ -193,40 +209,48 @@ function HomePage({ setCurrentPage }) {
               key={i}
               onClick={() => setCurrentPage(card.page)}
               style={{
-                background: '#ffffff',
-                border: '1.5px solid #e8ecf0',
-                borderRadius: '16px',
-                padding: isMobile ? '16px 10px' : '20px 14px',
+                background: isDark ? '#1e293b' : '#ffffff',
+                border: isDark ? '1.5px solid #334155' : '1.5px solid #e8ecf0',
+                borderRadius: isMobile ? '14px' : '16px',
+                padding: isMobile ? '14px 8px' : '20px 14px',
                 cursor: 'pointer',
                 display: 'flex', flexDirection: 'column',
-                alignItems: 'center', gap: '10px',
+                alignItems: 'center', gap: isMobile ? '8px' : '10px',
                 transition: 'all 0.25s ease',
-                boxShadow: '0 2px 12px rgba(0,0,0,0.06)'
+                boxShadow: isDark 
+                  ? '0 2px 12px rgba(0,0,0,0.3)' 
+                  : '0 2px 12px rgba(0,0,0,0.06)'
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
-                e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+                e.currentTarget.style.boxShadow = isDark 
+                  ? '0 8px 24px rgba(0,0,0,0.5)' 
+                  : '0 8px 24px rgba(0,0,0,0.12)';
                 e.currentTarget.style.borderColor = '#6366f1';
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)';
-                e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.06)';
-                e.currentTarget.style.borderColor = '#e8ecf0';
+                e.currentTarget.style.boxShadow = isDark 
+                  ? '0 2px 12px rgba(0,0,0,0.3)' 
+                  : '0 2px 12px rgba(0,0,0,0.06)';
+                e.currentTarget.style.borderColor = isDark ? '#334155' : '#e8ecf0';
               }}
             >
               <div style={{
-                width: '44px', height: '44px',
+                width: isMobile ? '38px' : '44px', 
+                height: isMobile ? '38px' : '44px',
                 background: card.gradient,
                 borderRadius: '12px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.4rem',
+                fontSize: isMobile ? '1.2rem' : '1.4rem',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
               }}>
                 {card.icon}
               </div>
               <span style={{
-                fontSize: isMobile ? '0.78rem' : '0.85rem',
-                fontWeight: '700', color: '#1e293b'
+                fontSize: isMobile ? '0.72rem' : '0.85rem',
+                fontWeight: '700', 
+                color: isDark ? '#e2e8f0' : '#1e293b'
               }}>
                 {card.label}
               </span>
@@ -237,14 +261,14 @@ function HomePage({ setCurrentPage }) {
 
       {/* ===== FEATURES SECTION ===== */}
       <section style={{
-        padding: isMobile ? '24px 18px' : '40px 24px',
+        padding: isMobile ? '24px 16px' : '40px 24px',
         maxWidth: '1000px', margin: '0 auto'
       }}>
         <h2 style={{
-          fontSize: isMobile ? '1.5rem' : '2rem',
+          fontSize: isMobile ? '1.4rem' : '2rem',
           fontWeight: '900', textAlign: 'center',
           marginBottom: isMobile ? '16px' : '28px',
-          color: '#1e293b'
+          color: isDark ? '#e2e8f0' : '#1e293b'
         }}>
           Why Students Love Us
         </h2>
@@ -260,34 +284,49 @@ function HomePage({ setCurrentPage }) {
             { icon: '⚡', title: 'Instant Download', desc: 'Get your PDFs the second payment is done.', color: '#ec4899' }
           ].map((f, i) => (
             <div key={i} style={{
-              background: '#fff',
-              border: '1.5px solid #e8ecf0',
+              background: isDark ? '#1e293b' : '#fff',
+              border: isDark ? '1.5px solid #334155' : '1.5px solid #e8ecf0',
               borderRadius: '18px',
-              padding: isMobile ? '18px 16px' : '24px',
+              padding: isMobile ? '16px 14px' : '24px',
               display: 'flex', alignItems: 'flex-start', gap: '14px',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+              boxShadow: isDark 
+                ? '0 2px 12px rgba(0,0,0,0.3)' 
+                : '0 2px 12px rgba(0,0,0,0.05)',
               transition: 'all 0.3s ease'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = f.color;
-              e.currentTarget.style.boxShadow = `0 6px 20px ${f.color}20`;
+              e.currentTarget.style.boxShadow = `0 6px 20px ${f.color}${isDark ? '30' : '20'}`;
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e8ecf0';
-              e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.05)';
+              e.currentTarget.style.borderColor = isDark ? '#334155' : '#e8ecf0';
+              e.currentTarget.style.boxShadow = isDark 
+                ? '0 2px 12px rgba(0,0,0,0.3)' 
+                : '0 2px 12px rgba(0,0,0,0.05)';
             }}>
               <div style={{
-                width: '42px', height: '42px', flexShrink: 0,
-                background: `${f.color}12`,
+                width: isMobile ? '38px' : '42px', 
+                height: isMobile ? '38px' : '42px', 
+                flexShrink: 0,
+                background: `${f.color}${isDark ? '20' : '12'}`,
                 borderRadius: '12px',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.3rem'
+                fontSize: isMobile ? '1.2rem' : '1.3rem'
               }}>
                 {f.icon}
               </div>
               <div>
-                <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#1e293b', marginBottom: '3px' }}>{f.title}</div>
-                <div style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.5 }}>{f.desc}</div>
+                <div style={{ 
+                  fontSize: isMobile ? '0.9rem' : '0.95rem', 
+                  fontWeight: '800', 
+                  color: isDark ? '#e2e8f0' : '#1e293b', 
+                  marginBottom: '3px' 
+                }}>{f.title}</div>
+                <div style={{ 
+                  fontSize: isMobile ? '0.78rem' : '0.82rem', 
+                  color: isDark ? '#94a3b8' : '#64748b', 
+                  lineHeight: 1.5 
+                }}>{f.desc}</div>
               </div>
             </div>
           ))}
@@ -296,11 +335,11 @@ function HomePage({ setCurrentPage }) {
 
       {/* ===== INFO CARDS SECTION ===== */}
       <section style={{
-        padding: isMobile ? '24px 18px' : '40px 24px',
+        padding: isMobile ? '24px 16px' : '40px 24px',
         maxWidth: '1000px', margin: '0 auto'
       }}>
         <h2 style={{
-          fontSize: isMobile ? '1.5rem' : '2rem',
+          fontSize: isMobile ? '1.4rem' : '2rem',
           fontWeight: '900', textAlign: 'center',
           marginBottom: isMobile ? '16px' : '28px',
           background: 'linear-gradient(135deg, #6366f1, #ec4899)',
@@ -322,40 +361,55 @@ function HomePage({ setCurrentPage }) {
             { icon: '⭐', title: 'What Makes Us Better', desc: 'No outdated or copied content. Every note filtered for important questions. Real reviews, no hidden charges, direct founder support.', color: '#8b5cf6' }
           ].map((card, i) => (
             <div key={i} style={{
-              background: '#fff',
-              border: '1.5px solid #e8ecf0',
+              background: isDark ? '#1e293b' : '#fff',
+              border: isDark ? '1.5px solid #334155' : '1.5px solid #e8ecf0',
               borderRadius: '18px',
-              padding: isMobile ? '18px 16px' : '22px',
-              boxShadow: '0 2px 12px rgba(0,0,0,0.05)',
+              padding: isMobile ? '16px 14px' : '22px',
+              boxShadow: isDark 
+                ? '0 2px 12px rgba(0,0,0,0.3)' 
+                : '0 2px 12px rgba(0,0,0,0.05)',
               transition: 'all 0.3s ease',
               position: 'relative', overflow: 'hidden'
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = card.color;
-              e.currentTarget.style.boxShadow = `0 6px 20px ${card.color}20`;
+              e.currentTarget.style.boxShadow = `0 6px 20px ${card.color}${isDark ? '30' : '20'}`;
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = '#e8ecf0';
-              e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.05)';
+              e.currentTarget.style.borderColor = isDark ? '#334155' : '#e8ecf0';
+              e.currentTarget.style.boxShadow = isDark 
+                ? '0 2px 12px rgba(0,0,0,0.3)' 
+                : '0 2px 12px rgba(0,0,0,0.05)';
             }}>
               <div style={{
                 position: 'absolute', top: '-30px', right: '-30px',
                 width: '100px', height: '100px',
-                background: `${card.color}08`, borderRadius: '50%'
+                background: `${card.color}${isDark ? '10' : '08'}`, 
+                borderRadius: '50%'
               }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
                 <div style={{
-                  width: '38px', height: '38px',
-                  background: `${card.color}12`,
+                  width: isMobile ? '34px' : '38px', 
+                  height: isMobile ? '34px' : '38px',
+                  background: `${card.color}${isDark ? '20' : '12'}`,
                   borderRadius: '10px',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '1.2rem'
+                  fontSize: isMobile ? '1.1rem' : '1.2rem'
                 }}>
                   {card.icon}
                 </div>
-                <h3 style={{ fontSize: '1rem', fontWeight: '800', color: card.color }}>{card.title}</h3>
+                <h3 style={{ 
+                  fontSize: isMobile ? '0.95rem' : '1rem', 
+                  fontWeight: '800', 
+                  color: card.color 
+                }}>{card.title}</h3>
               </div>
-              <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6, margin: 0 }}>{card.desc}</p>
+              <p style={{ 
+                fontSize: isMobile ? '0.78rem' : '0.82rem', 
+                color: isDark ? '#94a3b8' : '#64748b', 
+                lineHeight: 1.6, 
+                margin: 0 
+              }}>{card.desc}</p>
             </div>
           ))}
         </div>
@@ -363,31 +417,35 @@ function HomePage({ setCurrentPage }) {
 
       {/* ===== FOUNDER SECTION ===== */}
       <section style={{
-        padding: isMobile ? '24px 18px 32px' : '40px 24px 60px',
+        padding: isMobile ? '24px 16px 32px' : '40px 24px 60px',
         maxWidth: '700px', margin: '0 auto'
       }}>
         <div style={{
-          background: 'linear-gradient(135deg, #f0f4ff, #fdf2f8)',
-          border: '1.5px solid #e0e4f0',
+          background: isDark 
+            ? 'linear-gradient(135deg, rgba(30,27,75,0.5), rgba(88,28,135,0.3))'
+            : 'linear-gradient(135deg, #f0f4ff, #fdf2f8)',
+          border: isDark ? '1.5px solid #334155' : '1.5px solid #e0e4f0',
           borderRadius: '22px',
-          padding: isMobile ? '22px 18px' : '32px',
+          padding: isMobile ? '20px 16px' : '32px',
           display: 'flex',
           flexDirection: isMobile ? 'column' : 'row',
           alignItems: isMobile ? 'center' : 'flex-start',
           gap: isMobile ? '16px' : '24px',
           textAlign: isMobile ? 'center' : 'left',
-          boxShadow: '0 4px 20px rgba(99,102,241,0.08)'
+          boxShadow: isDark 
+            ? '0 4px 20px rgba(0,0,0,0.4)' 
+            : '0 4px 20px rgba(99,102,241,0.08)'
         }}>
           {/* Photo */}
           <div style={{ flexShrink: 0 }}>
             <div style={{
-              width: isMobile ? '90px' : '110px',
-              height: isMobile ? '90px' : '110px',
+              width: isMobile ? '80px' : '110px',
+              height: isMobile ? '80px' : '110px',
               borderRadius: '50%',
               overflow: 'hidden',
               border: '3px solid rgba(99,102,241,0.3)',
               boxShadow: '0 6px 20px rgba(99,102,241,0.2)',
-              background: 'linear-gradient(135deg, #6366f120, #ec4899 20%)'
+              background: 'linear-gradient(135deg, #6366f120, #ec489920)'
             }}>
               <img
                 src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg"
@@ -408,13 +466,28 @@ function HomePage({ setCurrentPage }) {
 
           {/* Content */}
           <div style={{ flex: 1 }}>
-            <h3 style={{ fontSize: isMobile ? '1.2rem' : '1.4rem', fontWeight: '800', color: '#1e293b', marginBottom: '2px' }}>
+            <h3 style={{ 
+              fontSize: isMobile ? '1.15rem' : '1.4rem', 
+              fontWeight: '800', 
+              color: isDark ? '#e2e8f0' : '#1e293b', 
+              marginBottom: '2px' 
+            }}>
               Faizan Tariq
             </h3>
-            <div style={{ fontSize: '0.82rem', color: '#6366f1', fontWeight: '600', marginBottom: '10px' }}>
+            <div style={{ 
+              fontSize: isMobile ? '0.78rem' : '0.82rem', 
+              color: '#6366f1', 
+              fontWeight: '600', 
+              marginBottom: '10px' 
+            }}>
               Software Engineering • ILS Srinagar
             </div>
-            <p style={{ fontSize: '0.82rem', color: '#64748b', lineHeight: 1.6, margin: '0 0 14px' }}>
+            <p style={{ 
+              fontSize: isMobile ? '0.78rem' : '0.82rem', 
+              color: isDark ? '#94a3b8' : '#64748b', 
+              lineHeight: 1.6, 
+              margin: '0 0 14px' 
+            }}>
               Providing quality study materials & filtered important questions to help students excel — because we are students too.
             </p>
             <a
@@ -424,9 +497,10 @@ function HomePage({ setCurrentPage }) {
               style={{
                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                 background: 'linear-gradient(135deg, #f093fb, #f5576c)',
-                color: '#fff', padding: '8px 18px',
+                color: '#fff', 
+                padding: isMobile ? '7px 16px' : '8px 18px',
                 borderRadius: '50px', textDecoration: 'none',
-                fontWeight: '600', fontSize: '0.82rem',
+                fontWeight: '600', fontSize: isMobile ? '0.78rem' : '0.82rem',
                 boxShadow: '0 4px 14px rgba(240,147,251,0.3)',
                 transition: 'all 0.3s ease'
               }}
@@ -439,7 +513,7 @@ function HomePage({ setCurrentPage }) {
                 e.currentTarget.style.boxShadow = '0 4px 14px rgba(240,147,251,0.3)';
               }}
             >
-              <Instagram size={16} /> Follow on Instagram
+              <Instagram size={isMobile ? 14 : 16} /> Follow on Instagram
             </a>
           </div>
         </div>

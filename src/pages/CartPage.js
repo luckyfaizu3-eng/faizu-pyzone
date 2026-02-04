@@ -1,9 +1,11 @@
 import React from 'react';
 import { ShoppingCart, Trash2, Download, Zap } from 'lucide-react';
-import { useCart } from '../App';
+import { useCart, useTheme } from '../App';
 
 function CartPage({ setCurrentPage, completeOrder, user }) {
   const { cart, removeFromCart, cartTotal } = useCart();
+  const { isDark } = useTheme();
+  const isMobile = window.innerWidth <= 768;
 
   const handleCheckout = () => {
     if (!user) {
@@ -18,37 +20,37 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
   if (cart.length === 0) {
     return (
       <div style={{
-        paddingTop: '120px',
+        paddingTop: isMobile ? '100px' : '120px',
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '120px 1.5rem 2rem'
+        padding: isMobile ? '100px 1.5rem 2rem' : '120px 1.5rem 2rem'
       }}>
         <div style={{
           textAlign: 'center',
           animation: 'fadeInUp 0.6s ease'
         }}>
           <ShoppingCart 
-            size={120} 
-            color="#cbd5e1" 
+            size={isMobile ? 80 : 120} 
+            color={isDark ? '#475569' : '#cbd5e1'} 
             style={{
               margin: '0 auto 2rem',
               opacity: 0.5
             }} 
           />
           <h2 style={{
-            fontSize: 'clamp(1.8rem, 5vw, 2.5rem)',
+            fontSize: isMobile ? '1.6rem' : '2.5rem',
             fontWeight: '900',
             marginBottom: '1rem',
-            color: '#1e293b'
+            color: isDark ? '#e2e8f0' : '#1e293b'
           }}>
             Your cart is empty
           </h2>
           <p style={{
-            color: '#64748b',
-            fontSize: 'clamp(1rem, 3vw, 1.2rem)',
-            marginBottom: '3rem'
+            color: isDark ? '#94a3b8' : '#64748b',
+            fontSize: isMobile ? '0.95rem' : '1.2rem',
+            marginBottom: '2rem'
           }}>
             Start shopping now!
           </p>
@@ -58,8 +60,8 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
               background: 'linear-gradient(135deg, #6366f1, #ec4899)',
               border: 'none',
               color: 'white',
-              padding: '1.25rem 3rem',
-              fontSize: 'clamp(1rem, 3vw, 1.25rem)',
+              padding: isMobile ? '1rem 2.5rem' : '1.25rem 3rem',
+              fontSize: isMobile ? '0.95rem' : '1.25rem',
               borderRadius: '50px',
               cursor: 'pointer',
               fontWeight: '700',
@@ -78,7 +80,7 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
               e.currentTarget.style.boxShadow = '0 10px 30px rgba(99,102,241,0.3)';
             }}
           >
-            <Download size={24} />
+            <Download size={isMobile ? 20 : 24} />
             Browse Notes
           </button>
         </div>
@@ -88,20 +90,20 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
 
   return (
     <div style={{
-      paddingTop: '120px',
-      paddingBottom: '5rem',
+      paddingTop: isMobile ? '90px' : '120px',
+      paddingBottom: '3rem',
       minHeight: '100vh',
-      padding: '120px 1.5rem 5rem'
+      padding: isMobile ? '90px 1rem 3rem' : '120px 1.5rem 5rem'
     }}>
       <div style={{
         maxWidth: '1000px',
         margin: '0 auto'
       }}>
         <h1 style={{
-          fontSize: 'clamp(2rem, 6vw, 4rem)',
+          fontSize: isMobile ? '1.8rem' : '4rem',
           fontWeight: '900',
           textAlign: 'center',
-          marginBottom: '3rem',
+          marginBottom: isMobile ? '2rem' : '3rem',
           background: 'linear-gradient(135deg, #6366f1, #ec4899)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent'
@@ -110,12 +112,14 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
         </h1>
         
         <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '24px',
-          padding: 'clamp(1.5rem, 4vw, 2.5rem)',
+          background: isDark ? '#1e293b' : '#ffffff',
+          border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+          borderRadius: isMobile ? '18px' : '24px',
+          padding: isMobile ? '1.25rem' : '2.5rem',
           marginBottom: '2rem',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+          boxShadow: isDark 
+            ? '0 4px 20px rgba(0,0,0,0.3)' 
+            : '0 4px 20px rgba(0,0,0,0.05)'
         }}>
           {cart.map((item, index) => (
             <div 
@@ -123,11 +127,11 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 'clamp(1rem, 3vw, 2rem)',
-                paddingBottom: '2rem',
-                marginBottom: '2rem',
+                gap: isMobile ? '0.75rem' : '2rem',
+                paddingBottom: isMobile ? '1.25rem' : '2rem',
+                marginBottom: isMobile ? '1.25rem' : '2rem',
                 borderBottom: index !== cart.length - 1 
-                  ? '1px solid #e2e8f0' 
+                  ? (isDark ? '1px solid #334155' : '1px solid #e2e8f0') 
                   : 'none',
                 flexWrap: 'wrap'
               }}
@@ -138,26 +142,26 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
                   : 'linear-gradient(135deg, #6366f1, #ec4899)',
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
-                width: 'clamp(80px, 20vw, 100px)',
-                height: 'clamp(80px, 20vw, 100px)',
-                borderRadius: '16px',
+                width: isMobile ? '70px' : '100px',
+                height: isMobile ? '70px' : '100px',
+                borderRadius: isMobile ? '12px' : '16px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                fontSize: item.thumbnail ? '0' : 'clamp(2rem, 6vw, 3rem)'
+                fontSize: item.thumbnail ? '0' : (isMobile ? '1.8rem' : '3rem')
               }}>
                 {!item.thumbnail && (item.image || '📚')}
               </div>
               
               <div style={{
                 flex: 1,
-                minWidth: '150px'
+                minWidth: isMobile ? '120px' : '150px'
               }}>
                 <h3 style={{
-                  fontSize: 'clamp(1.1rem, 3vw, 1.3rem)',
+                  fontSize: isMobile ? '0.95rem' : '1.3rem',
                   fontWeight: '800',
-                  color: '#1e293b',
+                  color: isDark ? '#e2e8f0' : '#1e293b',
                   marginBottom: '0.5rem'
                 }}>
                   {item.title}
@@ -165,16 +169,16 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
                 <p style={{
                   color: '#6366f1',
                   fontWeight: '700',
-                  fontSize: 'clamp(0.95rem, 2.5vw, 1.1rem)'
+                  fontSize: isMobile ? '0.85rem' : '1.1rem'
                 }}>
                   ₹{item.price}
                 </p>
               </div>
               
               <div style={{
-                fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
+                fontSize: isMobile ? '1.2rem' : '1.8rem',
                 fontWeight: '900',
-                color: '#1e293b'
+                color: isDark ? '#e2e8f0' : '#1e293b'
               }}>
                 ₹{item.price * item.quantity}
               </div>
@@ -182,50 +186,52 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
               <button 
                 onClick={() => removeFromCart(item.id)} 
                 style={{
-                  background: 'rgba(239,68,68,0.1)',
+                  background: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)',
                   border: '2px solid rgba(239,68,68,0.3)',
-                  padding: '0.75rem',
+                  padding: isMobile ? '0.6rem' : '0.75rem',
                   borderRadius: '12px',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease'
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
+                  e.currentTarget.style.background = 'rgba(239,68,68,0.3)';
                   e.currentTarget.style.transform = 'scale(1.1)';
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+                  e.currentTarget.style.background = isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)';
                   e.currentTarget.style.transform = 'scale(1)';
                 }}
               >
-                <Trash2 size={24} color="#ef4444" />
+                <Trash2 size={isMobile ? 20 : 24} color="#ef4444" />
               </button>
             </div>
           ))}
         </div>
         
         <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '24px',
-          padding: 'clamp(2rem, 5vw, 3rem)',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+          background: isDark ? '#1e293b' : '#ffffff',
+          border: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+          borderRadius: isMobile ? '18px' : '24px',
+          padding: isMobile ? '1.5rem' : '3rem',
+          boxShadow: isDark 
+            ? '0 4px 20px rgba(0,0,0,0.3)' 
+            : '0 4px 20px rgba(0,0,0,0.05)'
         }}>
           <div style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
-            fontSize: 'clamp(1.5rem, 4vw, 2rem)',
+            fontSize: isMobile ? '1.2rem' : '2rem',
             fontWeight: '900',
-            marginBottom: '2.5rem',
-            paddingBottom: '2rem',
-            borderBottom: '1px solid #e2e8f0',
+            marginBottom: isMobile ? '1.5rem' : '2.5rem',
+            paddingBottom: isMobile ? '1.25rem' : '2rem',
+            borderBottom: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
             flexWrap: 'wrap',
             gap: '1rem'
           }}>
-            <span style={{ color: '#64748b' }}>Total:</span>
+            <span style={{ color: isDark ? '#94a3b8' : '#64748b' }}>Total:</span>
             <span style={{
-              fontSize: 'clamp(2rem, 8vw, 3.5rem)',
+              fontSize: isMobile ? '1.8rem' : '3.5rem',
               background: 'linear-gradient(135deg, #6366f1, #ec4899)',
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent'
@@ -240,8 +246,8 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
               background: 'linear-gradient(135deg, #6366f1, #ec4899)',
               border: 'none',
               color: 'white',
-              padding: 'clamp(1.25rem, 4vw, 1.5rem)',
-              fontSize: 'clamp(1.1rem, 3.5vw, 1.5rem)',
+              padding: isMobile ? '1rem' : '1.5rem',
+              fontSize: isMobile ? '1rem' : '1.5rem',
               borderRadius: '16px',
               cursor: 'pointer',
               fontWeight: '900',
@@ -263,7 +269,7 @@ function CartPage({ setCurrentPage, completeOrder, user }) {
             onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.95)'}
             onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            <Zap size={28} />
+            <Zap size={isMobile ? 24 : 28} />
             Pay ₹{cartTotal} - Checkout
           </button>
         </div>

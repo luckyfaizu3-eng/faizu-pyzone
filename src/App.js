@@ -61,11 +61,26 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [isDark] = useState(false);
+  
+  // ✅ DARK MODE STATE - localStorage se persist karega
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('faizupyzone_theme');
+    return saved === 'dark';
+  });
+  
   const [showSplash, setShowSplash] = useState(() => {
     const splashShown = sessionStorage.getItem('splashShown');
     return !splashShown;
   });
+
+  // ✅ Dark mode toggle function
+  const toggleTheme = () => {
+    setIsDark(prev => {
+      const newTheme = !prev;
+      localStorage.setItem('faizupyzone_theme', newTheme ? 'dark' : 'light');
+      return newTheme;
+    });
+  };
 
   const handleSplashComplete = () => {
     setShowSplash(false);
@@ -171,7 +186,7 @@ function App() {
         contact: ""
       },
       theme: {
-        color: "#6366f1"
+        color: isDark ? "#8b5cf6" : "#6366f1"
       },
       modal: {
         ondismiss: function() {
@@ -212,12 +227,11 @@ function App() {
     }
 
     initiatePayment(product.price, [product], async (response) => {
-      // ✅ Create item with multi-PDF support
       const itemData = {
         id: product.id,
         title: product.title,
         price: product.price,
-        pdfFiles: product.pdfFiles || [] // ✅ Include all PDFs
+        pdfFiles: product.pdfFiles || []
       };
 
       if (product.thumbnail) itemData.thumbnail = product.thumbnail;
@@ -283,14 +297,11 @@ function App() {
     }
   };
 
-  // ✅ FIXED LOGOUT - Cart ab persist karega
   const logout = async () => {
     const result = await logoutUser();
     if (result.success) {
       setUser(null);
       setOrders([]);
-      // ❌ setCart([]) - REMOVED - Cart persist karega
-      // ❌ localStorage.removeItem('faizupyzone_cart') - REMOVED - Cart persist karega
       setCurrentPage('home');
       window.showToast?.('👋 Logged out successfully! Cart items saved.', 'info');
     }
@@ -317,13 +328,12 @@ function App() {
     }
 
     initiatePayment(cartTotal, cart, async (response) => {
-      // ✅ Map cart items with multi-PDF support
       const orderItems = cart.map(item => {
         const itemData = {
           id: item.id,
           title: item.title,
           price: item.price,
-          pdfFiles: item.pdfFiles || [] // ✅ Include all PDFs
+          pdfFiles: item.pdfFiles || []
         };
 
         if (item.thumbnail) itemData.thumbnail = item.thumbnail;
@@ -353,7 +363,6 @@ function App() {
         await loadOrders();
         
         setTimeout(() => {
-          // ✅ Payment successful hone ke baad hi cart clear hoga
           setCart([]);
           localStorage.removeItem('faizupyzone_cart');
           setCurrentPage('orders');
@@ -403,16 +412,19 @@ function App() {
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
-        <ThemeContext.Provider value={{ isDark }}>
+        <ThemeContext.Provider value={{ isDark, toggleTheme }}>
           {showSplash ? (
             <SplashScreen onComplete={handleSplashComplete} />
           ) : (
           <div style={{
             minHeight: '100vh',
-            background: '#ffffff',
-            color: '#1e293b',
+            background: isDark 
+              ? 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)'
+              : '#ffffff',
+            color: isDark ? '#e2e8f0' : '#1e293b',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
-            position: 'relative'
+            position: 'relative',
+            transition: 'background 0.3s ease, color 0.3s ease'
           }}>
             
             <ToastContainer />
@@ -465,7 +477,8 @@ function App() {
               )}
             </main>
             
-            <Footer setCurrentPage={setCurrentPage} />
+            {/* ✅ Footer SIRF HomePage mein dikhega */}
+            {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
           </div>
           )}
         </ThemeContext.Provider>

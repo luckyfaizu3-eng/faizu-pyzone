@@ -1,12 +1,18 @@
 import React from 'react';
 import { Instagram, Shield } from 'lucide-react';
+import { useTheme } from '../App';
 
 const Footer = ({ setCurrentPage }) => {
+  const { isDark } = useTheme();
+  const isMobile = window.innerWidth <= 768;
+
   return (
     <footer style={{
-      background: '#f8fafc',
-      borderTop: '1px solid #e2e8f0',
-      padding: '4rem 2rem 2rem',
+      background: isDark 
+        ? 'linear-gradient(180deg, transparent 0%, rgba(15,23,42,0.8) 100%)'
+        : '#f8fafc',
+      borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+      padding: isMobile ? '3rem 1.5rem 1.5rem' : '4rem 2rem 2rem',
       position: 'relative',
       zIndex: 1,
       marginTop: '5rem'
@@ -15,12 +21,12 @@ const Footer = ({ setCurrentPage }) => {
         maxWidth: '1400px',
         margin: '0 auto',
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-        gap: '3rem'
+        gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: isMobile ? '2rem' : '3rem'
       }}>
         <div>
           <h3 style={{
-            fontSize: '2rem',
+            fontSize: isMobile ? '1.6rem' : '2rem',
             fontWeight: '900',
             marginBottom: '1.5rem',
             background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
@@ -30,9 +36,10 @@ const Footer = ({ setCurrentPage }) => {
             FaizUpyZone
           </h3>
           <p style={{
-            color: '#64748b',
+            color: isDark ? '#94a3b8' : '#64748b',
             marginBottom: '1.5rem',
-            lineHeight: 1.7
+            lineHeight: 1.7,
+            fontSize: isMobile ? '0.9rem' : '1rem'
           }}>
             Empowering students with premium study materials for a brighter future.
           </p>
@@ -46,14 +53,14 @@ const Footer = ({ setCurrentPage }) => {
               gap: '0.75rem',
               color: '#6366f1',
               fontWeight: '600',
-              fontSize: '1.1rem',
+              fontSize: isMobile ? '0.95rem' : '1.1rem',
               textDecoration: 'none',
               transition: 'all 0.3s ease'
             }}
             onMouseEnter={(e) => e.currentTarget.style.transform = 'translateX(5px)'}
             onMouseLeave={(e) => e.currentTarget.style.transform = 'translateX(0)'}
           >
-            <Instagram size={24} /> @code_with_06
+            <Instagram size={isMobile ? 22 : 24} /> @code_with_06
           </a>
         </div>
         
@@ -61,8 +68,8 @@ const Footer = ({ setCurrentPage }) => {
           <h4 style={{
             fontWeight: '800',
             marginBottom: '1.5rem',
-            fontSize: '1.2rem',
-            color: '#1e293b'
+            fontSize: isMobile ? '1.1rem' : '1.2rem',
+            color: isDark ? '#e2e8f0' : '#1e293b'
           }}>
             Quick Links
           </h4>
@@ -78,15 +85,15 @@ const Footer = ({ setCurrentPage }) => {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#64748b',
+                  color: isDark ? '#94a3b8' : '#64748b',
                   cursor: 'pointer',
                   textAlign: 'left',
-                  fontSize: '1rem',
+                  fontSize: isMobile ? '0.95rem' : '1rem',
                   transition: 'color 0.3s ease',
                   padding: 0
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.color = '#6366f1'}
-                onMouseLeave={(e) => e.currentTarget.style.color = '#64748b'}
+                onMouseLeave={(e) => e.currentTarget.style.color = isDark ? '#94a3b8' : '#64748b'}
               >
                 {page === 'products' ? 'Browse Notes' : 'Home'}
               </button>
@@ -98,8 +105,8 @@ const Footer = ({ setCurrentPage }) => {
           <h4 style={{
             fontWeight: '800',
             marginBottom: '1.5rem',
-            fontSize: '1.2rem',
-            color: '#1e293b'
+            fontSize: isMobile ? '1.1rem' : '1.2rem',
+            color: isDark ? '#e2e8f0' : '#1e293b'
           }}>
             Support
           </h4>
@@ -113,26 +120,26 @@ const Footer = ({ setCurrentPage }) => {
               target="_blank" 
               rel="noopener noreferrer" 
               style={{
-                color: '#64748b',
+                color: isDark ? '#94a3b8' : '#64748b',
                 textDecoration: 'none',
-                fontSize: '1rem',
+                fontSize: isMobile ? '0.95rem' : '1rem',
                 transition: 'color 0.3s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.color = '#10b981'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#64748b'}
+              onMouseLeave={(e) => e.currentTarget.style.color = isDark ? '#94a3b8' : '#64748b'}
             >
               WhatsApp Support
             </a>
             <a 
               href="mailto:luckyfaizu3@gmail.com" 
               style={{
-                color: '#64748b',
+                color: isDark ? '#94a3b8' : '#64748b',
                 textDecoration: 'none',
-                fontSize: '1rem',
+                fontSize: isMobile ? '0.95rem' : '1rem',
                 transition: 'color 0.3s ease'
               }}
               onMouseEnter={(e) => e.currentTarget.style.color = '#6366f1'}
-              onMouseLeave={(e) => e.currentTarget.style.color = '#64748b'}
+              onMouseLeave={(e) => e.currentTarget.style.color = isDark ? '#94a3b8' : '#64748b'}
             >
               Email Us
             </a>
@@ -143,8 +150,8 @@ const Footer = ({ setCurrentPage }) => {
           <h4 style={{
             fontWeight: '800',
             marginBottom: '1.5rem',
-            fontSize: '1.2rem',
-            color: '#1e293b'
+            fontSize: isMobile ? '1.1rem' : '1.2rem',
+            color: isDark ? '#e2e8f0' : '#1e293b'
           }}>
             Secure Payment
           </h4>
@@ -153,26 +160,26 @@ const Footer = ({ setCurrentPage }) => {
             alignItems: 'center',
             gap: '0.75rem',
             color: '#10b981',
-            fontSize: '1rem',
+            fontSize: isMobile ? '0.95rem' : '1rem',
             fontWeight: '700',
-            background: 'rgba(16, 185, 129, 0.1)',
-            padding: '1rem',
+            background: isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.1)',
+            padding: isMobile ? '0.85rem' : '1rem',
             borderRadius: '12px',
             border: '1px solid rgba(16, 185, 129, 0.3)'
           }}>
-            <Shield size={20} />
+            <Shield size={isMobile ? 18 : 20} />
             Razorpay Protected
           </div>
         </div>
       </div>
       
       <div style={{
-        borderTop: '1px solid #e2e8f0',
-        marginTop: '4rem',
-        paddingTop: '2.5rem',
+        borderTop: isDark ? '1px solid #334155' : '1px solid #e2e8f0',
+        marginTop: isMobile ? '3rem' : '4rem',
+        paddingTop: isMobile ? '2rem' : '2.5rem',
         textAlign: 'center',
-        color: '#64748b',
-        fontSize: '1rem'
+        color: isDark ? '#94a3b8' : '#64748b',
+        fontSize: isMobile ? '0.85rem' : '1rem'
       }}>
         <p>&copy; 2026 FaizUpyZone. All rights reserved. Made with 💜 by @code_with_06</p>
       </div>
