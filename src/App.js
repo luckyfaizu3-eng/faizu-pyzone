@@ -62,6 +62,39 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
+  // ✅ BROWSER BACK BUTTON FIX - History API
+  useEffect(() => {
+    // Initialize history state if not present
+    if (!window.history.state) {
+      window.history.replaceState({ page: 'home' }, '', '#home');
+    }
+
+    // Handle browser back/forward button
+    const handlePopState = (event) => {
+      if (event.state && event.state.page) {
+        console.log('🔙 Browser back button - Going to:', event.state.page);
+        setCurrentPage(event.state.page);
+      } else {
+        console.log('🔙 Browser back button - Going to home');
+        setCurrentPage('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  // ✅ Update browser history when page changes
+  useEffect(() => {
+    if (currentPage !== window.history.state?.page) {
+      console.log('📄 Page changed to:', currentPage);
+      window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
+    }
+  }, [currentPage]);
+  
   // ✅ DARK MODE STATE - localStorage se persist karega
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('faizupyzone_theme');
