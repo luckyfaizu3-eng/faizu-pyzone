@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Shield, Zap, Instagram, BookOpen, LogIn, LogOut } from 'lucide-react';
+import { Download, Shield, Zap, Instagram, BookOpen } from 'lucide-react';
 import { useTheme, useAuth } from '../App';
 
 function HomePage({ setCurrentPage }) {

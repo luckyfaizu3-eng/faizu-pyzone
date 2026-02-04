@@ -116,7 +116,7 @@ const Footer = ({ setCurrentPage }) => {
             gap: '1rem'
           }}>
             <a 
-              href="https://wa.me/918899843797" 
+              href="https://t.me/FAIZU_PYZONE" 
               target="_blank" 
               rel="noopener noreferrer" 
               style={{
@@ -125,10 +125,10 @@ const Footer = ({ setCurrentPage }) => {
                 fontSize: isMobile ? '0.95rem' : '1rem',
                 transition: 'color 0.3s ease'
               }}
-              onMouseEnter={(e) => e.currentTarget.style.color = '#10b981'}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#0088cc'}
               onMouseLeave={(e) => e.currentTarget.style.color = isDark ? '#94a3b8' : '#64748b'}
             >
-              WhatsApp Support
+              Telegram Support
             </a>
             <a 
               href="mailto:luckyfaizu3@gmail.com" 
