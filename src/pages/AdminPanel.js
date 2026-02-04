@@ -1,18 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader } from 'lucide-react';
-import { uploadPDF, uploadImage } from '../supabaseUpload'; // ✅ Supabase for storage
-import { auth } from '../firebase'; // ✅ Firebase for auth
+import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader, Edit, Save, Zap } from 'lucide-react';
+import { uploadPDF, uploadImage } from '../supabaseUpload';
+import { auth } from '../firebase';
+import { db } from '../firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 import ConfirmModal from '../components/ConfirmModal';
 
 function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [pdfFile, setPdfFile] = useState(null);
+  const [pdfFiles, setPdfFiles] = useState([]);
   const [thumbnailFile, setThumbnailFile] = useState(null);
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
   const [isBundle, setIsBundle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null); // ✅ Track logged-in user
+  const [currentUser, setCurrentUser] = useState(null);
+  
+  // ✅ Edit Mode States
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  
+  // ✅ Preview Pages State
+  const [previewPages, setPreviewPages] = useState([]);
+  const [generatingPreview, setGeneratingPreview] = useState(false);
+  
   const [formData, setFormData] = useState({
     title: '',
     category: '',
@@ -26,25 +37,282 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     customCategory: '',
     individualPrice: '',
     discount: '',
-    itemsIncluded: ''
+    itemsIncluded: '',
+    previewPageCount: '3' // How many pages to show in preview
   });
 
-  // ✅ Listen to Firebase auth state
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged((user) => {
       setCurrentUser(user);
       console.log('👤 Current user:', user?.email);
     });
+    
+    // ✅ Load PDF.js library for preview generation
+    if (!window.pdfjsLib) {
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      script.async = true;
+      script.onload = () => {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        console.log('✅ PDF.js loaded for preview generation');
+      };
+      document.head.appendChild(script);
+    }
+    
     return () => unsubscribe();
   }, []);
 
-  const handlePdfChange = (e) => {
-    const file = e.target.files[0];
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
-    } else {
-      window.showToast?.('Please select a valid PDF file!', 'error');
+  // ✅ Start Editing Product
+  const startEditProduct = (product) => {
+    console.log('✏️ Editing product:', product);
+    setEditingProduct(product);
+    setEditMode(true);
+    setShowUploadForm(true);
+    
+    // Pre-fill form with existing data
+    setFormData({
+      title: product.title || '',
+      category: product.category || '',
+      price: product.price?.toString() || '',
+      description: product.description || '',
+      pages: product.pages?.toString() || '',
+      rating: product.rating?.toString() || '4.5',
+      fileSize: product.fileSize || '',
+      language: product.language || 'English',
+      image: product.image || '📚',
+      customCategory: product.customCategory || '',
+      individualPrice: product.bundleInfo?.individualPrice?.toString() || '',
+      discount: product.bundleInfo?.discount?.toString() || '',
+      itemsIncluded: product.bundleInfo?.itemsIncluded || '',
+      previewPageCount: product.previewPageCount?.toString() || '3'
+    });
+    
+    setIsBundle(product.isBundle || false);
+    
+    // Set existing thumbnail preview
+    if (product.thumbnail) {
+      setThumbnailPreview(product.thumbnail);
     }
+    
+    // ✅ Set existing preview pages if available
+    if (product.previewPages && product.previewPages.length > 0) {
+      setPreviewPages(product.previewPages);
+    }
+    
+    // Note: We don't pre-load PDFs, user can add new ones if needed
+  };
+
+  // ✅ Cancel Edit
+  const cancelEdit = () => {
+    setEditMode(false);
+    setEditingProduct(null);
+    setShowUploadForm(false);
+    resetForm();
+  };
+
+  // ✅ Reset Form
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      category: '',
+      price: '',
+      description: '',
+      pages: '',
+      rating: '4.5',
+      fileSize: '',
+      language: 'English',
+      image: '📚',
+      customCategory: '',
+      individualPrice: '',
+      discount: '',
+      itemsIncluded: '',
+      previewPageCount: '3'
+    });
+    setPdfFiles([]);
+    setThumbnailFile(null);
+    setThumbnailPreview(null);
+    setIsBundle(false);
+    setPreviewPages([]);
+    setGeneratingPreview(false);
+  };
+
+  const handlePdfChange = (e) => {
+    const files = Array.from(e.target.files);
+    const validPdfs = files.filter(file => file.type === 'application/pdf');
+    
+    if (validPdfs.length !== files.length) {
+      window.showToast?.('⚠️ Only PDF files are allowed!', 'warning');
+    }
+    
+    if (validPdfs.length > 0) {
+      setPdfFiles(prevFiles => [...prevFiles, ...validPdfs]);
+      window.showToast?.(`✅ ${validPdfs.length} PDF(s) selected`, 'success');
+    }
+  };
+
+  const removePdf = (index) => {
+    setPdfFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
+    window.showToast?.('🗑️ PDF removed', 'info');
+  };
+
+  // ✅ Generate Preview Pages from First Uploaded PDF
+  const generatePreviewFromUploadedPDF = async () => {
+    if (pdfFiles.length === 0) {
+      window.showToast?.('⚠️ Please upload PDF files first!', 'warning');
+      return;
+    }
+
+    const pageCount = parseInt(formData.previewPageCount) || 3;
+    const firstPdf = pdfFiles[0]; // Use first uploaded PDF
+    
+    setGeneratingPreview(true);
+    window.showToast?.(`⏳ Generating ${pageCount} preview pages from ${firstPdf.name}...`, 'info');
+    
+    try {
+      const reader = new FileReader();
+      
+      reader.onload = async (e) => {
+        const pdfData = new Uint8Array(e.target.result);
+        
+        if (!window.pdfjsLib) {
+          window.showToast?.('❌ PDF.js library not loaded. Please refresh the page.', 'error');
+          setGeneratingPreview(false);
+          return;
+        }
+        
+        const loadingTask = window.pdfjsLib.getDocument({ data: pdfData });
+        const pdf = await loadingTask.promise;
+        
+        const totalPages = pdf.numPages;
+        const pagesToCapture = Math.min(pageCount, totalPages);
+        
+        const previews = [];
+        
+        for (let i = 1; i <= pagesToCapture; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 1.5 });
+          
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
+          
+          await page.render({
+            canvasContext: context,
+            viewport: viewport
+          }).promise;
+          
+          const imageData = canvas.toDataURL('image/jpeg', 0.8);
+          
+          previews.push({
+            pageNumber: i,
+            imageData: imageData
+          });
+        }
+        
+        setPreviewPages(previews);
+        window.showToast?.(`✅ ${previews.length} preview pages generated from ${firstPdf.name}!`, 'success');
+        setGeneratingPreview(false);
+      };
+      
+      reader.onerror = () => {
+        window.showToast?.('❌ Failed to read PDF file', 'error');
+        setGeneratingPreview(false);
+      };
+      
+      reader.readAsArrayBuffer(firstPdf);
+      
+    } catch (error) {
+      console.error('❌ Preview generation error:', error);
+      window.showToast?.('❌ Failed to generate preview: ' + error.message, 'error');
+      setGeneratingPreview(false);
+    }
+  };
+
+  // ✅ Generate Preview from Existing Product PDF (Edit Mode)
+  const generatePreviewFromExistingPDF = async () => {
+    if (!editingProduct || !editingProduct.pdfFiles || editingProduct.pdfFiles.length === 0) {
+      window.showToast?.('⚠️ No existing PDF found!', 'warning');
+      return;
+    }
+
+    const pageCount = parseInt(formData.previewPageCount) || 3;
+    const firstPdfUrl = editingProduct.pdfFiles[0].url;
+    const firstPdfName = editingProduct.pdfFiles[0].fileName;
+    
+    setGeneratingPreview(true);
+    window.showToast?.(`⏳ Downloading and generating ${pageCount} preview pages from ${firstPdfName}...`, 'info');
+    
+    try {
+      // Fetch PDF from URL
+      const response = await fetch(firstPdfUrl);
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+      const pdfData = new Uint8Array(arrayBuffer);
+      
+      if (!window.pdfjsLib) {
+        window.showToast?.('❌ PDF.js library not loaded. Please refresh the page.', 'error');
+        setGeneratingPreview(false);
+        return;
+      }
+      
+      const loadingTask = window.pdfjsLib.getDocument({ data: pdfData });
+      const pdf = await loadingTask.promise;
+      
+      const totalPages = pdf.numPages;
+      const pagesToCapture = Math.min(pageCount, totalPages);
+      
+      const previews = [];
+      
+      for (let i = 1; i <= pagesToCapture; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1.5 });
+        
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        
+        await page.render({
+          canvasContext: context,
+          viewport: viewport
+        }).promise;
+        
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        
+        previews.push({
+          pageNumber: i,
+          imageData: imageData
+        });
+      }
+      
+      setPreviewPages(previews);
+      window.showToast?.(`✅ ${previews.length} preview pages generated from existing PDF!`, 'success');
+      setGeneratingPreview(false);
+      
+    } catch (error) {
+      console.error('❌ Preview generation error:', error);
+      window.showToast?.('❌ Failed to generate preview: ' + error.message, 'error');
+      setGeneratingPreview(false);
+    }
+  };
+
+  // ✅ Remove Preview Page
+  const removePreviewPage = (index) => {
+    setPreviewPages(prevPages => prevPages.filter((_, i) => i !== index));
+    window.showToast?.('🗑️ Preview page removed', 'info');
+  };
+
+  // ✅ Remove existing PDF from edited product
+  const removeExistingPdf = (index) => {
+    if (!editingProduct) return;
+    
+    const updatedPdfFiles = editingProduct.pdfFiles.filter((_, i) => i !== index);
+    setEditingProduct({
+      ...editingProduct,
+      pdfFiles: updatedPdfFiles
+    });
+    window.showToast?.('🗑️ Existing PDF marked for removal', 'info');
   };
 
   const handleThumbnailChange = (e) => {
@@ -70,17 +338,126 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     return '';
   };
 
-  const handleSubmit = async (e) => {
+  // ✅ Update Existing Product
+  const handleUpdateProduct = async (e) => {
     e.preventDefault();
     
-    // ✅ Check if user is logged in
     if (!currentUser) {
       window.showToast?.('❌ Please login first!', 'error');
       return;
     }
 
-    if (!pdfFile && !isBundle) {
-      window.showToast?.('⚠️ Please upload PDF file!', 'error');
+    if (!editingProduct) {
+      window.showToast?.('❌ No product selected for editing!', 'error');
+      return;
+    }
+
+    setUploading(true);
+    window.showToast?.('⏳ Updating product... Please wait!', 'info');
+
+    try {
+      let updatedPdfFiles = [...(editingProduct.pdfFiles || [])];
+      let thumbnailUrl = editingProduct.thumbnail || '';
+
+      // ✅ Upload new PDFs if any
+      if (pdfFiles.length > 0) {
+        console.log(`📤 Uploading ${pdfFiles.length} new PDFs...`);
+        
+        for (let i = 0; i < pdfFiles.length; i++) {
+          const pdfResult = await uploadPDF(pdfFiles[i]);
+          if (pdfResult.success) {
+            updatedPdfFiles.push({
+              url: pdfResult.url,
+              fileName: pdfResult.fileName,
+              size: (pdfFiles[i].size / 1024 / 1024).toFixed(2) + ' MB'
+            });
+            console.log(`✅ New PDF ${i + 1}/${pdfFiles.length} uploaded`);
+          } else {
+            window.showToast?.(`❌ PDF ${i + 1} upload failed: ${pdfResult.error}`, 'error');
+            setUploading(false);
+            return;
+          }
+        }
+      }
+
+      // ✅ Upload new thumbnail if changed
+      if (thumbnailFile) {
+        console.log('📤 Uploading new thumbnail...');
+        const thumbResult = await uploadImage(thumbnailFile);
+        if (thumbResult.success) {
+          thumbnailUrl = thumbResult.url;
+          console.log('✅ New thumbnail uploaded');
+        } else {
+          window.showToast?.('❌ Thumbnail upload failed: ' + thumbResult.error, 'error');
+          setUploading(false);
+          return;
+        }
+      }
+
+      // ✅ Prepare updated product data
+      const updatedData = {
+        title: formData.title,
+        category: formData.category === 'custom' ? formData.customCategory : formData.category,
+        price: isBundle ? calculateBundlePrice() : parseInt(formData.price),
+        description: formData.description,
+        pages: parseInt(formData.pages),
+        rating: parseFloat(formData.rating),
+        fileSize: formData.fileSize,
+        language: formData.language,
+        image: formData.image,
+        pdfFiles: updatedPdfFiles,
+        thumbnail: thumbnailUrl,
+        isBundle: isBundle,
+        previewPages: previewPages.length > 0 ? previewPages : (editingProduct.previewPages || []),
+        previewPageCount: parseInt(formData.previewPageCount) || 3,
+        lastUpdated: new Date().toISOString()
+      };
+
+      if (isBundle) {
+        updatedData.bundleInfo = {
+          individualPrice: parseFloat(formData.individualPrice),
+          discount: parseFloat(formData.discount),
+          savings: parseFloat(formData.individualPrice) - calculateBundlePrice(),
+          itemsIncluded: formData.itemsIncluded
+        };
+      }
+
+      if (formData.category === 'custom' && formData.customCategory) {
+        updatedData.customCategory = formData.customCategory;
+      }
+
+      console.log('📝 Updating product in Firestore:', updatedData);
+      
+      // ✅ Update in Firestore
+      const productRef = doc(db, 'products', editingProduct.id);
+      await updateDoc(productRef, updatedData);
+      
+      window.showToast?.('✅ Product updated successfully!', 'success');
+      
+      // Reset and close
+      cancelEdit();
+      
+      // Reload products (you might want to pass a refresh function)
+      window.location.reload(); // Simple reload for now
+      
+    } catch (error) {
+      console.error('❌ Update error:', error);
+      window.showToast?.('❌ Update failed: ' + error.message, 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    if (!currentUser) {
+      window.showToast?.('❌ Please login first!', 'error');
+      return;
+    }
+
+    if (pdfFiles.length === 0 && !isBundle) {
+      window.showToast?.('⚠️ Please upload at least one PDF file!', 'error');
       return;
     }
 
@@ -90,29 +467,32 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     }
 
     setUploading(true);
-    window.showToast?.('⏳ Uploading... Please wait!', 'info');
+    window.showToast?.(`⏳ Uploading ${pdfFiles.length} PDF(s)... Please wait!`, 'info');
 
     try {
-      let pdfUrl = '';
-      let pdfFileName = '';
+      let pdfUrls = [];
       let thumbnailUrl = '';
 
-      // ✅ Upload PDF to Supabase
-      if (pdfFile && !isBundle) {
-        console.log('📤 Uploading PDF to Supabase...');
-        const pdfResult = await uploadPDF(pdfFile);
-        if (pdfResult.success) {
-          pdfUrl = pdfResult.url;
-          pdfFileName = pdfResult.fileName;
-          console.log('✅ PDF URL:', pdfUrl);
-        } else {
-          window.showToast?.('❌ PDF upload failed: ' + pdfResult.error, 'error');
-          setUploading(false);
-          return;
+      if (pdfFiles.length > 0 && !isBundle) {
+        console.log(`📤 Uploading ${pdfFiles.length} PDFs to Supabase...`);
+        
+        for (let i = 0; i < pdfFiles.length; i++) {
+          const pdfResult = await uploadPDF(pdfFiles[i]);
+          if (pdfResult.success) {
+            pdfUrls.push({
+              url: pdfResult.url,
+              fileName: pdfResult.fileName,
+              size: (pdfFiles[i].size / 1024 / 1024).toFixed(2) + ' MB'
+            });
+            console.log(`✅ PDF ${i + 1}/${pdfFiles.length} uploaded:`, pdfResult.fileName);
+          } else {
+            window.showToast?.(`❌ PDF ${i + 1} upload failed: ${pdfResult.error}`, 'error');
+            setUploading(false);
+            return;
+          }
         }
       }
 
-      // ✅ Upload Thumbnail to Supabase
       if (thumbnailFile) {
         console.log('📤 Uploading Thumbnail to Supabase...');
         const thumbResult = await uploadImage(thumbnailFile);
@@ -126,7 +506,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         }
       }
 
-      // ✅ Create product data with userId
       const productData = {
         title: formData.title,
         category: formData.category === 'custom' ? formData.customCategory : formData.category,
@@ -137,15 +516,17 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         fileSize: formData.fileSize,
         language: formData.language,
         image: formData.image,
-        pdfUrl: pdfUrl,
-        pdfFileName: pdfFileName || null,
+        pdfFiles: pdfUrls,
         thumbnail: thumbnailUrl || null,
         isBundle: isBundle,
-        userId: currentUser.uid, // ✅ IMPORTANT: Add userId
-        userEmail: currentUser.email // ✅ Optional: for reference
+        userId: currentUser.uid,
+        userEmail: currentUser.email,
+        totalDownloads: 0,
+        totalRevenue: 0,
+        previewPages: previewPages,
+        previewPageCount: parseInt(formData.previewPageCount) || 3
       };
 
-      // Add bundle-specific fields
       if (isBundle) {
         productData.bundleInfo = {
           individualPrice: parseFloat(formData.individualPrice),
@@ -161,30 +542,10 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
 
       console.log('📝 Product data to save:', productData);
       
-      // ✅ Call addProduct (it will save to Firebase Firestore)
       await addProduct(productData);
       
-      // Reset form
-      setFormData({
-        title: '',
-        category: '',
-        price: '',
-        description: '',
-        pages: '',
-        rating: '4.5',
-        fileSize: '',
-        language: 'English',
-        image: '📚',
-        customCategory: '',
-        individualPrice: '',
-        discount: '',
-        itemsIncluded: ''
-      });
-      setPdfFile(null);
-      setThumbnailFile(null);
-      setThumbnailPreview(null);
+      resetForm();
       setShowUploadForm(false);
-      setIsBundle(false);
       
       window.showToast?.('✅ Product uploaded successfully!', 'success');
       
@@ -197,6 +558,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   };
 
   const totalRevenue = orders.reduce((sum, order) => sum + order.total, 0);
+  const totalDownloads = products.reduce((sum, product) => sum + (product.totalDownloads || 0), 0);
 
   return (
     <div style={{
@@ -216,7 +578,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         Admin Panel
       </h1>
 
-      {/* ✅ Show current user info */}
       {currentUser && (
         <div style={{
           maxWidth: '1400px',
@@ -245,7 +606,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         {[
           { icon: FileText, label: 'Total Products', value: products.length, color: '#6366f1' },
           { icon: Package, label: 'Orders', value: orders.length, color: '#10b981' },
-          { icon: BarChart, label: 'Revenue', value: `₹${totalRevenue}`, color: '#ec4899' }
+          { icon: BarChart, label: 'Revenue', value: `₹${totalRevenue}`, color: '#ec4899' },
+          { icon: Upload, label: 'Total Downloads', value: totalDownloads, color: '#f59e0b' }
         ].map((stat, i) => (
           <div key={i} style={{
             background: '#ffffff',
@@ -301,7 +663,11 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               window.showToast?.('❌ Please login first!', 'error');
               return;
             }
-            setShowUploadForm(!showUploadForm);
+            if (editMode) {
+              cancelEdit();
+            } else {
+              setShowUploadForm(!showUploadForm);
+            }
           }}
           style={{
             background: 'linear-gradient(135deg, #6366f1, #ec4899)',
@@ -328,11 +694,11 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
           }}
         >
           {showUploadForm ? <X size={24} /> : <Plus size={24} />}
-          {showUploadForm ? 'Cancel' : 'Upload New Product'}
+          {editMode ? 'Cancel Edit' : (showUploadForm ? 'Cancel' : 'Upload New Product')}
         </button>
       </div>
 
-      {/* Upload Form */}
+      {/* Upload/Edit Form */}
       {showUploadForm && (
         <div style={{
           background: '#ffffff',
@@ -348,9 +714,22 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
             fontSize: '2rem',
             fontWeight: '900',
             marginBottom: '2rem',
-            color: '#1e293b'
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.75rem'
           }}>
-            Upload Product
+            {editMode ? (
+              <>
+                <Edit size={32} color="#6366f1" />
+                Edit Product
+              </>
+            ) : (
+              <>
+                <Plus size={32} color="#6366f1" />
+                Upload Product
+              </>
+            )}
           </h2>
 
           {/* Bundle Toggle */}
@@ -412,7 +791,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
             </label>
           </div>
 
-          <form onSubmit={handleSubmit} style={{
+          <form onSubmit={editMode ? handleUpdateProduct : handleSubmit} style={{
             display: 'flex',
             flexDirection: 'column',
             gap: '1.5rem'
@@ -622,7 +1001,69 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               />
             </div>
 
-            {/* PDF Upload (only for non-bundle) */}
+            {/* ✅ Existing PDFs (Edit Mode) */}
+            {editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0 && (
+              <div>
+                <label style={{
+                  display: 'block',
+                  marginBottom: '0.75rem',
+                  fontSize: '1.05rem',
+                  fontWeight: '700',
+                  color: '#1e293b'
+                }}>
+                  Current PDFs
+                </label>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.5rem',
+                  marginBottom: '1rem'
+                }}>
+                  {editingProduct.pdfFiles.map((pdf, index) => (
+                    <div key={index} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '0.75rem 1rem',
+                      background: 'rgba(99,102,241,0.05)',
+                      border: '1px solid rgba(99,102,241,0.2)',
+                      borderRadius: '8px'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <FileText size={20} color="#6366f1" />
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
+                            {pdf.fileName}
+                          </div>
+                          {pdf.size && (
+                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                              {pdf.size}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeExistingPdf(index)}
+                        style={{
+                          background: 'rgba(239,68,68,0.1)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '0.5rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <X size={16} color="#ef4444" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Multi-PDF Upload */}
             {!isBundle && (
               <div>
                 <label style={{
@@ -632,8 +1073,58 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   fontWeight: '700',
                   color: '#1e293b'
                 }}>
-                  Upload PDF *
+                  {editMode ? 'Add More PDFs (Optional)' : 'Upload PDFs * (Multiple files allowed)'}
                 </label>
+                
+                {/* Selected PDFs List */}
+                {pdfFiles.length > 0 && (
+                  <div style={{
+                    marginBottom: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem'
+                  }}>
+                    {pdfFiles.map((file, index) => (
+                      <div key={index} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.75rem 1rem',
+                        background: 'rgba(16,185,129,0.05)',
+                        border: '1px solid rgba(16,185,129,0.2)',
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <FileText size={20} color="#10b981" />
+                          <div>
+                            <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
+                              {file.name}
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                              {(file.size / 1024 / 1024).toFixed(2)} MB
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePdf(index)}
+                          style={{
+                            background: 'rgba(239,68,68,0.1)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            padding: '0.5rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <X size={16} color="#ef4444" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 <label style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -643,23 +1134,24 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   borderRadius: '12px',
                   cursor: 'pointer',
                   transition: 'all 0.3s ease',
-                  background: pdfFile ? 'rgba(16,185,129,0.05)' : 'transparent'
+                  background: pdfFiles.length > 0 ? 'rgba(16,185,129,0.05)' : 'transparent'
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
                 onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
                 >
-                  <Upload size={24} color={pdfFile ? '#10b981' : '#64748b'} />
+                  <Upload size={24} color={pdfFiles.length > 0 ? '#10b981' : '#64748b'} />
                   <div>
                     <div style={{ fontWeight: '600', color: '#1e293b' }}>
-                      {pdfFile ? `✅ ${pdfFile.name}` : 'Click to upload PDF'}
+                      {pdfFiles.length > 0 ? `✅ ${pdfFiles.length} PDF(s) selected` : 'Click to upload PDFs'}
                     </div>
                     <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                      {pdfFile ? `Size: ${(pdfFile.size / 1024 / 1024).toFixed(2)} MB` : 'PDF files only'}
+                      You can select multiple PDF files
                     </div>
                   </div>
                   <input
                     type="file"
                     accept=".pdf"
+                    multiple
                     onChange={handlePdfChange}
                     style={{ display: 'none' }}
                   />
@@ -676,7 +1168,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 fontWeight: '700',
                 color: '#1e293b'
               }}>
-                Upload Thumbnail (Optional)
+                {editMode ? 'Change Thumbnail (Optional)' : 'Upload Thumbnail (Optional)'}
               </label>
               <label style={{
                 display: 'flex',
@@ -687,15 +1179,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 borderRadius: '12px',
                 cursor: 'pointer',
                 transition: 'all 0.3s ease',
-                background: thumbnailFile ? 'rgba(16,185,129,0.05)' : 'transparent'
+                background: thumbnailPreview ? 'rgba(16,185,129,0.05)' : 'transparent'
               }}
               onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
               onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
               >
-                <ImageIcon size={24} color={thumbnailFile ? '#10b981' : '#64748b'} />
+                <ImageIcon size={24} color={thumbnailPreview ? '#10b981' : '#64748b'} />
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: '600', color: '#1e293b' }}>
-                    {thumbnailFile ? `✅ ${thumbnailFile.name}` : 'Click to upload thumbnail'}
+                    {thumbnailFile ? `✅ ${thumbnailFile.name}` : (thumbnailPreview ? '✅ Current thumbnail' : 'Click to upload thumbnail')}
                   </div>
                   <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
                     PNG, JPG (recommended: 400x300px)
@@ -722,6 +1214,353 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               </label>
             </div>
 
+            {/* ✅ Preview Pages Section */}
+            {!isBundle && (pdfFiles.length > 0 || (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0)) && (
+              <div style={{
+                background: 'rgba(139,92,246,0.05)',
+                border: '2px solid rgba(139,92,246,0.2)',
+                borderRadius: '16px',
+                padding: '2rem'
+              }}>
+                <div style={{
+                  marginBottom: '1.5rem'
+                }}>
+                  <h3 style={{
+                    fontSize: '1.2rem',
+                    fontWeight: '700',
+                    color: '#8b5cf6',
+                    marginBottom: '0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    <FileText size={24} />
+                    Preview Pages Setup
+                  </h3>
+                  <p style={{
+                    fontSize: '0.9rem',
+                    color: '#64748b',
+                    margin: 0
+                  }}>
+                    {editMode && pdfFiles.length === 0 
+                      ? `Generate preview from existing PDF: ${editingProduct?.pdfFiles?.[0]?.fileName || 'uploaded PDF'}`
+                      : `Generate preview pages from ${pdfFiles[0]?.name || 'uploaded PDF'}`
+                    }
+                  </p>
+                </div>
+
+                {/* Show existing preview pages in edit mode */}
+                {editMode && editingProduct && editingProduct.previewPages && editingProduct.previewPages.length > 0 && (
+                  <div style={{
+                    marginBottom: '1.5rem',
+                    padding: '1rem',
+                    background: 'rgba(16,185,129,0.05)',
+                    border: '1px solid rgba(16,185,129,0.2)',
+                    borderRadius: '12px'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '1rem'
+                    }}>
+                      <span style={{
+                        fontSize: '0.95rem',
+                        fontWeight: '600',
+                        color: '#10b981'
+                      }}>
+                        ✅ Current Preview ({editingProduct.previewPages.length} pages)
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingProduct({
+                            ...editingProduct,
+                            previewPages: []
+                          });
+                          setPreviewPages([]);
+                          window.showToast?.('🗑️ Preview pages cleared. Generate new ones below.', 'info');
+                        }}
+                        style={{
+                          background: 'rgba(239,68,68,0.1)',
+                          border: '1px solid rgba(239,68,68,0.3)',
+                          color: '#ef4444',
+                          padding: '0.4rem 0.75rem',
+                          borderRadius: '6px',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Clear Preview
+                      </button>
+                    </div>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                      gap: '0.75rem',
+                      maxHeight: '200px',
+                      overflowY: 'auto'
+                    }}>
+                      {editingProduct.previewPages.map((page, index) => (
+                        <div key={index} style={{
+                          border: '2px solid #10b981',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          position: 'relative'
+                        }}>
+                          <img
+                            src={page.imageData}
+                            alt={`Page ${page.pageNumber}`}
+                            style={{
+                              width: '100%',
+                              height: 'auto',
+                              display: 'block'
+                            }}
+                          />
+                          <div style={{
+                            position: 'absolute',
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            background: 'rgba(16,185,129,0.9)',
+                            color: '#fff',
+                            padding: '0.25rem',
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            textAlign: 'center'
+                          }}>
+                            P{page.pageNumber}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1.5rem'
+                }}>
+                  {/* Preview Page Count */}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr auto',
+                    gap: '1rem',
+                    alignItems: 'center'
+                  }}>
+                    <div>
+                      <label style={{
+                        display: 'block',
+                        marginBottom: '0.5rem',
+                        fontSize: '0.95rem',
+                        fontWeight: '600',
+                        color: '#1e293b'
+                      }}>
+                        How many pages to show as preview?
+                      </label>
+                      <select
+                        value={formData.previewPageCount}
+                        onChange={(e) => setFormData({...formData, previewPageCount: e.target.value})}
+                        style={{
+                          width: '100%',
+                          padding: '0.75rem',
+                          border: '2px solid #e2e8f0',
+                          borderRadius: '8px',
+                          fontSize: '1rem',
+                          outline: 'none'
+                        }}
+                      >
+                        <option value="1">First 1 Page</option>
+                        <option value="2">First 2 Pages</option>
+                        <option value="3">First 3 Pages</option>
+                        <option value="4">First 4 Pages</option>
+                        <option value="5">First 5 Pages</option>
+                        <option value="10">First 10 Pages</option>
+                      </select>
+                    </div>
+
+                    {/* Generate Button */}
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        // ✅ Generate from newly uploaded PDF or existing PDF
+                        if (pdfFiles.length > 0) {
+                          await generatePreviewFromUploadedPDF();
+                        } else if (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0) {
+                          // ✅ Generate from existing product PDF
+                          await generatePreviewFromExistingPDF();
+                        } else {
+                          window.showToast?.('⚠️ No PDF available to generate preview!', 'warning');
+                        }
+                      }}
+                      disabled={generatingPreview}
+                      style={{
+                        background: generatingPreview 
+                          ? 'rgba(139,92,246,0.5)'
+                          : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                        border: 'none',
+                        color: 'white',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: '8px',
+                        cursor: generatingPreview ? 'not-allowed' : 'pointer',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem',
+                        transition: 'all 0.3s ease',
+                        whiteSpace: 'nowrap',
+                        minWidth: '180px',
+                        alignSelf: 'end'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!generatingPreview) {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!generatingPreview) {
+                          e.currentTarget.style.transform = 'translateY(0)';
+                        }
+                      }}
+                    >
+                      {generatingPreview ? (
+                        <>
+                          <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={18} />
+                          {editMode && pdfFiles.length === 0 ? 'Generate from Existing' : 'Generate Preview'}
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Preview Pages Display */}
+                  {previewPages.length > 0 && (
+                    <div>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: '1rem'
+                      }}>
+                        <label style={{
+                          fontSize: '0.95rem',
+                          fontWeight: '600',
+                          color: '#1e293b'
+                        }}>
+                          New Preview Pages ({previewPages.length})
+                        </label>
+                        <span style={{
+                          fontSize: '0.85rem',
+                          color: '#10b981',
+                          fontWeight: '600',
+                          background: 'rgba(16,185,129,0.1)',
+                          padding: '0.25rem 0.75rem',
+                          borderRadius: '20px'
+                        }}>
+                          ✅ Ready to save
+                        </span>
+                      </div>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                        gap: '1rem',
+                        maxHeight: '400px',
+                        overflowY: 'auto',
+                        padding: '1rem',
+                        background: '#ffffff',
+                        borderRadius: '8px',
+                        border: '1px solid #e2e8f0'
+                      }}>
+                        {previewPages.map((page, index) => (
+                          <div key={index} style={{
+                            position: 'relative',
+                            border: '2px solid #e2e8f0',
+                            borderRadius: '8px',
+                            overflow: 'hidden',
+                            background: '#fff',
+                            transition: 'transform 0.2s ease',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                          >
+                            <img
+                              src={page.imageData}
+                              alt={`Page ${page.pageNumber}`}
+                              style={{
+                                width: '100%',
+                                height: 'auto',
+                                display: 'block'
+                              }}
+                            />
+                            <div style={{
+                              position: 'absolute',
+                              top: '0.5rem',
+                              left: '0.5rem',
+                              background: 'rgba(139,92,246,0.9)',
+                              color: '#fff',
+                              padding: '0.25rem 0.5rem',
+                              borderRadius: '4px',
+                              fontSize: '0.75rem',
+                              fontWeight: '700'
+                            }}>
+                              Page {page.pageNumber}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removePreviewPage(index)}
+                              style={{
+                                position: 'absolute',
+                                top: '0.5rem',
+                                right: '0.5rem',
+                                background: 'rgba(239,68,68,0.9)',
+                                border: 'none',
+                                borderRadius: '4px',
+                                padding: '0.25rem',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'transform 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                            >
+                              <X size={14} color="#fff" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Help Text */}
+                  {previewPages.length === 0 && (!editMode || !editingProduct?.previewPages || editingProduct.previewPages.length === 0) && (
+                    <div style={{
+                      padding: '1rem',
+                      background: 'rgba(99,102,241,0.05)',
+                      border: '1px solid rgba(99,102,241,0.2)',
+                      borderRadius: '8px',
+                      fontSize: '0.9rem',
+                      color: '#6366f1'
+                    }}>
+                      💡 <strong>Tip:</strong> {editMode 
+                        ? 'Click "Generate from Existing" to create preview pages from the current PDF files, or upload new PDFs above.'
+                        : 'Preview pages will be automatically extracted from the first uploaded PDF. Customers will see these pages before purchasing to check quality.'
+                      }
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <button 
               type="submit" 
               disabled={uploading}
@@ -729,7 +1568,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 width: '100%',
                 background: uploading 
                   ? 'linear-gradient(135deg, #94a3b8, #cbd5e1)' 
-                  : 'linear-gradient(135deg, #10b981, #059669)',
+                  : editMode 
+                    ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                    : 'linear-gradient(135deg, #10b981, #059669)',
                 border: 'none',
                 color: 'white',
                 padding: '1.25rem',
@@ -741,7 +1582,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.75rem',
-                boxShadow: '0 8px 25px rgba(16,185,129,0.3)',
+                boxShadow: editMode ? '0 8px 25px rgba(245,158,11,0.3)' : '0 8px 25px rgba(16,185,129,0.3)',
                 transition: 'all 0.3s ease',
                 opacity: uploading ? 0.7 : 1
               }}
@@ -749,12 +1590,12 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               {uploading ? (
                 <>
                   <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} />
-                  Uploading...
+                  {editMode ? 'Updating...' : `Uploading ${pdfFiles.length} PDF(s)...`}
                 </>
               ) : (
                 <>
-                  <Upload size={24} />
-                  {isBundle ? 'Create Bundle' : 'Upload Product'}
+                  {editMode ? <Save size={24} /> : <Upload size={24} />}
+                  {editMode ? 'Save Changes' : (isBundle ? 'Create Bundle' : 'Upload Product')}
                 </>
               )}
             </button>
@@ -845,8 +1686,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       <Package size={14} /> BUNDLE
                     </span>
                   )}
-                  {/* ✅ PDF status indicator */}
-                  {product.pdfUrl ? (
+                  {product.pdfFiles && product.pdfFiles.length > 0 ? (
                     <span style={{
                       background: 'rgba(16,185,129,0.1)',
                       color: '#10b981',
@@ -855,7 +1695,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       fontSize: '0.75rem',
                       fontWeight: '600'
                     }}>
-                      ✅ PDF Ready
+                      ✅ {product.pdfFiles.length} PDF{product.pdfFiles.length > 1 ? 's' : ''}
                     </span>
                   ) : (
                     <span style={{
@@ -869,7 +1709,6 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       ❌ No PDF
                     </span>
                   )}
-                  {/* ✅ Owner indicator */}
                   {currentUser && product.userId === currentUser.uid && (
                     <span style={{
                       background: 'rgba(99,102,241,0.1)',
@@ -902,6 +1741,10 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   <span>{product.pages} pages</span>
                   <span>•</span>
                   <span>{product.fileSize}</span>
+                  <span>•</span>
+                  <span>📥 {product.totalDownloads || 0} downloads</span>
+                  <span>•</span>
+                  <span>💰 ₹{product.totalRevenue || 0} revenue</span>
                 </div>
                 {product.isBundle && product.bundleInfo && (
                   <div style={{
@@ -921,7 +1764,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '2rem'
+                gap: '1rem'
               }}>
                 <div style={{
                   fontSize: '2.5rem',
@@ -932,6 +1775,32 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 }}>
                   ₹{product.price}
                 </div>
+                
+                {/* ✅ Edit Button */}
+                {currentUser && product.userId === currentUser.uid && (
+                  <button 
+                    onClick={() => startEditProduct(product)}
+                    style={{
+                      background: 'rgba(245,158,11,0.1)',
+                      border: '2px solid rgba(245,158,11,0.2)',
+                      padding: '0.75rem',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(245,158,11,0.2)';
+                      e.currentTarget.style.transform = 'scale(1.1)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(245,158,11,0.1)';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  >
+                    <Edit size={24} color="#f59e0b" />
+                  </button>
+                )}
+                
                 <button 
                   onClick={() => setConfirmDelete(product.id)}
                   style={{

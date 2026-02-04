@@ -35,7 +35,6 @@ export const useCart = () => React.useContext(CartContext);
 export const useAuth = () => React.useContext(AuthContext);
 export const useTheme = () => React.useContext(ThemeContext);
 
-// ✅ LIVE RAZORPAY KEY
 export const RAZORPAY_KEY_ID = "rzp_live_SAvdBqaaBDr2qS";
 
 export const CATEGORIES = [
@@ -52,7 +51,6 @@ export const CATEGORIES = [
 
 function App() {
   const [cart, setCart] = useState(() => {
-    // Load cart from localStorage
     const savedCart = localStorage.getItem('faizupyzone_cart');
     return savedCart ? JSON.parse(savedCart) : [];
   });
@@ -63,9 +61,8 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [isDark] = useState(false); // Always light theme
+  const [isDark] = useState(false);
   const [showSplash, setShowSplash] = useState(() => {
-    // Check if splash was shown before
     const splashShown = sessionStorage.getItem('splashShown');
     return !splashShown;
   });
@@ -75,12 +72,10 @@ function App() {
     sessionStorage.setItem('splashShown', 'true');
   };
 
-  // Save cart to localStorage whenever it changes
   useEffect(() => {
     localStorage.setItem('faizupyzone_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // Load Razorpay Script
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -93,7 +88,6 @@ function App() {
     };
   }, []);
 
-  // ✅ FIXED: Create loadProducts function with useCallback
   const loadProducts = useCallback(async () => {
     try {
       const result = await getAllProducts();
@@ -106,12 +100,10 @@ function App() {
     }
   }, []);
 
-  // Load products from Firebase
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
 
-  // ✅ FIXED: Create loadOrders function with useCallback
   const loadOrders = useCallback(async () => {
     if (user?.uid) {
       try {
@@ -134,12 +126,10 @@ function App() {
     }
   }, [user?.uid]);
 
-  // Load user orders
   useEffect(() => {
     loadOrders();
   }, [loadOrders]);
 
-  // Firebase Auth State
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
@@ -222,16 +212,14 @@ function App() {
     }
 
     initiatePayment(product.price, [product], async (response) => {
-      // Create item object and only include defined fields
+      // ✅ Create item with multi-PDF support
       const itemData = {
         id: product.id,
         title: product.title,
-        price: product.price
+        price: product.price,
+        pdfFiles: product.pdfFiles || [] // ✅ Include all PDFs
       };
 
-      // Only add optional fields if they exist
-      if (product.pdfUrl) itemData.pdfUrl = product.pdfUrl;
-      if (product.pdfFileName) itemData.pdfFileName = product.pdfFileName;
       if (product.thumbnail) itemData.thumbnail = product.thumbnail;
 
       const newOrder = {
@@ -253,13 +241,11 @@ function App() {
       
       if (result.success) {
         console.log('✅ Order created successfully, reloading orders...');
-        // ✅ CRITICAL: Wait for orders to reload before changing page
         await loadOrders();
         
-        // Small delay to ensure state is updated
         setTimeout(() => {
           setCurrentPage('orders');
-          window.showToast?.('🎊 Order placed successfully! Download your PDF now!', 'success');
+          window.showToast?.('🎊 Order placed successfully! Download your PDFs now!', 'success');
         }, 500);
       } else {
         console.error('❌ Order creation failed:', result.error);
@@ -271,7 +257,6 @@ function App() {
   const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // ✅ Simple Login - No verification check
   const login = async (email, password) => {
     const result = await loginUser(email, password);
     
@@ -285,7 +270,6 @@ function App() {
     }
   };
 
-  // ✅ Simple Register - No verification needed
   const register = async (email, password, name) => {
     const result = await registerUser(email, password, name);
     
@@ -305,13 +289,12 @@ function App() {
       setUser(null);
       setCart([]);
       setOrders([]);
-      localStorage.removeItem('faizupyzone_cart'); // Clear cart from localStorage
+      localStorage.removeItem('faizupyzone_cart');
       setCurrentPage('home');
       window.showToast?.('👋 Logged out successfully!', 'info');
     }
   };
 
-  // Check if product is already purchased by user
   const isProductPurchased = (productId) => {
     if (!user || !orders || orders.length === 0) return false;
     
@@ -333,17 +316,15 @@ function App() {
     }
 
     initiatePayment(cartTotal, cart, async (response) => {
-      // Map cart items and only include defined fields
+      // ✅ Map cart items with multi-PDF support
       const orderItems = cart.map(item => {
         const itemData = {
           id: item.id,
           title: item.title,
-          price: item.price
+          price: item.price,
+          pdfFiles: item.pdfFiles || [] // ✅ Include all PDFs
         };
 
-        // Only add optional fields if they exist
-        if (item.pdfUrl) itemData.pdfUrl = item.pdfUrl;
-        if (item.pdfFileName) itemData.pdfFileName = item.pdfFileName;
         if (item.thumbnail) itemData.thumbnail = item.thumbnail;
 
         return itemData;
@@ -368,10 +349,8 @@ function App() {
       
       if (result.success) {
         console.log('✅ Cart order created successfully, reloading orders...');
-        // ✅ CRITICAL: Wait for orders to reload before changing page
         await loadOrders();
         
-        // Small delay to ensure state is updated
         setTimeout(() => {
           setCart([]);
           setCurrentPage('orders');
@@ -395,7 +374,8 @@ function App() {
       userId: user.uid,
       userEmail: user.email,
       uploadDate: new Date().toISOString(),
-      totalDownloads: 0
+      totalDownloads: 0,
+      totalRevenue: 0
     };
     
     const result = await addProductDB(productData, user.uid);

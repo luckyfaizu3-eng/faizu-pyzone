@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw } from 'lucide-react';
+import { ShoppingCart, Star, Zap, ChevronDown, RefreshCw, FileText } from 'lucide-react';
 import { useCart } from '../App';
 import { CATEGORIES } from '../App';
 import ProductDetailPage from '../components/ProductDetailPage';
@@ -364,6 +364,9 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
             const productCategory = CATEGORIES.find(c => c.id === product.category) || 
                                    { name: product.customCategory || product.category, color: '#6366f1' };
             
+            // ✅ Get PDF count
+            const pdfCount = product.pdfFiles ? product.pdfFiles.length : 0;
+            
             return (
               <div 
                 key={product.id} 
@@ -396,17 +399,60 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
 
                 {/* Category Badge at Top */}
                 <div style={{
-                  display: 'inline-block',
-                  background: `${productCategory.color}15`,
-                  color: productCategory.color,
-                  padding: '0.4rem 1rem',
-                  borderRadius: '50px',
-                  fontSize: '0.85rem',
-                  fontWeight: '700',
+                  display: 'flex',
+                  gap: '0.5rem',
                   marginBottom: '1rem',
-                  border: `1px solid ${productCategory.color}30`
+                  flexWrap: 'wrap'
                 }}>
-                  {productCategory.name}
+                  <div style={{
+                    display: 'inline-block',
+                    background: `${productCategory.color}15`,
+                    color: productCategory.color,
+                    padding: '0.4rem 1rem',
+                    borderRadius: '50px',
+                    fontSize: '0.85rem',
+                    fontWeight: '700',
+                    border: `1px solid ${productCategory.color}30`
+                  }}>
+                    {productCategory.name}
+                  </div>
+                  
+                  {/* ✅ PDF Count Badge */}
+                  {pdfCount > 0 && (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      background: 'rgba(99,102,241,0.1)',
+                      color: '#6366f1',
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '50px',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      border: '1px solid rgba(99,102,241,0.3)'
+                    }}>
+                      <FileText size={14} />
+                      {pdfCount} PDF{pdfCount > 1 ? 's' : ''}
+                    </div>
+                  )}
+                  
+                  {/* ✅ Downloads Badge (if available) */}
+                  {product.totalDownloads > 0 && (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      background: 'rgba(16,185,129,0.1)',
+                      color: '#10b981',
+                      padding: '0.4rem 0.75rem',
+                      borderRadius: '50px',
+                      fontSize: '0.8rem',
+                      fontWeight: '700',
+                      border: '1px solid rgba(16,185,129,0.3)'
+                    }}>
+                      📥 {product.totalDownloads}
+                    </div>
+                  )}
                 </div>
 
                 {/* Thumbnail */}
@@ -439,8 +485,10 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
                     background: 'rgba(0,0,0,0.5)',
                     backdropFilter: 'blur(5px)',
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: '0.5rem',
                     opacity: hoveredCard === index ? 1 : 0,
                     transition: 'opacity 0.3s ease'
                   }}>
@@ -455,6 +503,22 @@ function ProductsPage({ products, refreshProducts, buyNow, selectedCategory, set
                       <Star size={20} fill="#fbbf24" color="#fbbf24" />
                       {product.rating || '4.5'} Rating
                     </div>
+                    {pdfCount > 0 && (
+                      <div style={{
+                        color: '#fff',
+                        fontSize: '0.9rem',
+                        fontWeight: '600',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        background: 'rgba(255,255,255,0.2)',
+                        padding: '0.3rem 0.75rem',
+                        borderRadius: '20px'
+                      }}>
+                        <FileText size={16} />
+                        {pdfCount} File{pdfCount > 1 ? 's' : ''} Included
+                      </div>
+                    )}
                   </div>
                 </div>
                 

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Download, CheckCircle, Trash2, FileText, X } from 'lucide-react';
 import { useAuth } from '../App';
 import { db } from '../firebase';
-import { deleteDoc, doc } from 'firebase/firestore';
+import { deleteDoc, doc, updateDoc, increment } from 'firebase/firestore';
 import ConfirmModal from '../components/ConfirmModal';
 
 function OrdersPage({ orders: initialOrders, refreshOrders }) {
@@ -10,6 +10,7 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
   const [orders, setOrders] = useState(initialOrders || []);
   const [showReceipt, setShowReceipt] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [downloading, setDownloading] = useState({});
 
   useEffect(() => {
     console.log('=== ORDERS PAGE DEBUG ===');
@@ -19,44 +20,106 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
   }, [orders, user]);
 
   useEffect(() => {
-    // Sync with parent props whenever initialOrders changes
     if (initialOrders) {
       console.log('📥 Orders updated from parent:', initialOrders.length);
       setOrders(initialOrders);
     }
   }, [initialOrders]);
 
-  const handleDownload = async (item) => {
+  // ✅ Update product stats when PDF is downloaded
+  const updateProductStats = async (productId, price) => {
+    try {
+      const productRef = doc(db, 'products', productId);
+      await updateDoc(productRef, {
+        totalDownloads: increment(1),
+        totalRevenue: increment(price)
+      });
+      console.log('✅ Product stats updated:', productId);
+    } catch (error) {
+      console.error('❌ Failed to update product stats:', error);
+    }
+  };
+
+  // ✅ Handle multi-PDF download
+  const handleDownloadAll = async (item) => {
     console.log('📥 Starting download for:', item.title);
-    console.log('PDF URL:', item.pdfUrl);
+    console.log('PDFs:', item.pdfFiles);
     
-    if (!item.pdfUrl) {
-      window.showToast?.('❌ No PDF available', 'error');
+    if (!item.pdfFiles || item.pdfFiles.length === 0) {
+      window.showToast?.('❌ No PDFs available', 'error');
       return;
     }
 
-    window.showToast?.('📥 Downloading...', 'info');
+    setDownloading(prev => ({ ...prev, [item.id]: true }));
+    window.showToast?.(`📥 Downloading ${item.pdfFiles.length} PDF(s)...`, 'info');
 
     try {
-      const response = await fetch(item.pdfUrl);
+      // ✅ Update stats once for the product
+      await updateProductStats(item.id, item.price);
+
+      // Download all PDFs
+      for (let i = 0; i < item.pdfFiles.length; i++) {
+        const pdf = item.pdfFiles[i];
+        console.log(`Downloading PDF ${i + 1}/${item.pdfFiles.length}:`, pdf.fileName);
+        
+        const response = await fetch(pdf.url);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = pdf.fileName;
+        
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        
+        // Small delay between downloads
+        if (i < item.pdfFiles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      console.log('✅ All downloads complete');
+      window.showToast?.(`✅ Downloaded ${item.pdfFiles.length} PDF(s)!`, 'success');
+      
+    } catch (error) {
+      console.error('❌ Download error:', error);
+      window.showToast?.('❌ Download failed: ' + error.message, 'error');
+    } finally {
+      setDownloading(prev => ({ ...prev, [item.id]: false }));
+    }
+  };
+
+  // ✅ Handle single PDF download
+  const handleDownloadSingle = async (item, pdfIndex) => {
+    console.log('📥 Downloading single PDF:', item.pdfFiles[pdfIndex].fileName);
+    
+    setDownloading(prev => ({ ...prev, [`${item.id}-${pdfIndex}`]: true }));
+    
+    try {
+      const pdf = item.pdfFiles[pdfIndex];
+      const response = await fetch(pdf.url);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       
       const link = document.createElement('a');
       link.href = blobUrl;
-      link.download = item.pdfFileName || `${item.title}.pdf`;
+      link.download = pdf.fileName;
       
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
       
-      console.log('✅ Download complete');
       window.showToast?.('✅ Download complete!', 'success');
       
     } catch (error) {
       console.error('❌ Download error:', error);
       window.showToast?.('❌ Download failed: ' + error.message, 'error');
+    } finally {
+      setDownloading(prev => ({ ...prev, [`${item.id}-${pdfIndex}`]: false }));
     }
   };
 
@@ -68,12 +131,10 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
       
       window.showToast?.('✅ Order deleted successfully!', 'success');
       
-      // ✅ FIXED: Use refreshOrders prop instead of page reload
       if (refreshOrders) {
         console.log('🔄 Refreshing orders after delete...');
         await refreshOrders();
       } else {
-        // Fallback: remove from local state
         setOrders(orders.filter(order => order.id !== orderId));
       }
       
@@ -200,7 +261,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                   {order.status}
                 </span>
                 
-                {/* View Receipt Button */}
                 <button
                   onClick={() => setShowReceipt(order)}
                   style={{
@@ -227,7 +287,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                   Receipt
                 </button>
 
-                {/* Delete Button */}
                 <button
                   onClick={() => setConfirmDelete(order.id)}
                   style={{
@@ -278,59 +337,171 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '1rem'
+                gap: '1.5rem'
               }}>
                 {order.items.map(item => (
-                  <button 
-                    key={item.id}
-                    onClick={() => handleDownload(item)}
-                    style={{
-                      width: '100%',
-                      background: 'linear-gradient(135deg, #10b981, #059669)',
-                      border: 'none',
-                      color: 'white',
-                      padding: '1.25rem 2rem',
-                      borderRadius: '14px',
-                      cursor: 'pointer',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: '1rem',
-                      transition: 'all 0.3s ease',
-                      boxShadow: '0 4px 15px rgba(16,185,129,0.3)',
-                      fontSize: '1.1rem'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = 'translateY(-3px)';
-                      e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = 'translateY(0)';
-                      e.currentTarget.style.boxShadow = '0 4px 15px rgba(16,185,129,0.3)';
-                    }}
-                  >
-                    <span style={{
-                      flex: 1,
-                      textAlign: 'left',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}>
-                      📄 {item.title}
-                    </span>
+                  <div key={item.id} style={{
+                    background: 'rgba(99,102,241,0.02)',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '16px',
+                    padding: '1.5rem',
+                  }}>
                     <div style={{
                       display: 'flex',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
-                      gap: '0.5rem',
-                      background: 'rgba(255,255,255,0.2)',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '20px'
+                      marginBottom: '1rem',
+                      flexWrap: 'wrap',
+                      gap: '1rem'
                     }}>
-                      <Download size={20} /> 
-                      Download PDF
+                      <div>
+                        <h4 style={{
+                          fontSize: '1.25rem',
+                          fontWeight: '700',
+                          color: '#1e293b',
+                          marginBottom: '0.25rem'
+                        }}>
+                          📄 {item.title}
+                        </h4>
+                        {item.pdfFiles && (
+                          <div style={{
+                            fontSize: '0.9rem',
+                            color: '#64748b',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem'
+                          }}>
+                            <FileText size={16} />
+                            {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* ✅ Download All Button */}
+                      {item.pdfFiles && item.pdfFiles.length > 0 && (
+                        <button
+                          onClick={() => handleDownloadAll(item)}
+                          disabled={downloading[item.id]}
+                          style={{
+                            background: downloading[item.id] 
+                              ? 'rgba(99,102,241,0.3)' 
+                              : 'linear-gradient(135deg, #10b981, #059669)',
+                            border: 'none',
+                            color: 'white',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '12px',
+                            cursor: downloading[item.id] ? 'not-allowed' : 'pointer',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            transition: 'all 0.3s ease',
+                            fontSize: '0.95rem',
+                            opacity: downloading[item.id] ? 0.7 : 1
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!downloading[item.id]) {
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!downloading[item.id]) {
+                              e.currentTarget.style.transform = 'translateY(0)';
+                              e.currentTarget.style.boxShadow = 'none';
+                            }
+                          }}
+                        >
+                          <Download size={18} /> 
+                          {downloading[item.id] ? 'Downloading...' : `Download All (${item.pdfFiles.length})`}
+                        </button>
+                      )}
                     </div>
-                  </button>
+
+                    {/* ✅ Individual PDF List */}
+                    {item.pdfFiles && item.pdfFiles.length > 0 && (
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.75rem'
+                      }}>
+                        {item.pdfFiles.map((pdf, pdfIndex) => (
+                          <div key={pdfIndex} style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '1rem',
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '10px',
+                            flexWrap: 'wrap',
+                            gap: '0.75rem'
+                          }}>
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              flex: 1,
+                              minWidth: '200px'
+                            }}>
+                              <FileText size={20} color="#6366f1" />
+                              <div>
+                                <div style={{
+                                  fontWeight: '600',
+                                  color: '#1e293b',
+                                  fontSize: '0.95rem'
+                                }}>
+                                  {pdf.fileName}
+                                </div>
+                                {pdf.size && (
+                                  <div style={{
+                                    fontSize: '0.8rem',
+                                    color: '#64748b'
+                                  }}>
+                                    {pdf.size}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <button
+                              onClick={() => handleDownloadSingle(item, pdfIndex)}
+                              disabled={downloading[`${item.id}-${pdfIndex}`]}
+                              style={{
+                                background: downloading[`${item.id}-${pdfIndex}`]
+                                  ? 'rgba(99,102,241,0.2)'
+                                  : 'rgba(99,102,241,0.1)',
+                                border: '2px solid rgba(99,102,241,0.3)',
+                                color: '#6366f1',
+                                padding: '0.5rem 1rem',
+                                borderRadius: '8px',
+                                cursor: downloading[`${item.id}-${pdfIndex}`] ? 'not-allowed' : 'pointer',
+                                fontWeight: '600',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                fontSize: '0.85rem',
+                                transition: 'all 0.3s ease'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!downloading[`${item.id}-${pdfIndex}`]) {
+                                  e.currentTarget.style.background = 'rgba(99,102,241,0.2)';
+                                }
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!downloading[`${item.id}-${pdfIndex}`]) {
+                                  e.currentTarget.style.background = 'rgba(99,102,241,0.1)';
+                                }
+                              }}
+                            >
+                              <Download size={16} />
+                              {downloading[`${item.id}-${pdfIndex}`] ? 'Downloading...' : 'Download'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -481,7 +652,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
         </div>
       )}
 
-      {/* Confirm Delete Modal */}
       <ConfirmModal
         show={confirmDelete !== null}
         onConfirm={() => handleDeleteOrder(confirmDelete)}
