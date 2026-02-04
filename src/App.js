@@ -283,15 +283,16 @@ function App() {
     }
   };
 
+  // ✅ FIXED LOGOUT - Cart ab persist karega
   const logout = async () => {
     const result = await logoutUser();
     if (result.success) {
       setUser(null);
-      setCart([]);
       setOrders([]);
-      localStorage.removeItem('faizupyzone_cart');
+      // ❌ setCart([]) - REMOVED - Cart persist karega
+      // ❌ localStorage.removeItem('faizupyzone_cart') - REMOVED - Cart persist karega
       setCurrentPage('home');
-      window.showToast?.('👋 Logged out successfully!', 'info');
+      window.showToast?.('👋 Logged out successfully! Cart items saved.', 'info');
     }
   };
 
@@ -352,7 +353,9 @@ function App() {
         await loadOrders();
         
         setTimeout(() => {
+          // ✅ Payment successful hone ke baad hi cart clear hoga
           setCart([]);
+          localStorage.removeItem('faizupyzone_cart');
           setCurrentPage('orders');
           window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
         }, 500);
