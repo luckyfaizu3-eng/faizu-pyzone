@@ -1,12 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Search, Menu, X, User, LogOut, Moon, Sun } from 'lucide-react';
+import { ShoppingCart, Menu, X, User, LogOut, Moon, Sun, Palette } from 'lucide-react';
 import { useTheme } from '../App';
 
 const Navbar = ({ 
   currentPage, 
   setCurrentPage, 
-  searchQuery, 
-  setSearchQuery, 
   mobileMenuOpen, 
   setMobileMenuOpen,
   user,
@@ -16,7 +14,7 @@ const Navbar = ({
   const [scrolled, setScrolled] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme, toggleBackground, backgroundTheme } = useTheme();
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -35,6 +33,22 @@ const Navbar = ({
     setCurrentPage(page);
     setMobileMenuOpen(false);
   };
+
+  // Theme names for display
+  const themeNames = [
+    'Purple',
+    'Blue', 
+    'Green',
+    'Orange',
+    'Red',
+    'Violet',
+    'Teal',
+    'Indigo',
+    'Lime',
+    'Fuchsia',
+    'Sky',
+    'Yellow'
+  ];
 
   return (
     <>
@@ -102,47 +116,28 @@ const Navbar = ({
             )}
           </div>
 
-          {/* Search Bar - Desktop only */}
+          {/* Running Marquee Text - Desktop only */}
           {!isMobile && (
-            <div style={{ flex: 1, maxWidth: '500px' }}>
-              <div style={{position: 'relative'}}>
-                <Search 
-                  size={18} 
-                  style={{
-                    position: 'absolute',
-                    left: '1rem',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    color: isDark ? '#94a3b8' : '#64748b'
-                  }} 
-                />
-                <input
-                  type="text"
-                  placeholder="Search notes..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.7rem 1rem 0.7rem 2.75rem',
-                    background: isDark ? '#1e293b' : '#f8fafc',
-                    border: isDark 
-                      ? '1.5px solid #334155' 
-                      : '1.5px solid #e2e8f0',
-                    borderRadius: '25px',
-                    color: isDark ? '#e2e8f0' : '#1e293b',
-                    fontSize: '0.95rem',
-                    outline: 'none',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onFocus={(e) => {
-                    e.target.style.borderColor = '#6366f1';
-                    e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)';
-                  }}
-                  onBlur={(e) => {
-                    e.target.style.borderColor = isDark ? '#334155' : '#e2e8f0';
-                    e.target.style.boxShadow = 'none';
-                  }}
-                />
+            <div style={{ 
+              flex: 1, 
+              maxWidth: '500px',
+              overflow: 'hidden',
+              position: 'relative',
+              background: isDark ? '#1e293b' : '#f8fafc',
+              border: isDark ? '1.5px solid #334155' : '1.5px solid #e2e8f0',
+              borderRadius: '25px',
+              padding: '0.7rem 1rem',
+              height: '42px'
+            }}>
+              <div style={{
+                display: 'inline-block',
+                whiteSpace: 'nowrap',
+                animation: 'marquee 20s linear infinite',
+                fontSize: '0.95rem',
+                fontWeight: '600',
+                color: isDark ? '#94a3b8' : '#64748b'
+              }}>
+                Welcome to FaizUpyZone • Best Python Notes • 100% Original Content • Instant Download • Quality Study Materials • JKBOSE Materials • Job Preparation • Secure Payment
               </div>
             </div>
           )}
@@ -154,6 +149,34 @@ const Navbar = ({
               alignItems: 'center',
               gap: '0.5rem'
             }}>
+              {/* Background Theme Toggle */}
+              <button
+                onClick={toggleBackground}
+                title={`Theme: ${themeNames[backgroundTheme]}`}
+                style={{
+                  background: isDark ? '#1e293b' : '#f1f5f9',
+                  border: isDark ? '1.5px solid #334155' : '1.5px solid #e2e8f0',
+                  borderRadius: '12px',
+                  width: '38px',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'scale(1.1) rotate(15deg)';
+                  e.currentTarget.style.borderColor = '#6366f1';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'scale(1) rotate(0deg)';
+                  e.currentTarget.style.borderColor = isDark ? '#334155' : '#e2e8f0';
+                }}
+              >
+                <Palette size={18} color="#6366f1" />
+              </button>
+
               {/* Dark Mode Toggle */}
               <button
                 onClick={toggleTheme}
@@ -401,6 +424,24 @@ const Navbar = ({
           {/* Mobile Menu Icons */}
           {isMobile && (
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+              {/* Background Toggle - Mobile */}
+              <button
+                onClick={toggleBackground}
+                style={{
+                  background: isDark ? '#1e293b' : 'rgba(99,102,241,0.1)',
+                  border: isDark ? '1.5px solid #334155' : '1.5px solid rgba(99,102,241,0.3)',
+                  borderRadius: '10px',
+                  width: '38px',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <Palette size={18} color="#6366f1" />
+              </button>
+
               {/* Dark Mode Toggle - Mobile */}
               <button
                 onClick={toggleTheme}
@@ -476,13 +517,37 @@ const Navbar = ({
             </div>
           )}
         </div>
+
+        {/* Running Marquee - Mobile (below navbar) */}
+        {isMobile && (
+          <div style={{
+            marginTop: '0.5rem',
+            overflow: 'hidden',
+            background: isDark ? '#1e293b' : '#f8fafc',
+            border: isDark ? '1.5px solid #334155' : '1.5px solid #e2e8f0',
+            borderRadius: '20px',
+            padding: '0.5rem 0.75rem',
+            height: '32px'
+          }}>
+            <div style={{
+              display: 'inline-block',
+              whiteSpace: 'nowrap',
+              animation: 'marquee 20s linear infinite',
+              fontSize: '0.8rem',
+              fontWeight: '600',
+              color: isDark ? '#94a3b8' : '#64748b'
+            }}>
+              Welcome to FaizUpyZone • Best Python Notes • 100% Original • Instant Download • Quality Materials
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Mobile Menu Dropdown */}
       {isMobile && mobileMenuOpen && (
         <div style={{
           position: 'fixed',
-          top: '62px',
+          top: '112px',
           left: 0,
           right: 0,
           background: isDark 
@@ -499,38 +564,6 @@ const Navbar = ({
           maxHeight: '85vh',
           overflowY: 'auto'
         }}>
-          {/* Mobile Search */}
-          <div style={{ marginBottom: '1rem' }}>
-            <div style={{position: 'relative'}}>
-              <Search 
-                size={18} 
-                style={{
-                  position: 'absolute',
-                  left: '1rem',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  color: isDark ? '#94a3b8' : '#64748b'
-                }} 
-              />
-              <input
-                type="text"
-                placeholder="Search notes..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '0.75rem 1rem 0.75rem 2.75rem',
-                  background: isDark ? '#1e293b' : '#f8fafc',
-                  border: isDark ? '1.5px solid #334155' : '1.5px solid #e2e8f0',
-                  borderRadius: '12px',
-                  color: isDark ? '#e2e8f0' : '#1e293b',
-                  fontSize: '0.95rem',
-                  outline: 'none'
-                }}
-              />
-            </div>
-          </div>
-
           {/* Mobile Menu Items */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <button 
@@ -666,6 +699,15 @@ const Navbar = ({
           to {
             opacity: 1;
             transform: translateY(0);
+          }
+        }
+        
+        @keyframes marquee {
+          0% {
+            transform: translateX(100%);
+          }
+          100% {
+            transform: translateX(-100%);
           }
         }
       `}</style>

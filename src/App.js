@@ -34,7 +34,7 @@ export const ThemeContext = React.createContext();
 
 export const useCart = () => React.useContext(CartContext);
 export const useAuth = () => React.useContext(AuthContext);
-export const useTheme = () => React.createContext(ThemeContext);
+export const useTheme = () => React.useContext(ThemeContext);
 
 export const RAZORPAY_KEY_ID = "rzp_live_SAvdBqaaBDr2qS";
 
@@ -136,6 +136,12 @@ function App() {
     const saved = localStorage.getItem('faizupyzone_theme');
     return saved === 'dark';
   });
+
+  // ✅ BACKGROUND THEME STATE (0-11 for 12 different backgrounds)
+  const [backgroundTheme, setBackgroundTheme] = useState(() => {
+    const saved = localStorage.getItem('faizupyzone_background');
+    return saved ? parseInt(saved) : 0;
+  });
   
   const [showSplash, setShowSplash] = useState(() => {
     const splashShown = sessionStorage.getItem('splashShown');
@@ -148,6 +154,15 @@ function App() {
       const newTheme = !prev;
       localStorage.setItem('faizupyzone_theme', newTheme ? 'dark' : 'light');
       return newTheme;
+    });
+  };
+
+  // ✅ Background toggle function - cycles through 12 backgrounds
+  const toggleBackground = () => {
+    setBackgroundTheme(prev => {
+      const next = (prev + 1) % 12; // Cycle through 0-11
+      localStorage.setItem('faizupyzone_background', next.toString());
+      return next;
     });
   };
 
@@ -530,7 +545,7 @@ function App() {
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
-        <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+        <ThemeContext.Provider value={{ isDark, toggleTheme, backgroundTheme, toggleBackground }}>
           {showSplash ? (
             <SplashScreen onComplete={handleSplashComplete} />
           ) : (
