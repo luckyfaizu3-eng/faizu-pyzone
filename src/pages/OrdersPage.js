@@ -13,10 +13,54 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
   const [downloading, setDownloading] = useState({});
 
   useEffect(() => {
-    console.log('=== ORDERS PAGE DEBUG ===');
+    console.log('===========================================');
+    console.log('🔍 ORDERS PAGE FULL DEBUG');
+    console.log('===========================================');
     console.log('User:', user?.email);
-    console.log('Orders received:', orders?.length || 0);
-    console.log('Orders data:', orders);
+    console.log('Total Orders:', orders?.length || 0);
+    console.log('Raw Orders Data:', JSON.stringify(orders, null, 2));
+    
+    // 🔍 Debug each order's items in detail
+    if (orders && orders.length > 0) {
+      orders.forEach((order, orderIdx) => {
+        console.log(`\n📦 ORDER ${orderIdx + 1}:`, order.id);
+        console.log('  Order Date:', order.date);
+        console.log('  Order Total:', order.total);
+        console.log('  Items Count:', order.items?.length || 0);
+        
+        if (order.items && order.items.length > 0) {
+          order.items.forEach((item, itemIdx) => {
+            console.log(`\n  📄 ITEM ${itemIdx + 1}:`);
+            console.log('    Title:', item.title);
+            console.log('    ID:', item.id);
+            console.log('    Price:', item.price);
+            console.log('    isBundle:', item.isBundle);
+            console.log('    Has pdfFiles key?', 'pdfFiles' in item);
+            console.log('    pdfFiles value:', item.pdfFiles);
+            console.log('    pdfFiles type:', typeof item.pdfFiles);
+            console.log('    pdfFiles is Array?', Array.isArray(item.pdfFiles));
+            console.log('    pdfFiles length:', item.pdfFiles?.length);
+            console.log('    Has bundledProducts key?', 'bundledProducts' in item);
+            console.log('    bundledProducts value:', item.bundledProducts);
+            console.log('    bundledProducts type:', typeof item.bundledProducts);
+            console.log('    bundledProducts is Array?', Array.isArray(item.bundledProducts));
+            console.log('    bundledProducts length:', item.bundledProducts?.length);
+            
+            // Check download button visibility
+            const hasPDFs = item.pdfFiles && Array.isArray(item.pdfFiles) && item.pdfFiles.length > 0;
+            const hasBundle = item.isBundle && item.bundledProducts && Array.isArray(item.bundledProducts) && item.bundledProducts.length > 0;
+            console.log('    ⭐ WILL SHOW DOWNLOAD BUTTON?', hasPDFs || hasBundle);
+            console.log('    - Has PDFs:', hasPDFs);
+            console.log('    - Has Bundle:', hasBundle);
+          });
+        } else {
+          console.log('  ⚠️ No items in this order!');
+        }
+      });
+    } else {
+      console.log('\n⚠️ NO ORDERS FOUND!');
+    }
+    console.log('===========================================\n');
   }, [orders, user]);
 
   useEffect(() => {
@@ -289,6 +333,25 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
           My Orders ({orders.length})
         </h1>
         
+        {/* 🔍 DEBUG PANEL - Remove this after fixing */}
+        <div style={{
+          background: '#fff3cd',
+          border: '2px solid #ffc107',
+          borderRadius: '12px',
+          padding: '1rem',
+          marginBottom: '1.5rem',
+          fontSize: '0.85rem'
+        }}>
+          <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#856404' }}>
+            🔍 DEBUG INFO - Check Console for Full Details
+          </div>
+          <div style={{ color: '#856404' }}>
+            • Open browser console (F12)<br/>
+            • Look for detailed order item logs<br/>
+            • Check if pdfFiles/bundledProducts exist
+          </div>
+        </div>
+        
         {/* Orders List */}
         {orders.map((order, index) => (
           <div 
@@ -422,60 +485,63 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                 flexDirection: 'column',
                 gap: '1rem'
               }}>
-                {order.items.map(item => (
-                  <div key={item.id} style={{
-                    background: 'rgba(99,102,241,0.03)',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '16px',
-                    padding: '1.25rem',
-                  }}>
-                    {/* Item Header */}
-                    <div style={{
-                      marginBottom: '1rem'
+                {order.items?.map((item, itemIdx) => {
+                  // 🔍 Check if download button should be shown
+                  const hasPDFs = item.pdfFiles && Array.isArray(item.pdfFiles) && item.pdfFiles.length > 0;
+                  const hasBundle = item.isBundle && item.bundledProducts && Array.isArray(item.bundledProducts) && item.bundledProducts.length > 0;
+                  const showDownload = hasPDFs || hasBundle;
+                  
+                  console.log(`🎯 Rendering item ${itemIdx + 1}:`, {
+                    title: item.title,
+                    hasPDFs,
+                    pdfCount: item.pdfFiles?.length,
+                    hasBundle,
+                    bundleCount: item.bundledProducts?.length,
+                    showDownload
+                  });
+                  
+                  return (
+                    <div key={item.id || itemIdx} style={{
+                      background: 'rgba(99,102,241,0.03)',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '16px',
+                      padding: '1.25rem',
                     }}>
+                      {/* Item Header */}
                       <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem',
-                        marginBottom: '0.5rem'
+                        marginBottom: '1rem'
                       }}>
-                        <h4 style={{
-                          fontSize: '1.05rem',
-                          fontWeight: '700',
-                          color: '#1e293b',
-                          lineHeight: 1.3,
-                          flex: 1
-                        }}>
-                          {item.isBundle ? '📦' : '📄'} {item.title}
-                        </h4>
-                        {item.isBundle && (
-                          <span style={{
-                            background: 'rgba(139,92,246,0.1)',
-                            color: '#8b5cf6',
-                            padding: '0.25rem 0.6rem',
-                            borderRadius: '12px',
-                            fontSize: '0.75rem',
-                            fontWeight: '700'
-                          }}>
-                            BUNDLE
-                          </span>
-                        )}
-                      </div>
-                      
-                      {/* Bundle or Single Product Info */}
-                      {item.isBundle ? (
                         <div style={{
-                          fontSize: '0.85rem',
-                          color: '#64748b',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '0.5rem'
+                          gap: '0.5rem',
+                          marginBottom: '0.5rem'
                         }}>
-                          <Package size={14} />
-                          {item.bundledProducts?.length || 0} products included
+                          <h4 style={{
+                            fontSize: '1.05rem',
+                            fontWeight: '700',
+                            color: '#1e293b',
+                            lineHeight: 1.3,
+                            flex: 1
+                          }}>
+                            {item.isBundle ? '📦' : '📄'} {item.title}
+                          </h4>
+                          {item.isBundle && (
+                            <span style={{
+                              background: 'rgba(139,92,246,0.1)',
+                              color: '#8b5cf6',
+                              padding: '0.25rem 0.6rem',
+                              borderRadius: '12px',
+                              fontSize: '0.75rem',
+                              fontWeight: '700'
+                            }}>
+                              BUNDLE
+                            </span>
+                          )}
                         </div>
-                      ) : (
-                        item.pdfFiles && (
+                        
+                        {/* Bundle or Single Product Info */}
+                        {item.isBundle ? (
                           <div style={{
                             fontSize: '0.85rem',
                             color: '#64748b',
@@ -483,180 +549,224 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                             alignItems: 'center',
                             gap: '0.5rem'
                           }}>
-                            <FileText size={14} />
-                            {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
+                            <Package size={14} />
+                            {item.bundledProducts?.length || 0} products included
                           </div>
-                        )
-                      )}
-                    </div>
-                      
-                    {/* Download All Button */}
-                    {((item.pdfFiles && item.pdfFiles.length > 0) || (item.isBundle && item.bundledProducts)) && (
-                      <button
-                        onClick={() => item.isBundle ? handleDownloadBundle(item) : handleDownloadAll(item)}
-                        disabled={downloading[item.id]}
-                        style={{
-                          width: '100%',
-                          background: downloading[item.id] 
-                            ? 'rgba(99,102,241,0.2)' 
-                            : item.isBundle
-                              ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)'
-                              : 'linear-gradient(135deg, #10b981, #059669)',
-                          border: 'none',
-                          color: 'white',
-                          padding: '1rem',
-                          borderRadius: '14px',
-                          cursor: downloading[item.id] ? 'not-allowed' : 'pointer',
-                          fontWeight: '700',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '0.5rem',
-                          transition: 'all 0.3s ease',
-                          fontSize: '0.95rem',
-                          opacity: downloading[item.id] ? 0.7 : 1,
-                          marginBottom: item.isBundle ? '0' : '1rem',
-                          boxShadow: downloading[item.id] ? 'none' : item.isBundle ? '0 4px 12px rgba(139,92,246,0.3)' : '0 4px 12px rgba(16,185,129,0.3)'
-                        }}
-                      >
-                        <Download size={18} /> 
-                        {downloading[item.id] ? 'Downloading...' : 
-                          item.isBundle ? `Download All Bundle Files` : `Download All (${item.pdfFiles.length})`
-                        }
-                      </button>
-                    )}
-
-                    {/* Individual PDF List (only for non-bundle products) */}
-                    {!item.isBundle && item.pdfFiles && item.pdfFiles.length > 0 && (
-                      <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '0.75rem'
-                      }}>
-                        {item.pdfFiles.map((pdf, pdfIndex) => (
-                          <div key={pdfIndex} style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            padding: '0.9rem',
-                            background: '#ffffff',
-                            border: '1px solid #e2e8f0',
-                            borderRadius: '12px',
-                            gap: '0.75rem'
-                          }}>
+                        ) : (
+                          item.pdfFiles && (
                             <div style={{
+                              fontSize: '0.85rem',
+                              color: '#64748b',
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '0.75rem',
-                              flex: 1,
-                              minWidth: 0
+                              gap: '0.5rem'
                             }}>
-                              <FileText size={18} color="#6366f1" style={{ flexShrink: 0 }} />
+                              <FileText size={14} />
+                              {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
+                            </div>
+                          )
+                        )}
+                      </div>
+                      
+                      {/* 🔍 DEBUG INFO FOR THIS ITEM */}
+                      <div style={{
+                        background: showDownload ? '#d4edda' : '#f8d7da',
+                        border: showDownload ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
+                        borderRadius: '8px',
+                        padding: '0.75rem',
+                        marginBottom: '1rem',
+                        fontSize: '0.8rem',
+                        color: showDownload ? '#155724' : '#721c24'
+                      }}>
+                        <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
+                          {showDownload ? '✅ Download Button: VISIBLE' : '❌ Download Button: HIDDEN'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>
+                          Has PDFs: {hasPDFs ? 'Yes' : 'No'} ({item.pdfFiles?.length || 0} files)<br/>
+                          Has Bundle: {hasBundle ? 'Yes' : 'No'} ({item.bundledProducts?.length || 0} products)
+                        </div>
+                      </div>
+                        
+                      {/* Download All Button - WITH BETTER VISIBILITY CHECK */}
+                      {showDownload ? (
+                        <button
+                          onClick={() => item.isBundle ? handleDownloadBundle(item) : handleDownloadAll(item)}
+                          disabled={downloading[item.id]}
+                          style={{
+                            width: '100%',
+                            background: downloading[item.id] 
+                              ? 'rgba(99,102,241,0.2)' 
+                              : item.isBundle
+                                ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)'
+                                : 'linear-gradient(135deg, #10b981, #059669)',
+                            border: 'none',
+                            color: 'white',
+                            padding: '1rem',
+                            borderRadius: '14px',
+                            cursor: downloading[item.id] ? 'not-allowed' : 'pointer',
+                            fontWeight: '700',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            transition: 'all 0.3s ease',
+                            fontSize: '0.95rem',
+                            opacity: downloading[item.id] ? 0.7 : 1,
+                            marginBottom: item.isBundle ? '0' : '1rem',
+                            boxShadow: downloading[item.id] ? 'none' : item.isBundle ? '0 4px 12px rgba(139,92,246,0.3)' : '0 4px 12px rgba(16,185,129,0.3)'
+                          }}
+                        >
+                          <Download size={18} /> 
+                          {downloading[item.id] ? 'Downloading...' : 
+                            item.isBundle ? `Download All Bundle Files` : `Download All (${item.pdfFiles?.length || 0})`
+                          }
+                        </button>
+                      ) : (
+                        <div style={{
+                          background: '#fff3cd',
+                          border: '1px solid #ffc107',
+                          borderRadius: '12px',
+                          padding: '1rem',
+                          textAlign: 'center',
+                          color: '#856404',
+                          fontSize: '0.9rem'
+                        }}>
+                          ⚠️ No downloadable files found in this order item
+                        </div>
+                      )}
+
+                      {/* Individual PDF List (only for non-bundle products) */}
+                      {!item.isBundle && hasPDFs && (
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.75rem'
+                        }}>
+                          {item.pdfFiles.map((pdf, pdfIndex) => (
+                            <div key={pdfIndex} style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              padding: '0.9rem',
+                              background: '#ffffff',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: '12px',
+                              gap: '0.75rem'
+                            }}>
                               <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
                                 flex: 1,
                                 minWidth: 0
                               }}>
+                                <FileText size={18} color="#6366f1" style={{ flexShrink: 0 }} />
                                 <div style={{
-                                  fontWeight: '600',
-                                  color: '#1e293b',
-                                  fontSize: '0.9rem',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap'
+                                  flex: 1,
+                                  minWidth: 0
                                 }}>
-                                  {pdf.fileName}
-                                </div>
-                                {pdf.size && (
                                   <div style={{
-                                    fontSize: '0.75rem',
-                                    color: '#64748b'
+                                    fontWeight: '600',
+                                    color: '#1e293b',
+                                    fontSize: '0.9rem',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
                                   }}>
-                                    {pdf.size}
+                                    {pdf.fileName}
                                   </div>
-                                )}
+                                  {pdf.size && (
+                                    <div style={{
+                                      fontSize: '0.75rem',
+                                      color: '#64748b'
+                                    }}>
+                                      {pdf.size}
+                                    </div>
+                                  )}
+                                </div>
                               </div>
+                              
+                              <button
+                                onClick={() => handleDownloadSingle(item, pdfIndex)}
+                                disabled={downloading[`${item.id}-${pdfIndex}`]}
+                                style={{
+                                  background: downloading[`${item.id}-${pdfIndex}`]
+                                    ? 'rgba(99,102,241,0.2)'
+                                    : 'rgba(99,102,241,0.1)',
+                                  border: '1px solid rgba(99,102,241,0.3)',
+                                  color: '#6366f1',
+                                  padding: '0.6rem 0.9rem',
+                                  borderRadius: '10px',
+                                  cursor: downloading[`${item.id}-${pdfIndex}`] ? 'not-allowed' : 'pointer',
+                                  fontWeight: '600',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.4rem',
+                                  fontSize: '0.8rem',
+                                  transition: 'all 0.3s ease',
+                                  flexShrink: 0
+                                }}
+                              >
+                                <Download size={14} />
+                                {downloading[`${item.id}-${pdfIndex}`] ? '...' : 'Get'}
+                              </button>
                             </div>
-                            
-                            <button
-                              onClick={() => handleDownloadSingle(item, pdfIndex)}
-                              disabled={downloading[`${item.id}-${pdfIndex}`]}
-                              style={{
-                                background: downloading[`${item.id}-${pdfIndex}`]
-                                  ? 'rgba(99,102,241,0.2)'
-                                  : 'rgba(99,102,241,0.1)',
-                                border: '1px solid rgba(99,102,241,0.3)',
-                                color: '#6366f1',
-                                padding: '0.6rem 0.9rem',
-                                borderRadius: '10px',
-                                cursor: downloading[`${item.id}-${pdfIndex}`] ? 'not-allowed' : 'pointer',
-                                fontWeight: '600',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.4rem',
-                                fontSize: '0.8rem',
-                                transition: 'all 0.3s ease',
-                                flexShrink: 0
-                              }}
-                            >
-                              <Download size={14} />
-                              {downloading[`${item.id}-${pdfIndex}`] ? '...' : 'Get'}
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    
-                    {/* Bundle Products List */}
-                    {item.isBundle && item.bundledProducts && item.bundledProducts.length > 0 && (
-                      <div style={{
-                        marginTop: '1rem',
-                        padding: '1rem',
-                        background: 'rgba(139,92,246,0.05)',
-                        borderRadius: '12px',
-                        border: '1px solid rgba(139,92,246,0.2)'
-                      }}>
-                        <div style={{
-                          fontSize: '0.9rem',
-                          fontWeight: '700',
-                          color: '#8b5cf6',
-                          marginBottom: '0.75rem'
-                        }}>
-                          📦 Included Products:
+                          ))}
                         </div>
-                        {item.bundledProducts.map((bundledProduct, idx) => (
-                          <div key={idx} style={{
-                            padding: '0.75rem',
-                            background: '#ffffff',
-                            borderRadius: '8px',
-                            marginBottom: idx < item.bundledProducts.length - 1 ? '0.5rem' : '0',
-                            border: '1px solid #e2e8f0'
+                      )}
+                      
+                      {/* Bundle Products List */}
+                      {item.isBundle && hasBundle && (
+                        <div style={{
+                          marginTop: '1rem',
+                          padding: '1rem',
+                          background: 'rgba(139,92,246,0.05)',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(139,92,246,0.2)'
+                        }}>
+                          <div style={{
+                            fontSize: '0.9rem',
+                            fontWeight: '700',
+                            color: '#8b5cf6',
+                            marginBottom: '0.75rem'
                           }}>
-                            <div style={{
-                              fontWeight: '600',
-                              color: '#1e293b',
-                              fontSize: '0.9rem',
-                              marginBottom: '0.25rem'
-                            }}>
-                              {bundledProduct.title}
-                            </div>
-                            {bundledProduct.pdfFiles && bundledProduct.pdfFiles.length > 0 && (
-                              <div style={{
-                                fontSize: '0.75rem',
-                                color: '#64748b',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.25rem'
-                              }}>
-                                <FileText size={12} />
-                                {bundledProduct.pdfFiles.length} PDF file{bundledProduct.pdfFiles.length > 1 ? 's' : ''}
-                              </div>
-                            )}
+                            📦 Included Products:
                           </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                          {item.bundledProducts.map((bundledProduct, idx) => (
+                            <div key={idx} style={{
+                              padding: '0.75rem',
+                              background: '#ffffff',
+                              borderRadius: '8px',
+                              marginBottom: idx < item.bundledProducts.length - 1 ? '0.5rem' : '0',
+                              border: '1px solid #e2e8f0'
+                            }}>
+                              <div style={{
+                                fontWeight: '600',
+                                color: '#1e293b',
+                                fontSize: '0.9rem',
+                                marginBottom: '0.25rem'
+                              }}>
+                                {bundledProduct.title}
+                              </div>
+                              {bundledProduct.pdfFiles && bundledProduct.pdfFiles.length > 0 && (
+                                <div style={{
+                                  fontSize: '0.75rem',
+                                  color: '#64748b',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '0.25rem'
+                                }}>
+                                  <FileText size={12} />
+                                  {bundledProduct.pdfFiles.length} PDF file{bundledProduct.pdfFiles.length > 1 ? 's' : ''}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -697,7 +807,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
           }}
           onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
             <button
               onClick={() => setShowReceipt(null)}
               style={{
@@ -719,7 +828,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
               <X size={20} color="#ef4444" />
             </button>
 
-            {/* Title */}
             <h2 style={{
               fontSize: '1.5rem',
               fontWeight: '900',
@@ -731,7 +839,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
               🧾 Receipt
             </h2>
 
-            {/* Receipt Content */}
             <div style={{
               background: 'linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.05))',
               border: '2px solid rgba(99,102,241,0.2)',
@@ -739,13 +846,11 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
               padding: '1.5rem',
               marginBottom: '1.5rem'
             }}>
-              {/* Order ID */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Order ID</div>
                 <div style={{ fontWeight: '700', fontSize: '1rem', color: '#1e293b' }}>#{showReceipt.id}</div>
               </div>
 
-              {/* Payment ID */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Payment ID</div>
                 <div style={{ 
@@ -758,13 +863,11 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                 </div>
               </div>
 
-              {/* Date */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Date</div>
                 <div style={{ fontWeight: '700', fontSize: '1rem', color: '#1e293b' }}>{showReceipt.date}</div>
               </div>
 
-              {/* Customer */}
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Customer</div>
                 <div style={{ 
@@ -777,7 +880,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                 </div>
               </div>
 
-              {/* Items */}
               <div style={{
                 borderTop: '2px dashed rgba(99,102,241,0.2)',
                 paddingTop: '1.25rem',
@@ -800,7 +902,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
                 ))}
               </div>
 
-              {/* Total */}
               <div style={{
                 borderTop: '2px solid rgba(99,102,241,0.3)',
                 paddingTop: '1.25rem',
@@ -823,7 +924,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
               </div>
             </div>
 
-            {/* Success Badge */}
             <div style={{
               background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.1))',
               border: '2px solid rgba(16,185,129,0.3)',
@@ -840,7 +940,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
         </div>
       )}
 
-      {/* Confirm Delete Modal */}
       <ConfirmModal
         show={confirmDelete !== null}
         onConfirm={() => handleDeleteOrder(confirmDelete)}
@@ -852,7 +951,6 @@ function OrdersPage({ orders: initialOrders, refreshOrders }) {
         type="danger"
       />
 
-      {/* Animations */}
       <style>{`
         @keyframes fadeInUp {
           from {

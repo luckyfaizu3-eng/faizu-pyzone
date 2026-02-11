@@ -63,6 +63,10 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
+  // ✅ NEW: Razorpay loading state
+  const [razorpayLoaded, setRazorpayLoaded] = useState(false);
+  const [razorpayError, setRazorpayError] = useState(false);
+  
   // ✅ COMPLETE BROWSER BACK BUTTON FIX
   useEffect(() => {
     // Get initial page from URL hash or default to home
@@ -175,15 +179,62 @@ function App() {
     localStorage.setItem('faizupyzone_cart', JSON.stringify(cart));
   }, [cart]);
 
+  // ✅ FIXED: Razorpay Script Loading with proper state management
   useEffect(() => {
+    // Check if script already exists
+    if (window.Razorpay) {
+      console.log('✅ Razorpay already loaded');
+      setRazorpayLoaded(true);
+      return;
+    }
+
+    // Check if script tag already exists in DOM
+    const existingScript = document.querySelector('script[src*="razorpay"]');
+    if (existingScript) {
+      console.log('✅ Razorpay script tag already exists, waiting for load...');
+      const checkLoaded = setInterval(() => {
+        if (window.Razorpay) {
+          console.log('✅ Razorpay loaded successfully');
+          setRazorpayLoaded(true);
+          clearInterval(checkLoaded);
+        }
+      }, 100);
+      
+      setTimeout(() => {
+        clearInterval(checkLoaded);
+        if (!window.Razorpay) {
+          console.error('❌ Razorpay failed to load after timeout');
+          setRazorpayError(true);
+        }
+      }, 10000); // 10 second timeout
+      
+      return;
+    }
+
+    console.log('📦 Loading Razorpay script...');
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
+    
+    script.onload = () => {
+      console.log('✅ Razorpay loaded successfully');
+      setRazorpayLoaded(true);
+      setRazorpayError(false);
+    };
+    
+    script.onerror = () => {
+      console.error('❌ Failed to load Razorpay script');
+      setRazorpayError(true);
+      window.showToast?.('⚠️ Payment system failed to load. Please refresh the page!', 'error');
+    };
+    
     document.body.appendChild(script);
+    
     return () => {
-      if (document.body.contains(script)) {
-        document.body.removeChild(script);
-      }
+      // Don't remove script on unmount to prevent reloading
+      // if (document.body.contains(script)) {
+      //   document.body.removeChild(script);
+      // }
     };
   }, []);
 
@@ -245,11 +296,36 @@ function App() {
     return () => unsubscribe();
   }, []);
 
+  // ✅ FIXED: Payment initiation with proper loading checks and auto-retry
   const initiatePayment = (amount, items, onSuccess) => {
-    if (!window.Razorpay) {
-      window.showToast?.('⏳ Payment system loading... Please try again!', 'error');
+    console.log('💳 Initiating payment...', { razorpayLoaded, razorpayError });
+    
+    // Check if there was an error loading Razorpay
+    if (razorpayError) {
+      window.showToast?.('❌ Payment system failed to load. Please refresh the page!', 'error');
       return;
     }
+    
+    // Check if Razorpay is loaded
+    if (!window.Razorpay || !razorpayLoaded) {
+      console.log('⏳ Razorpay not ready yet, waiting...');
+      window.showToast?.('⏳ Payment system loading... Please wait!', 'warning');
+      
+      // Auto-retry after 2 seconds
+      setTimeout(() => {
+        if (window.Razorpay && razorpayLoaded) {
+          console.log('✅ Razorpay now ready, retrying payment...');
+          window.showToast?.('✅ Payment ready! Processing...', 'success');
+          setTimeout(() => initiatePayment(amount, items, onSuccess), 500);
+        } else {
+          console.error('❌ Razorpay still not ready after retry');
+          window.showToast?.('❌ Payment system not ready. Please try again or refresh the page!', 'error');
+        }
+      }, 2000);
+      return;
+    }
+
+    console.log('✅ Razorpay ready, opening payment modal...');
 
     const options = {
       key: RAZORPAY_KEY_ID,
@@ -259,6 +335,7 @@ function App() {
       description: "Premium Study Materials",
       image: "https://img.icons8.com/fluency/96/000000/graduation-cap.png",
       handler: async function (response) {
+        console.log('✅ Payment successful:', response);
         window.showToast?.('🎉 Payment Successful! Processing order...', 'success');
         setTimeout(async () => {
           await onSuccess(response);
@@ -274,17 +351,26 @@ function App() {
       },
       modal: {
         ondismiss: function() {
+          console.log('❌ Payment modal dismissed by user');
           window.showToast?.('❌ Payment cancelled', 'info');
         }
       }
     };
 
-    const rzp = new window.Razorpay(options);
-    rzp.on('payment.failed', function (response) {
-      console.error('Payment failed:', response);
-      window.showToast?.('❌ Payment Failed! Please try again.', 'error');
-    });
-    rzp.open();
+    try {
+      const rzp = new window.Razorpay(options);
+      
+      rzp.on('payment.failed', function (response) {
+        console.error('❌ Payment failed:', response);
+        window.showToast?.('❌ Payment Failed! Please try again.', 'error');
+      });
+      
+      rzp.open();
+      console.log('🚀 Payment modal opened');
+    } catch (error) {
+      console.error('❌ Error opening Razorpay:', error);
+      window.showToast?.('❌ Failed to open payment. Please refresh and try again!', 'error');
+    }
   };
 
   const addToCart = (product) => {
@@ -311,14 +397,19 @@ function App() {
     }
 
     initiatePayment(product.price, [product], async (response) => {
+      // ✅ FIX: Properly save ALL product data including pdfFiles and bundledProducts
       const itemData = {
         id: product.id,
         title: product.title,
         price: product.price,
-        pdfFiles: product.pdfFiles || []
+        isBundle: product.isBundle || false,
+        pdfFiles: product.pdfFiles || [],
+        bundledProducts: product.bundledProducts || []
       };
 
       if (product.thumbnail) itemData.thumbnail = product.thumbnail;
+
+      console.log('💾 Saving order item data:', itemData);
 
       const newOrder = {
         userEmail: user.email,
@@ -412,16 +503,20 @@ function App() {
     }
 
     initiatePayment(cartTotal, cart, async (response) => {
+      // ✅ FIX: Properly save ALL product data including pdfFiles and bundledProducts
       const orderItems = cart.map(item => {
         const itemData = {
           id: item.id,
           title: item.title,
           price: item.price,
-          pdfFiles: item.pdfFiles || []
+          isBundle: item.isBundle || false,
+          pdfFiles: item.pdfFiles || [],
+          bundledProducts: item.bundledProducts || []
         };
 
         if (item.thumbnail) itemData.thumbnail = item.thumbnail;
 
+        console.log('💾 Saving cart item data:', itemData);
         return itemData;
       });
 
@@ -564,6 +659,36 @@ function App() {
             <Background />
             <TelegramButton />
             
+            {/* ✅ NEW: Razorpay Loading Indicator */}
+            {!razorpayLoaded && !razorpayError && (
+              <div style={{
+                position: 'fixed',
+                bottom: '20px',
+                right: '20px',
+                background: 'rgba(99, 102, 241, 0.9)',
+                color: '#fff',
+                padding: '8px 16px',
+                borderRadius: '20px',
+                fontSize: '0.75rem',
+                fontWeight: '600',
+                zIndex: 9999,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+              }}>
+                <div style={{
+                  width: '12px',
+                  height: '12px',
+                  border: '2px solid #fff',
+                  borderTopColor: 'transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite'
+                }}></div>
+                Loading payment system...
+              </div>
+            )}
+            
             <Navbar 
               currentPage={currentPage} 
               setCurrentPage={setCurrentPage}
@@ -612,6 +737,13 @@ function App() {
             </main>
             
             {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
+            
+            {/* ✅ NEW: Spinner animation */}
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
           </div>
           )}
         </ThemeContext.Provider>
