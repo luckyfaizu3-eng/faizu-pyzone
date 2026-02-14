@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { registerUser, loginUser, logoutUser, isAdmin, resetPassword } from './authService';
+import { registerUser, loginUser, logoutUser, isAdmin as isAdminAuth, resetPassword } from './authService';
 import { 
   addProduct as addProductDB, 
   getAllProducts, 
@@ -26,6 +26,7 @@ import CartPage from './pages/CartPage';
 import OrdersPage from './pages/OrdersPage';
 import AdminPanel from './pages/AdminPanel';
 import LoginPage from './pages/LoginPage';
+import MockTestPage from './pages/MockTestPage';
 
 // Contexts
 export const CartContext = React.createContext();
@@ -63,85 +64,58 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
-  // ✅ NEW: Razorpay loading state
+  // ✅ Razorpay loading state
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [razorpayError, setRazorpayError] = useState(false);
   
   // ✅ COMPLETE BROWSER BACK BUTTON FIX
   useEffect(() => {
-    // Get initial page from URL hash or default to home
     const getInitialPage = () => {
-      const hash = window.location.hash.slice(1); // Remove #
+      const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
-      
-      // Handle product detail URLs like #products/product-123
-      if (hash.startsWith('products/')) {
-        return 'products';
-      }
-      
-      // Handle main pages
-      const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login'];
+      if (hash.startsWith('products/')) return 'products';
+      const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login', 'mocktests'];
       return validPages.includes(hash) ? hash : 'home';
     };
 
     const initialPage = getInitialPage();
     setCurrentPage(initialPage);
 
-    // Initialize history state if not present
     if (!window.history.state || !window.history.state.page) {
       window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
     }
 
-    // Handle browser back/forward button
     const handlePopState = (event) => {
-      console.log('🔙 Browser back/forward button pressed');
-      console.log('Event state:', event.state);
-      
       if (event.state && event.state.page) {
-        console.log('📄 Navigating to page:', event.state.page);
         setCurrentPage(event.state.page);
-        
-        // If navigating away from products page, reset category
         if (event.state.page !== 'products') {
           setSelectedCategory('all');
         }
       } else {
-        // Fallback to home if no state
-        console.log('📄 No state found, navigating to home');
         setCurrentPage('home');
       }
     };
 
     window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
+    return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // ✅ Update browser history when page changes (but not for product details)
+  // ✅ Update browser history when page changes
   useEffect(() => {
     const hash = window.location.hash.slice(1);
-    
-    // Don't update history for product detail URLs (they're handled in ProductsPage)
-    if (hash.startsWith('products/')) {
-      return;
-    }
-
-    // Only update if the page has actually changed
+    if (hash.startsWith('products/')) return;
     if (currentPage !== window.history.state?.page) {
-      console.log('📝 Updating history - Current page:', currentPage);
       window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
   }, [currentPage]);
   
-  // ✅ DARK MODE STATE - localStorage se persist karega
+  // ✅ Dark mode
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('faizupyzone_theme');
     return saved === 'dark';
   });
 
-  // ✅ BACKGROUND THEME STATE (0-11 for 12 different backgrounds)
+  // ✅ Background theme
   const [backgroundTheme, setBackgroundTheme] = useState(() => {
     const saved = localStorage.getItem('faizupyzone_background');
     return saved ? parseInt(saved) : 0;
@@ -152,7 +126,6 @@ function App() {
     return !splashShown;
   });
 
-  // ✅ Dark mode toggle function
   const toggleTheme = () => {
     setIsDark(prev => {
       const newTheme = !prev;
@@ -161,10 +134,9 @@ function App() {
     });
   };
 
-  // ✅ Background toggle function - cycles through 12 backgrounds
   const toggleBackground = () => {
     setBackgroundTheme(prev => {
-      const next = (prev + 1) % 12; // Cycle through 0-11
+      const next = (prev + 1) % 12;
       localStorage.setItem('faizupyzone_background', next.toString());
       return next;
     });
@@ -179,71 +151,46 @@ function App() {
     localStorage.setItem('faizupyzone_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // ✅ FIXED: Razorpay Script Loading with proper state management
+  // ✅ Razorpay Script Loading
   useEffect(() => {
-    // Check if script already exists
     if (window.Razorpay) {
-      console.log('✅ Razorpay already loaded');
       setRazorpayLoaded(true);
       return;
     }
 
-    // Check if script tag already exists in DOM
     const existingScript = document.querySelector('script[src*="razorpay"]');
     if (existingScript) {
-      console.log('✅ Razorpay script tag already exists, waiting for load...');
       const checkLoaded = setInterval(() => {
         if (window.Razorpay) {
-          console.log('✅ Razorpay loaded successfully');
           setRazorpayLoaded(true);
           clearInterval(checkLoaded);
         }
       }, 100);
-      
       setTimeout(() => {
         clearInterval(checkLoaded);
-        if (!window.Razorpay) {
-          console.error('❌ Razorpay failed to load after timeout');
-          setRazorpayError(true);
-        }
-      }, 10000); // 10 second timeout
-      
+        if (!window.Razorpay) setRazorpayError(true);
+      }, 10000);
       return;
     }
 
-    console.log('📦 Loading Razorpay script...');
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    
     script.onload = () => {
-      console.log('✅ Razorpay loaded successfully');
       setRazorpayLoaded(true);
       setRazorpayError(false);
     };
-    
     script.onerror = () => {
-      console.error('❌ Failed to load Razorpay script');
       setRazorpayError(true);
-      window.showToast?.('⚠️ Payment system failed to load. Please refresh the page!', 'error');
+      window.showToast?.('⚠️ Payment system failed to load. Please refresh!', 'error');
     };
-    
     document.body.appendChild(script);
-    
-    return () => {
-      // Don't remove script on unmount to prevent reloading
-      // if (document.body.contains(script)) {
-      //   document.body.removeChild(script);
-      // }
-    };
   }, []);
 
   const loadProducts = useCallback(async () => {
     try {
       const result = await getAllProducts();
-      if (result.success) {
-        setProducts(result.products);
-      }
+      if (result.success) setProducts(result.products);
     } catch (error) {
       console.error('Error loading products:', error);
       window.showToast?.('❌ Failed to load products', 'error');
@@ -257,13 +204,10 @@ function App() {
   const loadOrders = useCallback(async () => {
     if (user?.uid) {
       try {
-        console.log('🔄 Loading orders for user:', user.uid);
         const result = await getUserOrders(user.uid);
         if (result.success) {
-          console.log('✅ Orders loaded:', result.orders.length);
           setOrders(result.orders);
         } else {
-          console.error('❌ Failed to load orders:', result.error);
           setOrders([]);
         }
       } catch (error) {
@@ -271,7 +215,6 @@ function App() {
         setOrders([]);
       }
     } else {
-      console.log('ℹ️ No user, clearing orders');
       setOrders([]);
     }
   }, [user?.uid]);
@@ -287,7 +230,7 @@ function App() {
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
           uid: firebaseUser.uid,
-          isAdmin: isAdmin(firebaseUser.email)
+          isAdmin: isAdminAuth(firebaseUser.email)
         });
       } else {
         setUser(null);
@@ -296,36 +239,24 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // ✅ FIXED: Payment initiation with proper loading checks and auto-retry
+  // ✅ Payment
   const initiatePayment = (amount, items, onSuccess) => {
-    console.log('💳 Initiating payment...', { razorpayLoaded, razorpayError });
-    
-    // Check if there was an error loading Razorpay
     if (razorpayError) {
-      window.showToast?.('❌ Payment system failed to load. Please refresh the page!', 'error');
+      window.showToast?.('❌ Payment system failed to load. Please refresh!', 'error');
       return;
     }
     
-    // Check if Razorpay is loaded
     if (!window.Razorpay || !razorpayLoaded) {
-      console.log('⏳ Razorpay not ready yet, waiting...');
       window.showToast?.('⏳ Payment system loading... Please wait!', 'warning');
-      
-      // Auto-retry after 2 seconds
       setTimeout(() => {
         if (window.Razorpay && razorpayLoaded) {
-          console.log('✅ Razorpay now ready, retrying payment...');
-          window.showToast?.('✅ Payment ready! Processing...', 'success');
           setTimeout(() => initiatePayment(amount, items, onSuccess), 500);
         } else {
-          console.error('❌ Razorpay still not ready after retry');
-          window.showToast?.('❌ Payment system not ready. Please try again or refresh the page!', 'error');
+          window.showToast?.('❌ Payment system not ready. Please refresh!', 'error');
         }
       }, 2000);
       return;
     }
-
-    console.log('✅ Razorpay ready, opening payment modal...');
 
     const options = {
       key: RAZORPAY_KEY_ID,
@@ -335,23 +266,17 @@ function App() {
       description: "Premium Study Materials",
       image: "https://img.icons8.com/fluency/96/000000/graduation-cap.png",
       handler: async function (response) {
-        console.log('✅ Payment successful:', response);
         window.showToast?.('🎉 Payment Successful! Processing order...', 'success');
-        setTimeout(async () => {
-          await onSuccess(response);
-        }, 1000);
+        setTimeout(async () => { await onSuccess(response); }, 1000);
       },
       prefill: {
         name: user?.displayName || user?.email?.split('@')[0] || "Student",
         email: user?.email || "",
         contact: ""
       },
-      theme: {
-        color: isDark ? "#8b5cf6" : "#6366f1"
-      },
+      theme: { color: isDark ? "#8b5cf6" : "#6366f1" },
       modal: {
         ondismiss: function() {
-          console.log('❌ Payment modal dismissed by user');
           window.showToast?.('❌ Payment cancelled', 'info');
         }
       }
@@ -359,17 +284,13 @@ function App() {
 
     try {
       const rzp = new window.Razorpay(options);
-      
       rzp.on('payment.failed', function (response) {
-        console.error('❌ Payment failed:', response);
         window.showToast?.('❌ Payment Failed! Please try again.', 'error');
       });
-      
       rzp.open();
-      console.log('🚀 Payment modal opened');
     } catch (error) {
       console.error('❌ Error opening Razorpay:', error);
-      window.showToast?.('❌ Failed to open payment. Please refresh and try again!', 'error');
+      window.showToast?.('❌ Failed to open payment. Please refresh!', 'error');
     }
   };
 
@@ -397,7 +318,6 @@ function App() {
     }
 
     initiatePayment(product.price, [product], async (response) => {
-      // ✅ FIX: Properly save ALL product data including pdfFiles and bundledProducts
       const itemData = {
         id: product.id,
         title: product.title,
@@ -406,38 +326,26 @@ function App() {
         pdfFiles: product.pdfFiles || [],
         bundledProducts: product.bundledProducts || []
       };
-
       if (product.thumbnail) itemData.thumbnail = product.thumbnail;
-
-      console.log('💾 Saving order item data:', itemData);
 
       const newOrder = {
         userEmail: user.email,
         userId: user.uid,
         items: [itemData],
         total: product.price,
-        date: new Date().toLocaleDateString('en-IN', { 
-          day: '2-digit', 
-          month: 'short', 
-          year: 'numeric' 
-        }),
+        date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
         status: 'completed',
         paymentId: response.razorpay_payment_id
       };
       
-      console.log('💳 Creating order:', newOrder);
       const result = await addOrderDB(newOrder, user.uid);
-      
       if (result.success) {
-        console.log('✅ Order created successfully, reloading orders...');
         await loadOrders();
-        
         setTimeout(() => {
           setCurrentPage('orders');
-          window.showToast?.('🎊 Order placed successfully! Download your PDFs now!', 'success');
+          window.showToast?.('🎊 Order placed! Download your PDFs now!', 'success');
         }, 500);
       } else {
-        console.error('❌ Order creation failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -448,7 +356,6 @@ function App() {
 
   const login = async (email, password) => {
     const result = await loginUser(email, password);
-    
     if (result.success) {
       window.showToast?.('🎉 Welcome back!', 'success');
       setCurrentPage('home');
@@ -461,7 +368,6 @@ function App() {
 
   const register = async (email, password, name) => {
     const result = await registerUser(email, password, name);
-    
     if (result.success) {
       window.showToast?.('🎊 Account created successfully!', 'success');
       setCurrentPage('home');
@@ -478,13 +384,12 @@ function App() {
       setUser(null);
       setOrders([]);
       setCurrentPage('home');
-      window.showToast?.('👋 Logged out successfully! Cart items saved.', 'info');
+      window.showToast?.('👋 Logged out successfully!', 'info');
     }
   };
 
   const isProductPurchased = (productId) => {
     if (!user || !orders || orders.length === 0) return false;
-    
     return orders.some(order => 
       order.items && order.items.some(item => item.id === productId)
     );
@@ -492,18 +397,16 @@ function App() {
 
   const completeOrder = () => {
     if (!user) {
-      window.showToast?.('⚠️ Please login first to complete order!', 'warning');
+      window.showToast?.('⚠️ Please login first!', 'warning');
       setCurrentPage('login');
       return;
     }
-
     if (cart.length === 0) {
       window.showToast?.('⚠️ Your cart is empty!', 'warning');
       return;
     }
 
     initiatePayment(cartTotal, cart, async (response) => {
-      // ✅ FIX: Properly save ALL product data including pdfFiles and bundledProducts
       const orderItems = cart.map(item => {
         const itemData = {
           id: item.id,
@@ -513,10 +416,7 @@ function App() {
           pdfFiles: item.pdfFiles || [],
           bundledProducts: item.bundledProducts || []
         };
-
         if (item.thumbnail) itemData.thumbnail = item.thumbnail;
-
-        console.log('💾 Saving cart item data:', itemData);
         return itemData;
       });
 
@@ -525,22 +425,14 @@ function App() {
         userId: user.uid,
         items: orderItems,
         total: cartTotal,
-        date: new Date().toLocaleDateString('en-IN', { 
-          day: '2-digit', 
-          month: 'short', 
-          year: 'numeric' 
-        }),
+        date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
         status: 'completed',
         paymentId: response.razorpay_payment_id
       };
       
-      console.log('💳 Creating cart order:', newOrder);
       const result = await addOrderDB(newOrder, user.uid);
-      
       if (result.success) {
-        console.log('✅ Cart order created successfully, reloading orders...');
         await loadOrders();
-        
         setTimeout(() => {
           setCart([]);
           localStorage.removeItem('faizupyzone_cart');
@@ -548,7 +440,6 @@ function App() {
           window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
         }, 500);
       } else {
-        console.error('❌ Cart order creation failed:', result.error);
         window.showToast?.('❌ Order failed: ' + result.error, 'error');
       }
     });
@@ -559,7 +450,6 @@ function App() {
       window.showToast?.('❌ Please login first!', 'error');
       return;
     }
-
     const productData = { 
       ...product,
       userId: user.uid,
@@ -569,7 +459,6 @@ function App() {
       totalRevenue: 0,
       reviews: []
     };
-    
     const result = await addProductDB(productData, user.uid);
     if (result.success) {
       await loadProducts();
@@ -583,7 +472,7 @@ function App() {
     const result = await deleteProductDB(id);
     if (result.success) {
       await loadProducts();
-      window.showToast?.('✅ Product deleted successfully!', 'success');
+      window.showToast?.('✅ Product deleted!', 'success');
     } else {
       window.showToast?.('❌ Delete failed: ' + result.error, 'error');
     }
@@ -594,40 +483,23 @@ function App() {
       window.showToast?.('⚠️ Please login to add review!', 'error');
       return;
     }
-
     try {
       const product = products.find(p => p.id === productId);
-      if (!product) {
-        window.showToast?.('❌ Product not found!', 'error');
-        return;
-      }
+      if (!product) { window.showToast?.('❌ Product not found!', 'error'); return; }
 
       const newReview = {
         ...reviewData,
         id: Date.now(),
-        date: new Date().toLocaleDateString('en-IN', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric'
-        }),
+        date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
         likes: 0
       };
 
-      const updatedProduct = {
-        ...product,
-        reviews: [...(product.reviews || []), newReview]
-      };
-
+      const updatedProduct = { ...product, reviews: [...(product.reviews || []), newReview] };
       const result = await updateProductDB(productId, updatedProduct);
 
       if (result.success) {
-        setProducts(prevProducts =>
-          prevProducts.map(p =>
-            p.id === productId ? updatedProduct : p
-          )
-        );
-
-        window.showToast?.('✅ Review added successfully!', 'success');
+        setProducts(prev => prev.map(p => p.id === productId ? updatedProduct : p));
+        window.showToast?.('✅ Review added!', 'success');
       } else {
         window.showToast?.('❌ Failed to add review: ' + result.error, 'error');
       }
@@ -659,31 +531,20 @@ function App() {
             <Background />
             <TelegramButton />
             
-            {/* ✅ NEW: Razorpay Loading Indicator */}
+            {/* Razorpay Loading Indicator */}
             {!razorpayLoaded && !razorpayError && (
               <div style={{
-                position: 'fixed',
-                bottom: '20px',
-                right: '20px',
-                background: 'rgba(99, 102, 241, 0.9)',
-                color: '#fff',
-                padding: '8px 16px',
-                borderRadius: '20px',
-                fontSize: '0.75rem',
-                fontWeight: '600',
-                zIndex: 9999,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
+                position: 'fixed', bottom: '20px', right: '20px',
+                background: 'rgba(99, 102, 241, 0.9)', color: '#fff',
+                padding: '8px 16px', borderRadius: '20px',
+                fontSize: '0.75rem', fontWeight: '600', zIndex: 9999,
+                display: 'flex', alignItems: 'center', gap: '8px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
               }}>
                 <div style={{
-                  width: '12px',
-                  height: '12px',
-                  border: '2px solid #fff',
-                  borderTopColor: 'transparent',
-                  borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite'
+                  width: '12px', height: '12px',
+                  border: '2px solid #fff', borderTopColor: 'transparent',
+                  borderRadius: '50%', animation: 'spin 0.8s linear infinite'
                 }}></div>
                 Loading payment system...
               </div>
@@ -701,8 +562,9 @@ function App() {
               cartCount={cartCount}
             />
             
-            <main style={{position: 'relative', zIndex: 1}}>
+            <main style={{ position: 'relative', zIndex: 1 }}>
               {currentPage === 'home' && <HomePage setCurrentPage={setCurrentPage} />}
+              
               {currentPage === 'products' && (
                 <ProductsPage 
                   products={products}
@@ -717,14 +579,11 @@ function App() {
                   onAddReview={handleAddReview}
                 />
               )}
+              
               {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
               {currentPage === 'login' && <LoginPage />}
               {currentPage === 'orders' && (
-                <OrdersPage 
-                  orders={orders} 
-                  user={user}
-                  refreshOrders={loadOrders}
-                />
+                <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />
               )}
               {currentPage === 'admin' && user?.isAdmin && (
                 <AdminPanel 
@@ -734,11 +593,12 @@ function App() {
                   orders={orders} 
                 />
               )}
+              {/* ✅ MOCK TEST PAGE */}
+              {currentPage === 'mocktests' && <MockTestPage />}
             </main>
             
             {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
             
-            {/* ✅ NEW: Spinner animation */}
             <style>{`
               @keyframes spin {
                 to { transform: rotate(360deg); }

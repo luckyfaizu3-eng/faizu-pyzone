@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader, Edit, Save, Zap, Search } from 'lucide-react';
+import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader, Edit, Save, Zap, Search, Brain } from 'lucide-react';
 import { uploadPDF, uploadImage } from '../supabaseUpload';
 import { auth } from '../firebase';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import ConfirmModal from '../components/ConfirmModal';
+import AdminQuestions from './AdminQuestions';
 
 function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -15,6 +16,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [isBundle, setIsBundle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  
+  // ✅ Tab State
+  const [activeTab, setActiveTab] = useState('products');
   
   // ✅ Edit Mode States
   const [editingProduct, setEditingProduct] = useState(null);
@@ -612,6 +616,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     product.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // ✅ Tab definitions
+  const tabs = [
+    { id: 'products', label: 'Products', icon: Package, count: products.length },
+    { id: 'questions', label: 'Questions', icon: Brain },
+    { id: 'orders', label: 'Orders', icon: BarChart, count: orders.length },
+  ];
+
   return (
     <div style={{
       paddingTop: '100px',
@@ -702,395 +713,274 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         ))}
       </div>
 
-      {/* Action Button */}
+      {/* ✅ Tab Navigation */}
       <div style={{
         maxWidth: '1400px',
         margin: '0 auto 3rem',
         display: 'flex',
-        justifyContent: 'center'
+        gap: '0.75rem',
+        background: '#f1f5f9',
+        padding: '0.5rem',
+        borderRadius: '16px',
+        width: 'fit-content'
       }}>
-        <button 
-          onClick={() => {
-            if (!currentUser) {
-              window.showToast?.('❌ Please login first!', 'error');
-              return;
-            }
-            if (editMode) {
-              cancelEdit();
-            } else {
-              setShowUploadForm(!showUploadForm);
-            }
-          }}
-          style={{
-            background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-            border: 'none',
-            color: 'white',
-            padding: '1.25rem 3rem',
-            fontSize: '1.25rem',
-            borderRadius: '16px',
-            cursor: 'pointer',
-            fontWeight: '700',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            boxShadow: '0 10px 30px rgba(99,102,241,0.4)',
-            transition: 'all 0.3s ease'
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-3px)';
-            e.currentTarget.style.boxShadow = '0 15px 40px rgba(99,102,241,0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 10px 30px rgba(99,102,241,0.4)';
-          }}
-        >
-          {showUploadForm ? <X size={24} /> : <Plus size={24} />}
-          {editMode ? 'Cancel Edit' : (showUploadForm ? 'Cancel' : 'Upload New Product')}
-        </button>
+        {tabs.map((tab) => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                background: isActive
+                  ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                  : 'transparent',
+                border: 'none',
+                color: isActive ? '#ffffff' : '#94a3b8',
+                padding: '0.85rem 1.75rem',
+                fontSize: '1rem',
+                borderRadius: '12px',
+                cursor: 'pointer',
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.6rem',
+                transition: 'all 0.25s ease',
+                boxShadow: isActive ? '0 4px 15px rgba(99,102,241,0.35)' : 'none',
+                whiteSpace: 'nowrap'
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.color = '#6366f1';
+                  e.currentTarget.style.background = 'rgba(99,102,241,0.08)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  e.currentTarget.style.color = '#94a3b8';
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <tab.icon size={20} />
+              {tab.label}
+              {tab.count !== undefined && (
+                <span style={{
+                  background: isActive ? 'rgba(255,255,255,0.25)' : 'rgba(99,102,241,0.12)',
+                  color: isActive ? '#ffffff' : '#6366f1',
+                  borderRadius: '20px',
+                  padding: '0.1rem 0.55rem',
+                  fontSize: '0.8rem',
+                  fontWeight: '800',
+                  minWidth: '22px',
+                  textAlign: 'center'
+                }}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Upload/Edit Form */}
-      {showUploadForm && (
-        <div style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: '24px',
-          padding: '3rem',
-          maxWidth: '800px',
-          margin: '0 auto 3rem',
-          boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
-          animation: 'slideDown 0.4s ease'
-        }}>
-          <h2 style={{
-            fontSize: '2rem',
-            fontWeight: '900',
-            marginBottom: '2rem',
-            color: '#1e293b',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem'
-          }}>
-            {editMode ? (
-              <>
-                <Edit size={32} color="#6366f1" />
-                Edit Product
-              </>
-            ) : (
-              <>
-                <Plus size={32} color="#6366f1" />
-                Upload Product
-              </>
-            )}
-          </h2>
-
-          {/* Bundle Toggle */}
+      {/* ✅ PRODUCTS TAB */}
+      {activeTab === 'products' && (
+        <>
+          {/* Action Button */}
           <div style={{
-            background: 'rgba(99,102,241,0.05)',
-            border: '1px solid rgba(99,102,241,0.2)',
-            borderRadius: '12px',
-            padding: '1.5rem',
-            marginBottom: '2rem',
+            maxWidth: '1400px',
+            margin: '0 auto 3rem',
             display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between'
+            justifyContent: 'center'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <Package size={24} color="#6366f1" />
-              <div>
-                <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.1rem' }}>
-                  Create Bundle Package
-                </div>
-                <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                  Select multiple products to bundle together
-                </div>
-              </div>
-            </div>
-            <label style={{
-              position: 'relative',
-              display: 'inline-block',
-              width: '60px',
-              height: '32px'
-            }}>
-              <input
-                type="checkbox"
-                checked={isBundle}
-                onChange={(e) => setIsBundle(e.target.checked)}
-                style={{ display: 'none' }}
-              />
-              <span style={{
-                position: 'absolute',
+            <button 
+              onClick={() => {
+                if (!currentUser) {
+                  window.showToast?.('❌ Please login first!', 'error');
+                  return;
+                }
+                if (editMode) {
+                  cancelEdit();
+                } else {
+                  setShowUploadForm(!showUploadForm);
+                }
+              }}
+              style={{
+                background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+                border: 'none',
+                color: 'white',
+                padding: '1.25rem 3rem',
+                fontSize: '1.25rem',
+                borderRadius: '16px',
                 cursor: 'pointer',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: isBundle ? '#6366f1' : '#cbd5e1',
-                borderRadius: '32px',
-                transition: '0.3s'
-              }}>
-                <span style={{
-                  position: 'absolute',
-                  height: '24px',
-                  width: '24px',
-                  left: isBundle ? '32px' : '4px',
-                  bottom: '4px',
-                  background: 'white',
-                  borderRadius: '50%',
-                  transition: '0.3s'
-                }} />
-              </span>
-            </label>
+                fontWeight: '700',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                boxShadow: '0 10px 30px rgba(99,102,241,0.4)',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-3px)';
+                e.currentTarget.style.boxShadow = '0 15px 40px rgba(99,102,241,0.5)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 10px 30px rgba(99,102,241,0.4)';
+              }}
+            >
+              {showUploadForm ? <X size={24} /> : <Plus size={24} />}
+              {editMode ? 'Cancel Edit' : (showUploadForm ? 'Cancel' : 'Upload New Product')}
+            </button>
           </div>
 
-          <form onSubmit={editMode ? handleUpdateProduct : handleSubmit} style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '1.5rem'
-          }}>
-            <input
-              type="text"
-              placeholder="Product Title *"
-              value={formData.title}
-              onChange={(e) => setFormData({...formData, title: e.target.value})}
-              required
-              style={{
-                padding: '1rem',
-                border: '2px solid #e2e8f0',
+          {/* Upload/Edit Form */}
+          {showUploadForm && (
+            <div style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '24px',
+              padding: '3rem',
+              maxWidth: '800px',
+              margin: '0 auto 3rem',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
+              animation: 'slideDown 0.4s ease'
+            }}>
+              <h2 style={{
+                fontSize: '2rem',
+                fontWeight: '900',
+                marginBottom: '2rem',
+                color: '#1e293b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem'
+              }}>
+                {editMode ? (
+                  <>
+                    <Edit size={32} color="#6366f1" />
+                    Edit Product
+                  </>
+                ) : (
+                  <>
+                    <Plus size={32} color="#6366f1" />
+                    Upload Product
+                  </>
+                )}
+              </h2>
+
+              {/* Bundle Toggle */}
+              <div style={{
+                background: 'rgba(99,102,241,0.05)',
+                border: '1px solid rgba(99,102,241,0.2)',
                 borderRadius: '12px',
-                fontSize: '1.05rem',
-                outline: 'none',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#6366f1'}
-              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-            />
+                padding: '1.5rem',
+                marginBottom: '2rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Package size={24} color="#6366f1" />
+                  <div>
+                    <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.1rem' }}>
+                      Create Bundle Package
+                    </div>
+                    <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                      Select multiple products to bundle together
+                    </div>
+                  </div>
+                </div>
+                <label style={{
+                  position: 'relative',
+                  display: 'inline-block',
+                  width: '60px',
+                  height: '32px'
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={isBundle}
+                    onChange={(e) => setIsBundle(e.target.checked)}
+                    style={{ display: 'none' }}
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    cursor: 'pointer',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: isBundle ? '#6366f1' : '#cbd5e1',
+                    borderRadius: '32px',
+                    transition: '0.3s'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      height: '24px',
+                      width: '24px',
+                      left: isBundle ? '32px' : '4px',
+                      bottom: '4px',
+                      background: 'white',
+                      borderRadius: '50%',
+                      transition: '0.3s'
+                    }} />
+                  </span>
+                </label>
+              </div>
 
-            {/* ✅ Category Selection - Show "All Notes" in dropdown */}
-            <div style={{ display: 'grid', gridTemplateColumns: formData.category === 'custom' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({...formData, category: e.target.value})}
-                required
-                style={{
-                  padding: '1rem',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '12px',
-                  fontSize: '1.05rem',
-                  outline: 'none'
-                }}
-              >
-                <option value="">Select Category *</option>
-                <option value="python">Python Notes</option>
-                <option value="jkbose">JKBOSE Materials</option>
-                <option value="job">Job Preparation</option>
-                <option value="web">Web Development</option>
-                <option value="hacking">Ethical Hacking</option>
-                <option value="data">Data Science</option>
-                <option value="ai">AI & ML</option>
-                <option value="marketing">Digital Marketing</option>
-                <option value="custom">✏️ Custom Category</option>
-              </select>
-
-              {formData.category === 'custom' && (
+              <form onSubmit={editMode ? handleUpdateProduct : handleSubmit} style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '1.5rem'
+              }}>
                 <input
                   type="text"
-                  placeholder="Enter custom category name *"
-                  value={formData.customCategory}
-                  onChange={(e) => setFormData({...formData, customCategory: e.target.value})}
+                  placeholder="Product Title *"
+                  value={formData.title}
+                  onChange={(e) => setFormData({...formData, title: e.target.value})}
                   required
                   style={{
-                    padding: '1rem',
-                    border: '2px solid #e2e8f0',
-                    borderRadius: '12px',
-                    fontSize: '1.05rem'
-                  }}
-                />
-              )}
-            </div>
-
-            {/* Bundle Product Selection or Regular Product Options */}
-            {isBundle ? (
-              <div style={{
-                background: 'rgba(16,185,129,0.05)',
-                border: '2px solid rgba(16,185,129,0.2)',
-                borderRadius: '12px',
-                padding: '1.5rem'
-              }}>
-                <div style={{
-                  fontSize: '1.1rem',
-                  fontWeight: '700',
-                  color: '#10b981',
-                  marginBottom: '1rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <Package size={20} /> Bundle Configuration
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowProductSelector(!showProductSelector)}
-                    style={{
-                      background: '#10b981',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '0.5rem 1rem',
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '0.9rem',
-                      fontWeight: '600'
-                    }}
-                  >
-                    {showProductSelector ? 'Hide' : 'Select'} Products
-                  </button>
-                </div>
-
-                {/* Selected Products */}
-                {selectedProducts.length > 0 && (
-                  <div style={{
-                    marginBottom: '1rem',
-                    padding: '1rem',
-                    background: '#ffffff',
-                    borderRadius: '8px'
-                  }}>
-                    <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#64748b', marginBottom: '0.5rem' }}>
-                      Selected Products ({selectedProducts.length})
-                    </div>
-                    {selectedProducts.map(product => (
-                      <div key={product.id} style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '0.5rem',
-                        borderBottom: '1px solid #e2e8f0'
-                      }}>
-                        <span style={{ fontSize: '0.9rem' }}>{product.title}</span>
-                        <span style={{ fontWeight: '700', color: '#10b981' }}>₹{product.price}</span>
-                      </div>
-                    ))}
-                    <div style={{
-                      marginTop: '0.75rem',
-                      padding: '0.75rem',
-                      background: 'rgba(16,185,129,0.1)',
-                      borderRadius: '6px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      fontWeight: '700'
-                    }}>
-                      <span>Total Original Price:</span>
-                      <span style={{ color: '#10b981' }}>
-                        ₹{selectedProducts.reduce((sum, p) => sum + p.price, 0)}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Product Selector Modal */}
-                {showProductSelector && (
-                  <div style={{
-                    marginBottom: '1rem',
-                    maxHeight: '300px',
-                    overflowY: 'auto',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '1rem',
-                    background: '#ffffff'
-                  }}>
-                    {products.filter(p => !p.isBundle).map(product => (
-                      <label key={product.id} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '0.75rem',
-                        cursor: 'pointer',
-                        borderBottom: '1px solid #f1f5f9',
-                        transition: 'background 0.2s'
-                      }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99,102,241,0.05)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedProducts.some(p => p.id === product.id)}
-                          onChange={() => toggleProductSelection(product)}
-                          style={{ marginRight: '1rem' }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{product.title}</div>
-                          <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{product.category}</div>
-                        </div>
-                        <div style={{ fontWeight: '700', color: '#6366f1' }}>₹{product.price}</div>
-                      </label>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                  <input
-                    type="number"
-                    placeholder="Discount % *"
-                    value={formData.discount}
-                    onChange={(e) => setFormData({...formData, discount: e.target.value})}
-                    required
-                    min="0"
-                    max="100"
-                    style={{
-                      padding: '1rem',
-                      border: '2px solid #e2e8f0',
-                      borderRadius: '12px',
-                      fontSize: '1.05rem'
-                    }}
-                  />
-                  <div style={{
-                    padding: '1rem',
-                    background: '#ffffff',
-                    border: '2px solid #10b981',
-                    borderRadius: '12px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: '900',
-                    fontSize: '1.2rem',
-                    color: '#10b981'
-                  }}>
-                    ₹{calculateBundlePrice() || '0'}
-                  </div>
-                </div>
-
-                <textarea
-                  placeholder="What's included? (e.g., All chapters, Practice sets, Solutions) *"
-                  value={formData.itemsIncluded}
-                  onChange={(e) => setFormData({...formData, itemsIncluded: e.target.value})}
-                  required
-                  rows="3"
-                  style={{
-                    width: '100%',
                     padding: '1rem',
                     border: '2px solid #e2e8f0',
                     borderRadius: '12px',
                     fontSize: '1.05rem',
-                    marginTop: '1rem',
-                    resize: 'vertical',
-                    boxSizing: 'border-box'
+                    outline: 'none',
+                    transition: 'border-color 0.3s'
                   }}
+                  onFocus={(e) => e.target.style.borderColor = '#6366f1'}
+                  onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
                 />
-              </div>
-            ) : (
-              <>
-                {/* Regular Product Price with Discount */}
-                <div style={{
-                  background: 'rgba(99,102,241,0.05)',
-                  border: '1px solid rgba(99,102,241,0.2)',
-                  borderRadius: '12px',
-                  padding: '1.5rem'
-                }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+
+                {/* ✅ Category Selection */}
+                <div style={{ display: 'grid', gridTemplateColumns: formData.category === 'custom' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
+                  <select
+                    value={formData.category}
+                    onChange={(e) => setFormData({...formData, category: e.target.value})}
+                    required
+                    style={{
+                      padding: '1rem',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '12px',
+                      fontSize: '1.05rem',
+                      outline: 'none'
+                    }}
+                  >
+                    <option value="">Select Category *</option>
+                    <option value="python">Python Notes</option>
+                    <option value="jkbose">JKBOSE Materials</option>
+                    <option value="job">Job Preparation</option>
+                    <option value="web">Web Development</option>
+                    <option value="hacking">Ethical Hacking</option>
+                    <option value="data">Data Science</option>
+                    <option value="ai">AI & ML</option>
+                    <option value="marketing">Digital Marketing</option>
+                    <option value="custom">✏️ Custom Category</option>
+                  </select>
+
+                  {formData.category === 'custom' && (
                     <input
-                      type="number"
-                      placeholder="Price (₹) *"
-                      value={formData.price}
-                      onChange={(e) => setFormData({...formData, price: e.target.value})}
+                      type="text"
+                      placeholder="Enter custom category name *"
+                      value={formData.customCategory}
+                      onChange={(e) => setFormData({...formData, customCategory: e.target.value})}
                       required
                       style={{
                         padding: '1rem',
@@ -1099,980 +989,1326 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         fontSize: '1.05rem'
                       }}
                     />
-                    <input
-                      type="number"
-                      placeholder="Discount % (Optional)"
-                      value={formData.discountPercent}
-                      onChange={(e) => setFormData({...formData, discountPercent: e.target.value})}
-                      min="0"
-                      max="100"
+                  )}
+                </div>
+
+                {/* Bundle Product Selection or Regular Product Options */}
+                {isBundle ? (
+                  <div style={{
+                    background: 'rgba(16,185,129,0.05)',
+                    border: '2px solid rgba(16,185,129,0.2)',
+                    borderRadius: '12px',
+                    padding: '1.5rem'
+                  }}>
+                    <div style={{
+                      fontSize: '1.1rem',
+                      fontWeight: '700',
+                      color: '#10b981',
+                      marginBottom: '1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Package size={20} /> Bundle Configuration
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowProductSelector(!showProductSelector)}
+                        style={{
+                          background: '#10b981',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '0.5rem 1rem',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          fontWeight: '600'
+                        }}
+                      >
+                        {showProductSelector ? 'Hide' : 'Select'} Products
+                      </button>
+                    </div>
+
+                    {/* Selected Products */}
+                    {selectedProducts.length > 0 && (
+                      <div style={{
+                        marginBottom: '1rem',
+                        padding: '1rem',
+                        background: '#ffffff',
+                        borderRadius: '8px'
+                      }}>
+                        <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#64748b', marginBottom: '0.5rem' }}>
+                          Selected Products ({selectedProducts.length})
+                        </div>
+                        {selectedProducts.map(product => (
+                          <div key={product.id} style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '0.5rem',
+                            borderBottom: '1px solid #e2e8f0'
+                          }}>
+                            <span style={{ fontSize: '0.9rem' }}>{product.title}</span>
+                            <span style={{ fontWeight: '700', color: '#10b981' }}>₹{product.price}</span>
+                          </div>
+                        ))}
+                        <div style={{
+                          marginTop: '0.75rem',
+                          padding: '0.75rem',
+                          background: 'rgba(16,185,129,0.1)',
+                          borderRadius: '6px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          fontWeight: '700'
+                        }}>
+                          <span>Total Original Price:</span>
+                          <span style={{ color: '#10b981' }}>
+                            ₹{selectedProducts.reduce((sum, p) => sum + p.price, 0)}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Product Selector Modal */}
+                    {showProductSelector && (
+                      <div style={{
+                        marginBottom: '1rem',
+                        maxHeight: '300px',
+                        overflowY: 'auto',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                        padding: '1rem',
+                        background: '#ffffff'
+                      }}>
+                        {products.filter(p => !p.isBundle).map(product => (
+                          <label key={product.id} style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: '0.75rem',
+                            cursor: 'pointer',
+                            borderBottom: '1px solid #f1f5f9',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(99,102,241,0.05)'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedProducts.some(p => p.id === product.id)}
+                              onChange={() => toggleProductSelection(product)}
+                              style={{ marginRight: '1rem' }}
+                            />
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{product.title}</div>
+                              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{product.category}</div>
+                            </div>
+                            <div style={{ fontWeight: '700', color: '#6366f1' }}>₹{product.price}</div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <input
+                        type="number"
+                        placeholder="Discount % *"
+                        value={formData.discount}
+                        onChange={(e) => setFormData({...formData, discount: e.target.value})}
+                        required
+                        min="0"
+                        max="100"
+                        style={{
+                          padding: '1rem',
+                          border: '2px solid #e2e8f0',
+                          borderRadius: '12px',
+                          fontSize: '1.05rem'
+                        }}
+                      />
+                      <div style={{
+                        padding: '1rem',
+                        background: '#ffffff',
+                        border: '2px solid #10b981',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontWeight: '900',
+                        fontSize: '1.2rem',
+                        color: '#10b981'
+                      }}>
+                        ₹{calculateBundlePrice() || '0'}
+                      </div>
+                    </div>
+
+                    <textarea
+                      placeholder="What's included? (e.g., All chapters, Practice sets, Solutions) *"
+                      value={formData.itemsIncluded}
+                      onChange={(e) => setFormData({...formData, itemsIncluded: e.target.value})}
+                      required
+                      rows="3"
                       style={{
+                        width: '100%',
                         padding: '1rem',
                         border: '2px solid #e2e8f0',
                         borderRadius: '12px',
-                        fontSize: '1.05rem'
+                        fontSize: '1.05rem',
+                        marginTop: '1rem',
+                        resize: 'vertical',
+                        boxSizing: 'border-box'
                       }}
                     />
                   </div>
-                  {formData.price && formData.discountPercent && (
+                ) : (
+                  <>
+                    {/* Regular Product Price with Discount */}
                     <div style={{
-                      marginTop: '1rem',
-                      padding: '1rem',
-                      background: '#ffffff',
-                      borderRadius: '8px',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center'
-                    }}>
-                      <span style={{ color: '#64748b', textDecoration: 'line-through' }}>₹{formData.price}</span>
-                      <span style={{
-                        fontSize: '1.5rem',
-                        fontWeight: '900',
-                        color: '#10b981'
-                      }}>
-                        ₹{calculateDiscountedPrice()}
-                        <span style={{ fontSize: '0.9rem', marginLeft: '0.5rem', color: '#6366f1' }}>
-                          ({formData.discountPercent}% OFF)
-                        </span>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
-
-            <textarea
-              placeholder="Description *"
-              value={formData.description}
-              onChange={(e) => setFormData({...formData, description: e.target.value})}
-              required
-              rows="4"
-              style={{
-                padding: '1rem',
-                border: '2px solid #e2e8f0',
-                borderRadius: '12px',
-                fontSize: '1.05rem',
-                resize: 'vertical'
-              }}
-            />
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <input
-                type="number"
-                placeholder="Pages"
-                value={formData.pages}
-                onChange={(e) => setFormData({...formData, pages: e.target.value})}
-                style={{
-                  padding: '1rem',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '12px',
-                  fontSize: '1.05rem'
-                }}
-              />
-              <input
-                type="text"
-                placeholder="File Size (e.g., 5 MB)"
-                value={formData.fileSize}
-                onChange={(e) => setFormData({...formData, fileSize: e.target.value})}
-                style={{
-                  padding: '1rem',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '12px',
-                  fontSize: '1.05rem'
-                }}
-              />
-            </div>
-
-            {/* Continue with the rest of the form (PDFs, thumbnails, etc.) - keeping the existing code from your original file */}
-            {/* ... (I'll include this in the next part to stay within length limits) ... */}
-
-            {/* ✅ Existing PDFs (Edit Mode) */}
-            {editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0 && !isBundle && (
-              <div>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '0.75rem',
-                  fontSize: '1.05rem',
-                  fontWeight: '700',
-                  color: '#1e293b'
-                }}>
-                  Current PDFs
-                </label>
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.5rem',
-                  marginBottom: '1rem'
-                }}>
-                  {editingProduct.pdfFiles.map((pdf, index) => (
-                    <div key={index} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '0.75rem 1rem',
                       background: 'rgba(99,102,241,0.05)',
                       border: '1px solid rgba(99,102,241,0.2)',
-                      borderRadius: '8px'
+                      borderRadius: '12px',
+                      padding: '1.5rem'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <FileText size={20} color="#6366f1" />
-                        <div>
-                          <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
-                            {pdf.fileName}
-                          </div>
-                          {pdf.size && (
-                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                              {pdf.size}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => removeExistingPdf(index)}
-                        style={{
-                          background: 'rgba(239,68,68,0.1)',
-                          border: 'none',
-                          borderRadius: '6px',
-                          padding: '0.5rem',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center'
-                        }}
-                      >
-                        <X size={16} color="#ef4444" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Multi-PDF Upload */}
-            {!isBundle && (
-              <div>
-                <label style={{
-                  display: 'block',
-                  marginBottom: '0.75rem',
-                  fontSize: '1.05rem',
-                  fontWeight: '700',
-                  color: '#1e293b'
-                }}>
-                  {editMode ? 'Add More PDFs (Optional)' : 'Upload PDFs * (Multiple files allowed)'}
-                </label>
-                
-                {/* Selected PDFs List */}
-                {pdfFiles.length > 0 && (
-                  <div style={{
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem'
-                  }}>
-                    {pdfFiles.map((file, index) => (
-                      <div key={index} style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '0.75rem 1rem',
-                        background: 'rgba(16,185,129,0.05)',
-                        border: '1px solid rgba(16,185,129,0.2)',
-                        borderRadius: '8px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <FileText size={20} color="#10b981" />
-                          <div>
-                            <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
-                              {file.name}
-                            </div>
-                            <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                              {(file.size / 1024 / 1024).toFixed(2)} MB
-                            </div>
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removePdf(index)}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <input
+                          type="number"
+                          placeholder="Price (₹) *"
+                          value={formData.price}
+                          onChange={(e) => setFormData({...formData, price: e.target.value})}
+                          required
                           style={{
-                            background: 'rgba(239,68,68,0.1)',
-                            border: 'none',
-                            borderRadius: '6px',
-                            padding: '0.5rem',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center'
+                            padding: '1rem',
+                            border: '2px solid #e2e8f0',
+                            borderRadius: '12px',
+                            fontSize: '1.05rem'
                           }}
-                        >
-                          <X size={16} color="#ef4444" />
-                        </button>
+                        />
+                        <input
+                          type="number"
+                          placeholder="Discount % (Optional)"
+                          value={formData.discountPercent}
+                          onChange={(e) => setFormData({...formData, discountPercent: e.target.value})}
+                          min="0"
+                          max="100"
+                          style={{
+                            padding: '1rem',
+                            border: '2px solid #e2e8f0',
+                            borderRadius: '12px',
+                            fontSize: '1.05rem'
+                          }}
+                        />
                       </div>
-                    ))}
-                  </div>
+                      {formData.price && formData.discountPercent && (
+                        <div style={{
+                          marginTop: '1rem',
+                          padding: '1rem',
+                          background: '#ffffff',
+                          borderRadius: '8px',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <span style={{ color: '#64748b', textDecoration: 'line-through' }}>₹{formData.price}</span>
+                          <span style={{
+                            fontSize: '1.5rem',
+                            fontWeight: '900',
+                            color: '#10b981'
+                          }}>
+                            ₹{calculateDiscountedPrice()}
+                            <span style={{ fontSize: '0.9rem', marginLeft: '0.5rem', color: '#6366f1' }}>
+                              ({formData.discountPercent}% OFF)
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </>
                 )}
 
-                <label style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '1rem',
-                  padding: '1.5rem',
-                  border: '2px dashed #cbd5e1',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  background: pdfFiles.length > 0 ? 'rgba(16,185,129,0.05)' : 'transparent'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
-                onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
-                >
-                  <Upload size={24} color={pdfFiles.length > 0 ? '#10b981' : '#64748b'} />
-                  <div>
-                    <div style={{ fontWeight: '600', color: '#1e293b' }}>
-                      {pdfFiles.length > 0 ? `✅ ${pdfFiles.length} PDF(s) selected` : 'Click to upload PDFs'}
-                    </div>
-                    <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                      You can select multiple PDF files
-                    </div>
-                  </div>
-                  <input
-                    type="file"
-                    accept=".pdf"
-                    multiple
-                    onChange={handlePdfChange}
-                    style={{ display: 'none' }}
-                  />
-                </label>
-              </div>
-            )}
+                <textarea
+                  placeholder="Description *"
+                  value={formData.description}
+                  onChange={(e) => setFormData({...formData, description: e.target.value})}
+                  required
+                  rows="4"
+                  style={{
+                    padding: '1rem',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '12px',
+                    fontSize: '1.05rem',
+                    resize: 'vertical'
+                  }}
+                />
 
-            {/* Thumbnail Upload */}
-            <div>
-              <label style={{
-                display: 'block',
-                marginBottom: '0.75rem',
-                fontSize: '1.05rem',
-                fontWeight: '700',
-                color: '#1e293b'
-              }}>
-                {editMode ? 'Change Thumbnail (Optional)' : 'Upload Thumbnail (Optional)'}
-              </label>
-              <label style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                padding: '1.5rem',
-                border: '2px dashed #cbd5e1',
-                borderRadius: '12px',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                background: thumbnailPreview ? 'rgba(16,185,129,0.05)' : 'transparent'
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
-              onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
-              >
-                <ImageIcon size={24} color={thumbnailPreview ? '#10b981' : '#64748b'} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: '600', color: '#1e293b' }}>
-                    {thumbnailFile ? `✅ ${thumbnailFile.name}` : (thumbnailPreview ? '✅ Current thumbnail' : 'Click to upload thumbnail')}
-                  </div>
-                  <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                    PNG, JPG (recommended: 400x300px)
-                  </div>
-                </div>
-                {thumbnailPreview && (
-                  <img 
-                    src={thumbnailPreview} 
-                    alt="Preview" 
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <input
+                    type="number"
+                    placeholder="Pages"
+                    value={formData.pages}
+                    onChange={(e) => setFormData({...formData, pages: e.target.value})}
                     style={{
-                      width: '80px',
-                      height: '60px',
-                      objectFit: 'cover',
-                      borderRadius: '8px'
+                      padding: '1rem',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '12px',
+                      fontSize: '1.05rem'
                     }}
                   />
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleThumbnailChange}
-                  style={{ display: 'none' }}
-                />
-              </label>
-            </div>
-
-            {/* Preview Pages - keeping your existing code */}
-            {!isBundle && (pdfFiles.length > 0 || (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0)) && (
-              <div style={{
-                background: 'rgba(139,92,246,0.05)',
-                border: '2px solid rgba(139,92,246,0.2)',
-                borderRadius: '16px',
-                padding: '2rem'
-              }}>
-                <div style={{
-                  marginBottom: '1.5rem'
-                }}>
-                  <h3 style={{
-                    fontSize: '1.2rem',
-                    fontWeight: '700',
-                    color: '#8b5cf6',
-                    marginBottom: '0.5rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    <FileText size={24} />
-                    Preview Pages Setup
-                  </h3>
-                  <p style={{
-                    fontSize: '0.9rem',
-                    color: '#64748b',
-                    margin: 0
-                  }}>
-                    {editMode && pdfFiles.length === 0 
-                      ? `Generate preview from existing PDF: ${editingProduct?.pdfFiles?.[0]?.fileName || 'uploaded PDF'}`
-                      : `Generate preview pages from ${pdfFiles[0]?.name || 'uploaded PDF'}`
-                    }
-                  </p>
+                  <input
+                    type="text"
+                    placeholder="File Size (e.g., 5 MB)"
+                    value={formData.fileSize}
+                    onChange={(e) => setFormData({...formData, fileSize: e.target.value})}
+                    style={{
+                      padding: '1rem',
+                      border: '2px solid #e2e8f0',
+                      borderRadius: '12px',
+                      fontSize: '1.05rem'
+                    }}
+                  />
                 </div>
 
-                {editMode && editingProduct && editingProduct.previewPages && editingProduct.previewPages.length > 0 && (
-                  <div style={{
-                    marginBottom: '1.5rem',
-                    padding: '1rem',
-                    background: 'rgba(16,185,129,0.05)',
-                    border: '1px solid rgba(16,185,129,0.2)',
-                    borderRadius: '12px'
-                  }}>
+                {/* ✅ Existing PDFs (Edit Mode) */}
+                {editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0 && !isBundle && (
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.75rem',
+                      fontSize: '1.05rem',
+                      fontWeight: '700',
+                      color: '#1e293b'
+                    }}>
+                      Current PDFs
+                    </label>
                     <div style={{
                       display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
+                      flexDirection: 'column',
+                      gap: '0.5rem',
                       marginBottom: '1rem'
                     }}>
-                      <span style={{
-                        fontSize: '0.95rem',
-                        fontWeight: '600',
-                        color: '#10b981'
-                      }}>
-                        ✅ Current Preview ({editingProduct.previewPages.length} pages)
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingProduct({
-                            ...editingProduct,
-                            previewPages: []
-                          });
-                          setPreviewPages([]);
-                          window.showToast?.('🗑️ Preview pages cleared. Generate new ones below.', 'info');
-                        }}
-                        style={{
-                          background: 'rgba(239,68,68,0.1)',
-                          border: '1px solid rgba(239,68,68,0.3)',
-                          color: '#ef4444',
-                          padding: '0.4rem 0.75rem',
-                          borderRadius: '6px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        Clear Preview
-                      </button>
-                    </div>
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-                      gap: '0.75rem',
-                      maxHeight: '200px',
-                      overflowY: 'auto'
-                    }}>
-                      {editingProduct.previewPages.map((page, index) => (
+                      {editingProduct.pdfFiles.map((pdf, index) => (
                         <div key={index} style={{
-                          border: '2px solid #10b981',
-                          borderRadius: '8px',
-                          overflow: 'hidden',
-                          position: 'relative'
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '0.75rem 1rem',
+                          background: 'rgba(99,102,241,0.05)',
+                          border: '1px solid rgba(99,102,241,0.2)',
+                          borderRadius: '8px'
                         }}>
-                          <img
-                            src={page.imageData}
-                            alt={`Page ${page.pageNumber}`}
-                            style={{
-                              width: '100%',
-                              height: 'auto',
-                              display: 'block'
-                            }}
-                          />
-                          <div style={{
-                            position: 'absolute',
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            background: 'rgba(16,185,129,0.9)',
-                            color: '#fff',
-                            padding: '0.25rem',
-                            fontSize: '0.7rem',
-                            fontWeight: '600',
-                            textAlign: 'center'
-                          }}>
-                            P{page.pageNumber}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <FileText size={20} color="#6366f1" />
+                            <div>
+                              <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
+                                {pdf.fileName}
+                              </div>
+                              {pdf.size && (
+                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                  {pdf.size}
+                                </div>
+                              )}
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => removeExistingPdf(index)}
+                            style={{
+                              background: 'rgba(239,68,68,0.1)',
+                              border: 'none',
+                              borderRadius: '6px',
+                              padding: '0.5rem',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            <X size={16} color="#ef4444" />
+                          </button>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                <div style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1.5rem'
-                }}>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr auto',
-                    gap: '1rem',
-                    alignItems: 'center'
-                  }}>
-                    <div>
-                      <label style={{
-                        display: 'block',
-                        marginBottom: '0.5rem',
-                        fontSize: '0.95rem',
-                        fontWeight: '600',
-                        color: '#1e293b'
-                      }}>
-                        How many pages to show as preview?
-                      </label>
-                      <select
-                        value={formData.previewPageCount}
-                        onChange={(e) => setFormData({...formData, previewPageCount: e.target.value})}
-                        style={{
-                          width: '100%',
-                          padding: '0.75rem',
-                          border: '2px solid #e2e8f0',
-                          borderRadius: '8px',
-                          fontSize: '1rem',
-                          outline: 'none'
-                        }}
-                      >
-                        <option value="1">First 1 Page</option>
-                        <option value="2">First 2 Pages</option>
-                        <option value="3">First 3 Pages</option>
-                        <option value="4">First 4 Pages</option>
-                        <option value="5">First 5 Pages</option>
-                        <option value="10">First 10 Pages</option>
-                      </select>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (pdfFiles.length > 0) {
-                          await generatePreviewFromUploadedPDF();
-                        } else if (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0) {
-                          await generatePreviewFromExistingPDF();
-                        } else {
-                          window.showToast?.('⚠️ No PDF available to generate preview!', 'warning');
-                        }
-                      }}
-                      disabled={generatingPreview}
-                      style={{
-                        background: generatingPreview 
-                          ? 'rgba(139,92,246,0.5)'
-                          : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
-                        border: 'none',
-                        color: 'white',
-                        padding: '0.75rem 1.5rem',
-                        borderRadius: '8px',
-                        cursor: generatingPreview ? 'not-allowed' : 'pointer',
-                        fontWeight: '600',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '0.5rem',
-                        transition: 'all 0.3s ease',
-                        whiteSpace: 'nowrap',
-                        minWidth: '180px',
-                        alignSelf: 'end'
-                      }}
-                    >
-                      {generatingPreview ? (
-                        <>
-                          <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Zap size={18} />
-                          {editMode && pdfFiles.length === 0 ? 'Generate from Existing' : 'Generate Preview'}
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  {previewPages.length > 0 && (
-                    <div>
+                {/* Multi-PDF Upload */}
+                {!isBundle && (
+                  <div>
+                    <label style={{
+                      display: 'block',
+                      marginBottom: '0.75rem',
+                      fontSize: '1.05rem',
+                      fontWeight: '700',
+                      color: '#1e293b'
+                    }}>
+                      {editMode ? 'Add More PDFs (Optional)' : 'Upload PDFs * (Multiple files allowed)'}
+                    </label>
+                    
+                    {/* Selected PDFs List */}
+                    {pdfFiles.length > 0 && (
                       <div style={{
+                        marginBottom: '1rem',
                         display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '1rem'
+                        flexDirection: 'column',
+                        gap: '0.5rem'
                       }}>
-                        <label style={{
-                          fontSize: '0.95rem',
-                          fontWeight: '600',
-                          color: '#1e293b'
-                        }}>
-                          New Preview Pages ({previewPages.length})
-                        </label>
-                        <span style={{
-                          fontSize: '0.85rem',
-                          color: '#10b981',
-                          fontWeight: '600',
-                          background: 'rgba(16,185,129,0.1)',
-                          padding: '0.25rem 0.75rem',
-                          borderRadius: '20px'
-                        }}>
-                          ✅ Ready to save
-                        </span>
-                      </div>
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-                        gap: '1rem',
-                        maxHeight: '400px',
-                        overflowY: 'auto',
-                        padding: '1rem',
-                        background: '#ffffff',
-                        borderRadius: '8px',
-                        border: '1px solid #e2e8f0'
-                      }}>
-                        {previewPages.map((page, index) => (
+                        {pdfFiles.map((file, index) => (
                           <div key={index} style={{
-                            position: 'relative',
-                            border: '2px solid #e2e8f0',
-                            borderRadius: '8px',
-                            overflow: 'hidden',
-                            background: '#fff',
-                            transition: 'transform 0.2s ease',
-                            cursor: 'pointer'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-                          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                          >
-                            <img
-                              src={page.imageData}
-                              alt={`Page ${page.pageNumber}`}
-                              style={{
-                                width: '100%',
-                                height: 'auto',
-                                display: 'block'
-                              }}
-                            />
-                            <div style={{
-                              position: 'absolute',
-                              top: '0.5rem',
-                              left: '0.5rem',
-                              background: 'rgba(139,92,246,0.9)',
-                              color: '#fff',
-                              padding: '0.25rem 0.5rem',
-                              borderRadius: '4px',
-                              fontSize: '0.75rem',
-                              fontWeight: '700'
-                            }}>
-                              Page {page.pageNumber}
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '0.75rem 1rem',
+                            background: 'rgba(16,185,129,0.05)',
+                            border: '1px solid rgba(16,185,129,0.2)',
+                            borderRadius: '8px'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <FileText size={20} color="#10b981" />
+                              <div>
+                                <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
+                                  {file.name}
+                                </div>
+                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                                </div>
+                              </div>
                             </div>
                             <button
                               type="button"
-                              onClick={() => removePreviewPage(index)}
+                              onClick={() => removePdf(index)}
                               style={{
-                                position: 'absolute',
-                                top: '0.5rem',
-                                right: '0.5rem',
-                                background: 'rgba(239,68,68,0.9)',
+                                background: 'rgba(239,68,68,0.1)',
                                 border: 'none',
-                                borderRadius: '4px',
-                                padding: '0.25rem',
+                                borderRadius: '6px',
+                                padding: '0.5rem',
                                 cursor: 'pointer',
                                 display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'transform 0.2s ease'
+                                alignItems: 'center'
                               }}
                             >
-                              <X size={14} color="#fff" />
+                              <X size={16} color="#ef4444" />
                             </button>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {previewPages.length === 0 && (!editMode || !editingProduct?.previewPages || editingProduct.previewPages.length === 0) && (
-                    <div style={{
-                      padding: '1rem',
-                      background: 'rgba(99,102,241,0.05)',
-                      border: '1px solid rgba(99,102,241,0.2)',
-                      borderRadius: '8px',
-                      fontSize: '0.9rem',
-                      color: '#6366f1'
-                    }}>
-                      💡 <strong>Tip:</strong> {editMode 
-                        ? 'Click "Generate from Existing" to create preview pages from the current PDF files, or upload new PDFs above.'
-                        : 'Preview pages will be automatically extracted from the first uploaded PDF. Customers will see these pages before purchasing to check quality.'
-                      }
+                    <label style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '1rem',
+                      padding: '1.5rem',
+                      border: '2px dashed #cbd5e1',
+                      borderRadius: '12px',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      background: pdfFiles.length > 0 ? 'rgba(16,185,129,0.05)' : 'transparent'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
+                    >
+                      <Upload size={24} color={pdfFiles.length > 0 ? '#10b981' : '#64748b'} />
+                      <div>
+                        <div style={{ fontWeight: '600', color: '#1e293b' }}>
+                          {pdfFiles.length > 0 ? `✅ ${pdfFiles.length} PDF(s) selected` : 'Click to upload PDFs'}
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                          You can select multiple PDF files
+                        </div>
+                      </div>
+                      <input
+                        type="file"
+                        accept=".pdf"
+                        multiple
+                        onChange={handlePdfChange}
+                        style={{ display: 'none' }}
+                      />
+                    </label>
+                  </div>
+                )}
+
+                {/* Thumbnail Upload */}
+                <div>
+                  <label style={{
+                    display: 'block',
+                    marginBottom: '0.75rem',
+                    fontSize: '1.05rem',
+                    fontWeight: '700',
+                    color: '#1e293b'
+                  }}>
+                    {editMode ? 'Change Thumbnail (Optional)' : 'Upload Thumbnail (Optional)'}
+                  </label>
+                  <label style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    padding: '1.5rem',
+                    border: '2px dashed #cbd5e1',
+                    borderRadius: '12px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s ease',
+                    background: thumbnailPreview ? 'rgba(16,185,129,0.05)' : 'transparent'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
+                  onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
+                  >
+                    <ImageIcon size={24} color={thumbnailPreview ? '#10b981' : '#64748b'} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: '600', color: '#1e293b' }}>
+                        {thumbnailFile ? `✅ ${thumbnailFile.name}` : (thumbnailPreview ? '✅ Current thumbnail' : 'Click to upload thumbnail')}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                        PNG, JPG (recommended: 400x300px)
+                      </div>
                     </div>
-                  )}
+                    {thumbnailPreview && (
+                      <img 
+                        src={thumbnailPreview} 
+                        alt="Preview" 
+                        style={{
+                          width: '80px',
+                          height: '60px',
+                          objectFit: 'cover',
+                          borderRadius: '8px'
+                        }}
+                      />
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleThumbnailChange}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
                 </div>
-              </div>
-            )}
 
-            <button 
-              type="submit" 
-              disabled={uploading}
-              style={{
-                width: '100%',
-                background: uploading 
-                  ? 'linear-gradient(135deg, #94a3b8, #cbd5e1)' 
-                  : editMode 
-                    ? 'linear-gradient(135deg, #f59e0b, #d97706)'
-                    : 'linear-gradient(135deg, #10b981, #059669)',
-                border: 'none',
-                color: 'white',
-                padding: '1.25rem',
-                fontSize: '1.25rem',
-                borderRadius: '14px',
-                cursor: uploading ? 'not-allowed' : 'pointer',
-                fontWeight: '700',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.75rem',
-                boxShadow: editMode ? '0 8px 25px rgba(245,158,11,0.3)' : '0 8px 25px rgba(16,185,129,0.3)',
-                transition: 'all 0.3s ease',
-                opacity: uploading ? 0.7 : 1
-              }}
-            >
-              {uploading ? (
-                <>
-                  <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} />
-                  {editMode ? 'Updating...' : (isBundle ? 'Creating Bundle...' : `Uploading ${pdfFiles.length} PDF(s)...`)}
-                </>
-              ) : (
-                <>
-                  {editMode ? <Save size={24} /> : <Upload size={24} />}
-                  {editMode ? 'Save Changes' : (isBundle ? 'Create Bundle' : 'Upload Product')}
-                </>
-              )}
-            </button>
-          </form>
+                {/* Preview Pages */}
+                {!isBundle && (pdfFiles.length > 0 || (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0)) && (
+                  <div style={{
+                    background: 'rgba(139,92,246,0.05)',
+                    border: '2px solid rgba(139,92,246,0.2)',
+                    borderRadius: '16px',
+                    padding: '2rem'
+                  }}>
+                    <div style={{
+                      marginBottom: '1.5rem'
+                    }}>
+                      <h3 style={{
+                        fontSize: '1.2rem',
+                        fontWeight: '700',
+                        color: '#8b5cf6',
+                        marginBottom: '0.5rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}>
+                        <FileText size={24} />
+                        Preview Pages Setup
+                      </h3>
+                      <p style={{
+                        fontSize: '0.9rem',
+                        color: '#64748b',
+                        margin: 0
+                      }}>
+                        {editMode && pdfFiles.length === 0 
+                          ? `Generate preview from existing PDF: ${editingProduct?.pdfFiles?.[0]?.fileName || 'uploaded PDF'}`
+                          : `Generate preview pages from ${pdfFiles[0]?.name || 'uploaded PDF'}`
+                        }
+                      </p>
+                    </div>
+
+                    {editMode && editingProduct && editingProduct.previewPages && editingProduct.previewPages.length > 0 && (
+                      <div style={{
+                        marginBottom: '1.5rem',
+                        padding: '1rem',
+                        background: 'rgba(16,185,129,0.05)',
+                        border: '1px solid rgba(16,185,129,0.2)',
+                        borderRadius: '12px'
+                      }}>
+                        <div style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '1rem'
+                        }}>
+                          <span style={{
+                            fontSize: '0.95rem',
+                            fontWeight: '600',
+                            color: '#10b981'
+                          }}>
+                            ✅ Current Preview ({editingProduct.previewPages.length} pages)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingProduct({
+                                ...editingProduct,
+                                previewPages: []
+                              });
+                              setPreviewPages([]);
+                              window.showToast?.('🗑️ Preview pages cleared. Generate new ones below.', 'info');
+                            }}
+                            style={{
+                              background: 'rgba(239,68,68,0.1)',
+                              border: '1px solid rgba(239,68,68,0.3)',
+                              color: '#ef4444',
+                              padding: '0.4rem 0.75rem',
+                              borderRadius: '6px',
+                              fontSize: '0.8rem',
+                              fontWeight: '600',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Clear Preview
+                          </button>
+                        </div>
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                          gap: '0.75rem',
+                          maxHeight: '200px',
+                          overflowY: 'auto'
+                        }}>
+                          {editingProduct.previewPages.map((page, index) => (
+                            <div key={index} style={{
+                              border: '2px solid #10b981',
+                              borderRadius: '8px',
+                              overflow: 'hidden',
+                              position: 'relative'
+                            }}>
+                              <img
+                                src={page.imageData}
+                                alt={`Page ${page.pageNumber}`}
+                                style={{
+                                  width: '100%',
+                                  height: 'auto',
+                                  display: 'block'
+                                }}
+                              />
+                              <div style={{
+                                position: 'absolute',
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                background: 'rgba(16,185,129,0.9)',
+                                color: '#fff',
+                                padding: '0.25rem',
+                                fontSize: '0.7rem',
+                                fontWeight: '600',
+                                textAlign: 'center'
+                              }}>
+                                P{page.pageNumber}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '1.5rem'
+                    }}>
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: '1fr auto',
+                        gap: '1rem',
+                        alignItems: 'center'
+                      }}>
+                        <div>
+                          <label style={{
+                            display: 'block',
+                            marginBottom: '0.5rem',
+                            fontSize: '0.95rem',
+                            fontWeight: '600',
+                            color: '#1e293b'
+                          }}>
+                            How many pages to show as preview?
+                          </label>
+                          <select
+                            value={formData.previewPageCount}
+                            onChange={(e) => setFormData({...formData, previewPageCount: e.target.value})}
+                            style={{
+                              width: '100%',
+                              padding: '0.75rem',
+                              border: '2px solid #e2e8f0',
+                              borderRadius: '8px',
+                              fontSize: '1rem',
+                              outline: 'none'
+                            }}
+                          >
+                            <option value="1">First 1 Page</option>
+                            <option value="2">First 2 Pages</option>
+                            <option value="3">First 3 Pages</option>
+                            <option value="4">First 4 Pages</option>
+                            <option value="5">First 5 Pages</option>
+                            <option value="10">First 10 Pages</option>
+                          </select>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (pdfFiles.length > 0) {
+                              await generatePreviewFromUploadedPDF();
+                            } else if (editMode && editingProduct && editingProduct.pdfFiles && editingProduct.pdfFiles.length > 0) {
+                              await generatePreviewFromExistingPDF();
+                            } else {
+                              window.showToast?.('⚠️ No PDF available to generate preview!', 'warning');
+                            }
+                          }}
+                          disabled={generatingPreview}
+                          style={{
+                            background: generatingPreview 
+                              ? 'rgba(139,92,246,0.5)'
+                              : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
+                            border: 'none',
+                            color: 'white',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: '8px',
+                            cursor: generatingPreview ? 'not-allowed' : 'pointer',
+                            fontWeight: '600',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            gap: '0.5rem',
+                            transition: 'all 0.3s ease',
+                            whiteSpace: 'nowrap',
+                            minWidth: '180px',
+                            alignSelf: 'end'
+                          }}
+                        >
+                          {generatingPreview ? (
+                            <>
+                              <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} />
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <Zap size={18} />
+                              {editMode && pdfFiles.length === 0 ? 'Generate from Existing' : 'Generate Preview'}
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {previewPages.length > 0 && (
+                        <div>
+                          <div style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '1rem'
+                          }}>
+                            <label style={{
+                              fontSize: '0.95rem',
+                              fontWeight: '600',
+                              color: '#1e293b'
+                            }}>
+                              New Preview Pages ({previewPages.length})
+                            </label>
+                            <span style={{
+                              fontSize: '0.85rem',
+                              color: '#10b981',
+                              fontWeight: '600',
+                              background: 'rgba(16,185,129,0.1)',
+                              padding: '0.25rem 0.75rem',
+                              borderRadius: '20px'
+                            }}>
+                              ✅ Ready to save
+                            </span>
+                          </div>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                            gap: '1rem',
+                            maxHeight: '400px',
+                            overflowY: 'auto',
+                            padding: '1rem',
+                            background: '#ffffff',
+                            borderRadius: '8px',
+                            border: '1px solid #e2e8f0'
+                          }}>
+                            {previewPages.map((page, index) => (
+                              <div key={index} style={{
+                                position: 'relative',
+                                border: '2px solid #e2e8f0',
+                                borderRadius: '8px',
+                                overflow: 'hidden',
+                                background: '#fff',
+                                transition: 'transform 0.2s ease',
+                                cursor: 'pointer'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                              onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                              >
+                                <img
+                                  src={page.imageData}
+                                  alt={`Page ${page.pageNumber}`}
+                                  style={{
+                                    width: '100%',
+                                    height: 'auto',
+                                    display: 'block'
+                                  }}
+                                />
+                                <div style={{
+                                  position: 'absolute',
+                                  top: '0.5rem',
+                                  left: '0.5rem',
+                                  background: 'rgba(139,92,246,0.9)',
+                                  color: '#fff',
+                                  padding: '0.25rem 0.5rem',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: '700'
+                                }}>
+                                  Page {page.pageNumber}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removePreviewPage(index)}
+                                  style={{
+                                    position: 'absolute',
+                                    top: '0.5rem',
+                                    right: '0.5rem',
+                                    background: 'rgba(239,68,68,0.9)',
+                                    border: 'none',
+                                    borderRadius: '4px',
+                                    padding: '0.25rem',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    transition: 'transform 0.2s ease'
+                                  }}
+                                >
+                                  <X size={14} color="#fff" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {previewPages.length === 0 && (!editMode || !editingProduct?.previewPages || editingProduct.previewPages.length === 0) && (
+                        <div style={{
+                          padding: '1rem',
+                          background: 'rgba(99,102,241,0.05)',
+                          border: '1px solid rgba(99,102,241,0.2)',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem',
+                          color: '#6366f1'
+                        }}>
+                          💡 <strong>Tip:</strong> {editMode 
+                            ? 'Click "Generate from Existing" to create preview pages from the current PDF files, or upload new PDFs above.'
+                            : 'Preview pages will be automatically extracted from the first uploaded PDF. Customers will see these pages before purchasing to check quality.'
+                          }
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                <button 
+                  type="submit" 
+                  disabled={uploading}
+                  style={{
+                    width: '100%',
+                    background: uploading 
+                      ? 'linear-gradient(135deg, #94a3b8, #cbd5e1)' 
+                      : editMode 
+                        ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                        : 'linear-gradient(135deg, #10b981, #059669)',
+                    border: 'none',
+                    color: 'white',
+                    padding: '1.25rem',
+                    fontSize: '1.25rem',
+                    borderRadius: '14px',
+                    cursor: uploading ? 'not-allowed' : 'pointer',
+                    fontWeight: '700',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.75rem',
+                    boxShadow: editMode ? '0 8px 25px rgba(245,158,11,0.3)' : '0 8px 25px rgba(16,185,129,0.3)',
+                    transition: 'all 0.3s ease',
+                    opacity: uploading ? 0.7 : 1
+                  }}
+                >
+                  {uploading ? (
+                    <>
+                      <Loader size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                      {editMode ? 'Updating...' : (isBundle ? 'Creating Bundle...' : `Uploading ${pdfFiles.length} PDF(s)...`)}
+                    </>
+                  ) : (
+                    <>
+                      {editMode ? <Save size={24} /> : <Upload size={24} />}
+                      {editMode ? 'Save Changes' : (isBundle ? 'Create Bundle' : 'Upload Product')}
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Products List with Search */}
+          <div style={{
+            maxWidth: '1400px',
+            margin: '0 auto'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '2rem',
+              gap: '1rem',
+              flexWrap: 'wrap'
+            }}>
+              <h2 style={{
+                fontSize: '2rem',
+                fontWeight: '900',
+                color: '#1e293b',
+                margin: 0
+              }}>
+                All Products ({filteredProducts.length})
+              </h2>
+              
+              {/* Search Bar */}
+              <div style={{
+                position: 'relative',
+                flex: '1',
+                maxWidth: '400px',
+                minWidth: '250px'
+              }}>
+                <Search size={20} color="#64748b" style={{
+                  position: 'absolute',
+                  left: '1rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)'
+                }} />
+                <input
+                  type="text"
+                  placeholder="Search products..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem 0.75rem 3rem',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: '12px',
+                    fontSize: '1rem',
+                    outline: 'none',
+                    transition: 'border-color 0.3s'
+                  }}
+                  onFocus={(e) => e.target.style.borderColor = '#6366f1'}
+                  onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
+                />
+              </div>
+            </div>
+
+            <div style={{
+              display: 'grid',
+              gap: '1.5rem'
+            }}>
+              {filteredProducts.map((product, index) => (
+                <div 
+                  key={product.id} 
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '20px',
+                    padding: '2rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2rem',
+                    flexWrap: 'wrap',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+                    animation: `fadeInUp 0.4s ease ${index * 0.05}s backwards`
+                  }}
+                >
+                  {/* Thumbnail */}
+                  <div style={{
+                    background: product.thumbnail 
+                      ? `url(${product.thumbnail})` 
+                      : 'linear-gradient(135deg, #6366f1, #ec4899)',
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    width: '100px',
+                    height: '100px',
+                    borderRadius: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    fontSize: product.thumbnail ? '0' : '3rem'
+                  }}>
+                    {!product.thumbnail && (product.image || '📚')}
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: '250px' }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      marginBottom: '0.5rem',
+                      flexWrap: 'wrap'
+                    }}>
+                      <h3 style={{
+                        fontSize: '1.5rem',
+                        fontWeight: '800',
+                        color: '#1e293b'
+                      }}>
+                        {product.title}
+                      </h3>
+                      {product.isBundle && (
+                        <span style={{
+                          background: 'linear-gradient(135deg, #10b981, #059669)',
+                          color: '#fff',
+                          padding: '0.3rem 0.75rem',
+                          borderRadius: '20px',
+                          fontSize: '0.75rem',
+                          fontWeight: '700',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.25rem'
+                        }}>
+                          <Package size={14} /> BUNDLE
+                        </span>
+                      )}
+                      {product.discountPercent && (
+                        <span style={{
+                          background: 'rgba(239,68,68,0.1)',
+                          color: '#ef4444',
+                          padding: '0.3rem 0.75rem',
+                          borderRadius: '20px',
+                          fontSize: '0.75rem',
+                          fontWeight: '700'
+                        }}>
+                          {product.discountPercent}% OFF
+                        </span>
+                      )}
+                      {product.pdfFiles && product.pdfFiles.length > 0 ? (
+                        <span style={{
+                          background: 'rgba(16,185,129,0.1)',
+                          color: '#10b981',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '20px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600'
+                        }}>
+                          ✅ {product.pdfFiles.length} PDF{product.pdfFiles.length > 1 ? 's' : ''}
+                        </span>
+                      ) : product.isBundle ? (
+                        <span style={{
+                          background: 'rgba(99,102,241,0.1)',
+                          color: '#6366f1',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '20px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600'
+                        }}>
+                          📦 {product.bundledProducts?.length || 0} Items
+                        </span>
+                      ) : (
+                        <span style={{
+                          background: 'rgba(239,68,68,0.1)',
+                          color: '#ef4444',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '20px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600'
+                        }}>
+                          ❌ No PDF
+                        </span>
+                      )}
+                      {currentUser && product.userId === currentUser.uid && (
+                        <span style={{
+                          background: 'rgba(99,102,241,0.1)',
+                          color: '#6366f1',
+                          padding: '0.2rem 0.6rem',
+                          borderRadius: '20px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600'
+                        }}>
+                          👤 Your Product
+                        </span>
+                      )}
+                    </div>
+                    <p style={{
+                      color: '#64748b',
+                      marginBottom: '0.5rem',
+                      fontSize: '1rem'
+                    }}>
+                      {product.description}
+                    </p>
+                    <div style={{
+                      display: 'flex',
+                      gap: '1rem',
+                      flexWrap: 'wrap',
+                      fontSize: '0.9rem',
+                      color: '#64748b'
+                    }}>
+                      <span>Category: {product.customCategory || product.category}</span>
+                      <span>•</span>
+                      <span>{product.pages} pages</span>
+                      <span>•</span>
+                      <span>{product.fileSize}</span>
+                      <span>•</span>
+                      <span>📥 {product.totalDownloads || 0} downloads</span>
+                      <span>•</span>
+                      <span>💰 ₹{product.totalRevenue || 0} revenue</span>
+                    </div>
+                    {product.isBundle && product.bundleInfo && (
+                      <div style={{
+                        marginTop: '0.75rem',
+                        padding: '0.75rem',
+                        background: 'rgba(16,185,129,0.05)',
+                        borderRadius: '8px',
+                        fontSize: '0.9rem',
+                        color: '#10b981',
+                        fontWeight: '600'
+                      }}>
+                        Save ₹{product.bundleInfo.savings} • {product.bundleInfo.discount}% OFF
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{
+                      textAlign: 'center'
+                    }}>
+                      {product.originalPrice && (
+                        <div style={{
+                          fontSize: '1rem',
+                          color: '#94a3b8',
+                          textDecoration: 'line-through',
+                          marginBottom: '0.25rem'
+                        }}>
+                          ₹{product.originalPrice}
+                        </div>
+                      )}
+                      <div style={{
+                        fontSize: '2.5rem',
+                        fontWeight: '900',
+                        background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent'
+                      }}>
+                        ₹{product.price}
+                      </div>
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {currentUser && product.userId === currentUser.uid && (
+                        <button 
+                          onClick={() => startEditProduct(product)}
+                          style={{
+                            background: 'rgba(245,158,11,0.1)',
+                            border: '2px solid rgba(245,158,11,0.2)',
+                            padding: '0.75rem',
+                            borderRadius: '12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(245,158,11,0.2)';
+                            e.currentTarget.style.transform = 'scale(1.1)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(245,158,11,0.1)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                          }}
+                        >
+                          <Edit size={24} color="#f59e0b" />
+                        </button>
+                      )}
+                      
+                      <button 
+                        onClick={() => setConfirmDelete(product.id)}
+                        style={{
+                          background: 'rgba(239,68,68,0.1)',
+                          border: '2px solid rgba(239,68,68,0.2)',
+                          padding: '0.75rem',
+                          borderRadius: '12px',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
+                          e.currentTarget.style.transform = 'scale(1.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
+                          e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                      >
+                        <Trash2 size={24} color="#ef4444" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ✅ QUESTIONS TAB */}
+      {activeTab === 'questions' && (
+        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+          <AdminQuestions />
         </div>
       )}
 
-      {/* Products List with Search */}
-      <div style={{
-        maxWidth: '1400px',
-        margin: '0 auto'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2rem',
-          gap: '1rem',
-          flexWrap: 'wrap'
-        }}>
-          <h2 style={{
-            fontSize: '2rem',
-            fontWeight: '900',
-            color: '#1e293b',
-            margin: 0
-          }}>
-            All Products ({filteredProducts.length})
-          </h2>
-          
-          {/* Search Bar */}
+      {/* ✅ ORDERS TAB */}
+      {activeTab === 'orders' && (
+        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
           <div style={{
-            position: 'relative',
-            flex: '1',
-            maxWidth: '400px',
-            minWidth: '250px'
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '2rem',
+            flexWrap: 'wrap',
+            gap: '1rem'
           }}>
-            <Search size={20} color="#64748b" style={{
-              position: 'absolute',
-              left: '1rem',
-              top: '50%',
-              transform: 'translateY(-50%)'
-            }} />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.75rem 1rem 0.75rem 3rem',
-                border: '2px solid #e2e8f0',
-                borderRadius: '12px',
-                fontSize: '1rem',
-                outline: 'none',
-                transition: 'border-color 0.3s'
-              }}
-              onFocus={(e) => e.target.style.borderColor = '#6366f1'}
-              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-            />
+            <h2 style={{
+              fontSize: '2rem',
+              fontWeight: '900',
+              color: '#1e293b',
+              margin: 0
+            }}>
+              All Orders ({orders.length})
+            </h2>
+            <div style={{
+              padding: '0.6rem 1.25rem',
+              background: 'rgba(16,185,129,0.1)',
+              border: '1px solid rgba(16,185,129,0.3)',
+              borderRadius: '12px',
+              fontSize: '1rem',
+              fontWeight: '700',
+              color: '#10b981'
+            }}>
+              Total Revenue: ₹{totalRevenue}
+            </div>
           </div>
-        </div>
 
-        <div style={{
-          display: 'grid',
-          gap: '1.5rem'
-        }}>
-          {filteredProducts.map((product, index) => (
-            <div 
-              key={product.id} 
-              style={{
-                background: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '20px',
-                padding: '2rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2rem',
-                flexWrap: 'wrap',
-                boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-                animation: `fadeInUp 0.4s ease ${index * 0.05}s backwards`
-              }}
-            >
-              {/* Thumbnail */}
-              <div style={{
-                background: product.thumbnail 
-                  ? `url(${product.thumbnail})` 
-                  : 'linear-gradient(135deg, #6366f1, #ec4899)',
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                width: '100px',
-                height: '100px',
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                fontSize: product.thumbnail ? '0' : '3rem'
-              }}>
-                {!product.thumbnail && (product.image || '📚')}
+          {orders.length === 0 ? (
+            <div style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: '20px',
+              padding: '4rem',
+              textAlign: 'center',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📦</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>
+                No orders yet
               </div>
-
-              <div style={{ flex: 1, minWidth: '250px' }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.75rem',
-                  marginBottom: '0.5rem',
-                  flexWrap: 'wrap'
-                }}>
-                  <h3 style={{
-                    fontSize: '1.5rem',
-                    fontWeight: '800',
-                    color: '#1e293b'
-                  }}>
-                    {product.title}
-                  </h3>
-                  {product.isBundle && (
-                    <span style={{
-                      background: 'linear-gradient(135deg, #10b981, #059669)',
-                      color: '#fff',
-                      padding: '0.3rem 0.75rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.25rem'
-                    }}>
-                      <Package size={14} /> BUNDLE
-                    </span>
-                  )}
-                  {product.discountPercent && (
-                    <span style={{
-                      background: 'rgba(239,68,68,0.1)',
-                      color: '#ef4444',
-                      padding: '0.3rem 0.75rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700'
-                    }}>
-                      {product.discountPercent}% OFF
-                    </span>
-                  )}
-                  {product.pdfFiles && product.pdfFiles.length > 0 ? (
-                    <span style={{
-                      background: 'rgba(16,185,129,0.1)',
-                      color: '#10b981',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600'
-                    }}>
-                      ✅ {product.pdfFiles.length} PDF{product.pdfFiles.length > 1 ? 's' : ''}
-                    </span>
-                  ) : product.isBundle ? (
-                    <span style={{
-                      background: 'rgba(99,102,241,0.1)',
-                      color: '#6366f1',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600'
-                    }}>
-                      📦 {product.bundledProducts?.length || 0} Items
-                    </span>
-                  ) : (
-                    <span style={{
-                      background: 'rgba(239,68,68,0.1)',
-                      color: '#ef4444',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600'
-                    }}>
-                      ❌ No PDF
-                    </span>
-                  )}
-                  {currentUser && product.userId === currentUser.uid && (
-                    <span style={{
-                      background: 'rgba(99,102,241,0.1)',
-                      color: '#6366f1',
-                      padding: '0.2rem 0.6rem',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600'
-                    }}>
-                      👤 Your Product
-                    </span>
-                  )}
-                </div>
-                <p style={{
-                  color: '#64748b',
-                  marginBottom: '0.5rem',
-                  fontSize: '1rem'
-                }}>
-                  {product.description}
-                </p>
-                <div style={{
-                  display: 'flex',
-                  gap: '1rem',
-                  flexWrap: 'wrap',
-                  fontSize: '0.9rem',
-                  color: '#64748b'
-                }}>
-                  <span>Category: {product.customCategory || product.category}</span>
-                  <span>•</span>
-                  <span>{product.pages} pages</span>
-                  <span>•</span>
-                  <span>{product.fileSize}</span>
-                  <span>•</span>
-                  <span>📥 {product.totalDownloads || 0} downloads</span>
-                  <span>•</span>
-                  <span>💰 ₹{product.totalRevenue || 0} revenue</span>
-                </div>
-                {product.isBundle && product.bundleInfo && (
-                  <div style={{
-                    marginTop: '0.75rem',
-                    padding: '0.75rem',
-                    background: 'rgba(16,185,129,0.05)',
-                    borderRadius: '8px',
-                    fontSize: '0.9rem',
-                    color: '#10b981',
-                    fontWeight: '600'
-                  }}>
-                    Save ₹{product.bundleInfo.savings} • {product.bundleInfo.discount}% OFF
-                  </div>
-                )}
-              </div>
-
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '1rem',
-                flexDirection: 'column'
-              }}>
-                <div style={{
-                  textAlign: 'center'
-                }}>
-                  {product.originalPrice && (
-                    <div style={{
-                      fontSize: '1rem',
-                      color: '#94a3b8',
-                      textDecoration: 'line-through',
-                      marginBottom: '0.25rem'
-                    }}>
-                      ₹{product.originalPrice}
-                    </div>
-                  )}
-                  <div style={{
-                    fontSize: '2.5rem',
-                    fontWeight: '900',
-                    background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent'
-                  }}>
-                    ₹{product.price}
-                  </div>
-                </div>
-                
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  {currentUser && product.userId === currentUser.uid && (
-                    <button 
-                      onClick={() => startEditProduct(product)}
-                      style={{
-                        background: 'rgba(245,158,11,0.1)',
-                        border: '2px solid rgba(245,158,11,0.2)',
-                        padding: '0.75rem',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease'
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(245,158,11,0.2)';
-                        e.currentTarget.style.transform = 'scale(1.1)';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(245,158,11,0.1)';
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }}
-                    >
-                      <Edit size={24} color="#f59e0b" />
-                    </button>
-                  )}
-                  
-                  <button 
-                    onClick={() => setConfirmDelete(product.id)}
-                    style={{
-                      background: 'rgba(239,68,68,0.1)',
-                      border: '2px solid rgba(239,68,68,0.2)',
-                      padding: '0.75rem',
-                      borderRadius: '12px',
-                      cursor: 'pointer',
-                      transition: 'all 0.3s ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(239,68,68,0.2)';
-                      e.currentTarget.style.transform = 'scale(1.1)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(239,68,68,0.1)';
-                      e.currentTarget.style.transform = 'scale(1)';
-                    }}
-                  >
-                    <Trash2 size={24} color="#ef4444" />
-                  </button>
-                </div>
+              <div style={{ color: '#64748b', fontSize: '1rem' }}>
+                Orders will appear here once customers make purchases.
               </div>
             </div>
-          ))}
+          ) : (
+            <div style={{ display: 'grid', gap: '1.5rem' }}>
+              {orders.map((order, index) => (
+                <div
+                  key={order.id}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '20px',
+                    padding: '2rem',
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+                    animation: `fadeInUp 0.4s ease ${index * 0.05}s backwards`
+                  }}
+                >
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    flexWrap: 'wrap',
+                    gap: '1rem',
+                    marginBottom: '1rem'
+                  }}>
+                    <div>
+                      <div style={{
+                        fontSize: '1.1rem',
+                        fontWeight: '800',
+                        color: '#1e293b',
+                        marginBottom: '0.25rem'
+                      }}>
+                        Order #{order.id?.slice(-8)?.toUpperCase() || index + 1}
+                      </div>
+                      <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                        {order.userEmail || 'No email'}
+                      </div>
+                      {order.createdAt && (
+                        <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+                          {new Date(order.createdAt?.seconds ? order.createdAt.seconds * 1000 : order.createdAt).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{
+                        fontSize: '2rem',
+                        fontWeight: '900',
+                        background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent'
+                      }}>
+                        ₹{order.total}
+                      </div>
+                      <span style={{
+                        display: 'inline-block',
+                        marginTop: '0.25rem',
+                        padding: '0.25rem 0.75rem',
+                        background: order.status === 'completed'
+                          ? 'rgba(16,185,129,0.1)'
+                          : 'rgba(245,158,11,0.1)',
+                        color: order.status === 'completed' ? '#10b981' : '#f59e0b',
+                        borderRadius: '20px',
+                        fontSize: '0.8rem',
+                        fontWeight: '700',
+                        textTransform: 'capitalize'
+                      }}>
+                        {order.status || 'pending'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {order.items && order.items.length > 0 && (
+                    <div style={{
+                      borderTop: '1px solid #f1f5f9',
+                      paddingTop: '1rem',
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem'
+                    }}>
+                      {order.items.map((item, i) => (
+                        <span key={i} style={{
+                          background: 'rgba(99,102,241,0.07)',
+                          border: '1px solid rgba(99,102,241,0.15)',
+                          color: '#6366f1',
+                          padding: '0.35rem 0.85rem',
+                          borderRadius: '20px',
+                          fontSize: '0.85rem',
+                          fontWeight: '600'
+                        }}>
+                          {item.title || item.name || `Item ${i + 1}`}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Confirm Delete Modal */}
       <ConfirmModal

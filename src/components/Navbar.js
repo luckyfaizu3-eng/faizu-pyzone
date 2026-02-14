@@ -222,6 +222,26 @@ const Navbar = ({
               >
                 Browse Notes
               </button>
+
+              {/* ✅ MOCK TESTS BUTTON */}
+              <button 
+                onClick={() => setCurrentPage('mocktests')} 
+                style={{
+                  background: currentPage === 'mocktests' 
+                    ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                    : 'transparent',
+                  border: 'none',
+                  color: currentPage === 'mocktests' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: '600',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '20px',
+                  transition: 'all 0.3s ease'
+                }}
+              >
+                🐍 Mock Tests
+              </button>
               
               {user?.isAdmin && (
                 <button 
@@ -584,6 +604,27 @@ const Navbar = ({
               }}
             >
               📚 Browse Notes
+            </button>
+
+            {/* ✅ MOCK TESTS BUTTON - MOBILE */}
+            <button 
+              onClick={() => handleNavClick('mocktests')} 
+              style={{
+                background: currentPage === 'mocktests' 
+                  ? (isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)') 
+                  : 'transparent',
+                border: 'none',
+                color: currentPage === 'mocktests' ? '#6366f1' : (isDark ? '#cbd5e1' : '#64748b'),
+                cursor: 'pointer',
+                fontSize: '1rem',
+                fontWeight: '600',
+                padding: '1rem',
+                borderRadius: '12px',
+                textAlign: 'left',
+                transition: 'all 0.2s'
+              }}
+            >
+              🐍 Mock Tests
             </button>
             
             {user?.isAdmin && (

@@ -10,7 +10,9 @@ import {
   orderBy,
   serverTimestamp,
   arrayUnion,
-  where
+  where,
+  setDoc,
+  getDoc
 } from 'firebase/firestore';
 
 // Cloudinary Config
@@ -21,7 +23,6 @@ const CLOUDINARY_UPLOAD_PRESET = 'ml_default';
 const PRODUCTS_COLLECTION = 'products';
 const ORDERS_COLLECTION = 'orders';
 
-// ✅ SIMPLIFIED: Upload PDF without fl_attachment complications
 export const uploadPDF = async (file, folder = 'pdfs') => {
   try {
     console.log('📤 Uploading PDF to Cloudinary...');
@@ -30,21 +31,17 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
     formData.append('folder', folder);
-    formData.append('resource_type', 'raw'); // ✅ Critical: PDFs must use 'raw' type
+    formData.append('resource_type', 'raw');
 
-    // ✅ Use /raw/upload endpoint
     const response = await fetch(
       `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,
       { method: 'POST', body: formData }
     );
 
     const result = await response.json();
-    console.log('Cloudinary response:', result);
 
     if (result.secure_url) {
-      // ✅ Use simple raw URL without fl_attachment
       const downloadUrl = result.secure_url;
-      
       console.log('✅ PDF uploaded:', downloadUrl);
       return { 
         success: true, 
@@ -65,7 +62,6 @@ export const uploadPDF = async (file, folder = 'pdfs') => {
   }
 };
 
-// Upload Image to Cloudinary
 export const uploadImage = async (file) => {
   try {
     console.log('Uploading image...');
@@ -99,7 +95,6 @@ export const uploadImage = async (file) => {
   }
 };
 
-// ✅ FIXED: Add Product with userId
 export const addProduct = async (productData, userId) => {
   try {
     if (!userId) {
@@ -108,7 +103,7 @@ export const addProduct = async (productData, userId) => {
 
     const docRef = await addDoc(collection(db, PRODUCTS_COLLECTION), {
       ...productData,
-      userId: userId, // ✅ Store userId for security rules
+      userId: userId,
       createdAt: serverTimestamp(),
       totalDownloads: 0,
       reviews: []
@@ -122,7 +117,6 @@ export const addProduct = async (productData, userId) => {
   }
 };
 
-// ✅ FIXED: Get All Products (with better error handling)
 export const getAllProducts = async () => {
   try {
     const q = query(collection(db, PRODUCTS_COLLECTION), orderBy('createdAt', 'desc'));
@@ -138,7 +132,6 @@ export const getAllProducts = async () => {
   } catch (error) {
     console.error('❌ Fetch products error:', error.message);
     
-    // If index error, try without ordering
     if (error.message.includes('indexes') || error.message.includes('index')) {
       console.log('⚠️ Fetching without ordering...');
       try {
@@ -157,7 +150,6 @@ export const getAllProducts = async () => {
   }
 };
 
-// ✅ FIXED: Get User's Products Only
 export const getUserProducts = async (userId) => {
   try {
     if (!userId) {
@@ -185,7 +177,6 @@ export const getUserProducts = async (userId) => {
   }
 };
 
-// Delete Product
 export const deleteProduct = async (productId) => {
   try {
     console.log('Deleting product:', productId);
@@ -206,13 +197,12 @@ export const deleteProduct = async (productId) => {
   }
 };
 
-// ✅ FIXED: Update Product
 export const updateProduct = async (productId, updates) => {
   try {
     const productRef = doc(db, PRODUCTS_COLLECTION, productId);
     await updateDoc(productRef, {
       ...updates,
-      updatedAt: serverTimestamp() // Track when updated
+      updatedAt: serverTimestamp()
     });
     console.log('✅ Product updated:', productId);
     return { success: true };
@@ -227,7 +217,6 @@ export const updateProduct = async (productId, updates) => {
   }
 };
 
-// Add Review
 export const addReview = async (productId, reviewData) => {
   try {
     const productRef = doc(db, PRODUCTS_COLLECTION, productId);
@@ -242,14 +231,13 @@ export const addReview = async (productId, reviewData) => {
   }
 };
 
-// ✅ FIXED: Add Order with userId
 export const addOrder = async (orderData, userId) => {
   try {
     console.log('💾 Saving order:', JSON.stringify(orderData, null, 2));
 
     const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
       ...orderData,
-      userId: userId, // ✅ Store userId
+      userId: userId,
       createdAt: serverTimestamp()
     });
     
@@ -261,7 +249,6 @@ export const addOrder = async (orderData, userId) => {
   }
 };
 
-// ✅ FIXED: Get User Orders
 export const getUserOrders = async (userId) => {
   try {
     if (!userId) {
@@ -288,7 +275,6 @@ export const getUserOrders = async (userId) => {
   } catch (error) {
     console.error('❌ Orders error:', error.message);
     
-    // Fallback: try without ordering if index error
     if (error.message.includes('index')) {
       try {
         const q = query(
@@ -310,7 +296,6 @@ export const getUserOrders = async (userId) => {
   }
 };
 
-// Get All Orders (Admin)
 export const getAllOrders = async () => {
   try {
     const q = query(collection(db, ORDERS_COLLECTION), orderBy('createdAt', 'desc'));
@@ -326,7 +311,6 @@ export const getAllOrders = async () => {
   } catch (error) {
     console.error('❌ All orders error:', error.message);
     
-    // Fallback without ordering
     if (error.message.includes('index')) {
       try {
         const querySnapshot = await getDocs(collection(db, ORDERS_COLLECTION));
@@ -341,5 +325,356 @@ export const getAllOrders = async () => {
     }
     
     return { success: false, error: error.message, orders: [] };
+  }
+};
+
+// ========================================
+// MOCK TEST SUBSCRIPTION FUNCTIONS
+// ========================================
+
+export const purchaseMockTestPlan = async (planData, userId) => {
+  try {
+    const subscriptionDoc = {
+      ...planData,
+      userId,
+      purchaseDate: new Date().toISOString(),
+      expiryDate: planData.duration === 'once' 
+        ? null 
+        : new Date(Date.now() + planData.duration * 24 * 60 * 60 * 1000).toISOString(),
+      isActive: true,
+      attemptsUsed: 0,
+      lastAttemptDate: null,
+      bestScore: 0
+    };
+
+    const docRef = await addDoc(
+      collection(db, 'users', userId, 'mockTestSubscriptions'),
+      subscriptionDoc
+    );
+
+    console.log('✅ Subscription purchased:', docRef.id);
+    return { success: true, subscriptionId: docRef.id };
+  } catch (error) {
+    console.error('❌ Purchase plan error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getUserActiveSubscription = async (userId) => {
+  try {
+    const q = query(
+      collection(db, 'users', userId, 'mockTestSubscriptions'),
+      where('isActive', '==', true)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const subscriptions = [];
+    
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      const now = new Date();
+      const expiry = data.expiryDate ? new Date(data.expiryDate) : null;
+      
+      if (!expiry || expiry > now) {
+        subscriptions.push({ id: doc.id, ...data });
+      }
+    });
+    
+    console.log('✅ Active subscriptions:', subscriptions.length);
+    return {
+      success: true,
+      subscription: subscriptions.length > 0 ? subscriptions[0] : null
+    };
+  } catch (error) {
+    console.error('❌ Get subscription error:', error);
+    return { success: false, error: error.message, subscription: null };
+  }
+};
+
+export const saveMockTestResult = async (resultData, userId) => {
+  try {
+    const resultDoc = {
+      ...resultData,
+      userId,
+      createdAt: serverTimestamp()
+    };
+
+    const docRef = await addDoc(
+      collection(db, 'users', userId, 'mockTestResults'),
+      resultDoc
+    );
+
+    console.log('✅ Test result saved:', docRef.id);
+    return { success: true, resultId: docRef.id };
+  } catch (error) {
+    console.error('❌ Save result error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getUserMockTestResults = async (userId) => {
+  try {
+    const q = query(
+      collection(db, 'users', userId, 'mockTestResults'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const results = [];
+    
+    querySnapshot.forEach((doc) => {
+      results.push({ id: doc.id, ...doc.data() });
+    });
+    
+    console.log('✅ Test results found:', results.length);
+    return { success: true, results };
+  } catch (error) {
+    console.error('❌ Get results error:', error);
+    return { success: false, error: error.message, results: [] };
+  }
+};
+
+export const updateSubscriptionAttempt = async (subscriptionId, userId, score) => {
+  try {
+    const subRef = doc(db, 'users', userId, 'mockTestSubscriptions', subscriptionId);
+    
+    await updateDoc(subRef, {
+      attemptsUsed: arrayUnion(new Date().toISOString()),
+      lastAttemptDate: new Date().toISOString(),
+      bestScore: score
+    });
+
+    console.log('✅ Subscription updated');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Update subscription error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ========================================
+// CERTIFICATE FUNCTIONS
+// ========================================
+
+export const saveCertificateDetails = async (userDetails, userId) => {
+  try {
+    const detailsDoc = {
+      ...userDetails,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
+    };
+
+    const docRef = await addDoc(
+      collection(db, 'users', userId, 'certificateDetails'),
+      detailsDoc
+    );
+
+    console.log('✅ Certificate details saved:', docRef.id);
+    return { success: true, detailsId: docRef.id };
+  } catch (error) {
+    console.error('❌ Save certificate details error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getCertificateDetails = async (userId) => {
+  try {
+    const querySnapshot = await getDocs(
+      collection(db, 'users', userId, 'certificateDetails')
+    );
+
+    if (querySnapshot.empty) {
+      return { success: true, details: null };
+    }
+
+    const doc = querySnapshot.docs[0];
+    return { success: true, details: { id: doc.id, ...doc.data() } };
+  } catch (error) {
+    console.error('❌ Get certificate details error:', error);
+    return { success: false, error: error.message, details: null };
+  }
+};
+
+export const issueCertificate = async (certificateData, userId) => {
+  try {
+    const existingCerts = await getDocs(
+      collection(db, 'users', userId, 'certificates')
+    );
+
+    if (!existingCerts.empty) {
+      console.log('⚠️ Certificate already issued');
+      return { success: false, error: 'Certificate already issued for this account' };
+    }
+
+    const certDoc = {
+      ...certificateData,
+      issuedAt: serverTimestamp(),
+      certificateId: `FZ-CERT-${Date.now()}`,
+      isValid: true
+    };
+
+    const docRef = await addDoc(
+      collection(db, 'users', userId, 'certificates'),
+      certDoc
+    );
+
+    console.log('✅ Certificate issued:', docRef.id);
+    return { success: true, certificateId: certDoc.certificateId, docId: docRef.id };
+  } catch (error) {
+    console.error('❌ Issue certificate error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const getUserCertificate = async (userId) => {
+  try {
+    const querySnapshot = await getDocs(
+      collection(db, 'users', userId, 'certificates')
+    );
+
+    if (querySnapshot.empty) {
+      return { success: true, certificate: null };
+    }
+
+    const doc = querySnapshot.docs[0];
+    return { success: true, certificate: { id: doc.id, ...doc.data() } };
+  } catch (error) {
+    console.error('❌ Get certificate error:', error);
+    return { success: false, error: error.message, certificate: null };
+  }
+};
+
+export const hasCertificateForLevel = async (userId, level) => {
+  try {
+    const q = query(
+      collection(db, 'users', userId, 'certificates'),
+      where('level', '==', level)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    
+    return { success: true, hasCertificate: !querySnapshot.empty };
+  } catch (error) {
+    console.error('❌ Check certificate error:', error);
+    return { success: false, hasCertificate: false };
+  }
+};
+
+export const issueCertificateWithLevel = async (certificateData, userId, level) => {
+  try {
+    const checkResult = await hasCertificateForLevel(userId, level);
+    
+    if (checkResult.hasCertificate) {
+      console.log(`⚠️ Certificate already issued for ${level}`);
+      return { success: false, error: `Certificate already issued for ${level} level` };
+    }
+
+    const certDoc = {
+      ...certificateData,
+      level: level,
+      issuedAt: serverTimestamp(),
+      certificateId: `FZ-${level.toUpperCase()}-${Date.now()}`,
+      isValid: true
+    };
+
+    const docRef = await addDoc(
+      collection(db, 'users', userId, 'certificates'),
+      certDoc
+    );
+
+    console.log(`✅ ${level} certificate issued:`, docRef.id);
+    return { success: true, certificateId: certDoc.certificateId, docId: docRef.id };
+  } catch (error) {
+    console.error('❌ Issue certificate error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+// ========================================
+// ✅ MANUAL QUESTIONS — Firebase se fetch
+// ========================================
+
+export const getManualQuestions = async (level) => {
+  try {
+    console.log(`📖 Fetching manual questions for level: ${level}`);
+
+    const q = query(
+      collection(db, 'manualQuestions'),
+      where('level', '==', level),
+      orderBy('createdAt', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    const questions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    console.log(`✅ ${questions.length} questions loaded for ${level}`);
+    return { success: true, questions };
+  } catch (error) {
+    console.error('❌ getManualQuestions error:', error.message);
+
+    // index error fallback
+    if (error.message.includes('index')) {
+      try {
+        const q = query(
+          collection(db, 'manualQuestions'),
+          where('level', '==', level)
+        );
+        const snapshot = await getDocs(q);
+        const questions = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        console.log(`✅ ${questions.length} questions loaded (no order) for ${level}`);
+        return { success: true, questions };
+      } catch (err) {
+        return { success: false, error: err.message, questions: [] };
+      }
+    }
+
+    return { success: false, error: error.message, questions: [] };
+  }
+};
+
+// ========================================
+// 💰 TEST PRICES FUNCTIONS
+// ========================================
+
+export const getTestPrices = async () => {
+  try {
+    console.log('💰 Fetching test prices...');
+    
+    const priceDoc = await getDoc(doc(db, 'settings', 'testPrices'));
+    
+    if (priceDoc.exists()) {
+      console.log('✅ Prices loaded:', priceDoc.data());
+      return { success: true, prices: priceDoc.data() };
+    } else {
+      // Return default prices if not found
+      const defaultPrices = {
+        basic: 99,
+        advanced: 199,
+        pro: 299
+      };
+      console.log('⚠️ No prices found, using defaults');
+      return { success: true, prices: defaultPrices };
+    }
+  } catch (error) {
+    console.error('❌ Get prices error:', error);
+    return { 
+      success: false, 
+      error: error.message,
+      prices: { basic: 99, advanced: 199, pro: 299 }
+    };
+  }
+};
+
+export const saveTestPrices = async (prices) => {
+  try {
+    console.log('💾 Saving test prices:', prices);
+    
+    await setDoc(doc(db, 'settings', 'testPrices'), prices);
+    
+    console.log('✅ Prices saved successfully');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Save prices error:', error);
+    return { success: false, error: error.message };
   }
 };
