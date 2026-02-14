@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, Award, XCircle, BookOpen } from 'lucide-react';
+import { X, Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, BookOpen } from 'lucide-react';
 import UserDetailsForm from '../components/UserDetailsForm';
 
 // ==========================================
@@ -634,7 +634,7 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
     const score = TestUtils.calculateScore(answers, questions, tabSwitches, isAdmin);
 
-    const results = {
+    const testResults = {
       ...score,
       timeTaken: `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`,
       tabSwitches,
@@ -642,7 +642,7 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
       studentInfo
     };
 
-    onComplete(results);
+    onComplete(testResults);
   }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
 
   // ==========================================
@@ -1216,7 +1216,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
 export default function MockTestApp({ questions, testTitle, timeLimit, userEmail }) {
   const [stage, setStage] = useState('instructions');
   const [studentInfo, setStudentInfo] = useState(null);
-  const [results, setResults] = useState(null);
 
   const handleInstructionsAccept = () => {
     if (userEmail !== APP_CONFIG.ADMIN_EMAIL) {
@@ -1248,7 +1247,7 @@ export default function MockTestApp({ questions, testTitle, timeLimit, userEmail
           timeLimit={timeLimit}
           userEmail={userEmail}
           studentInfo={studentInfo}
-          onComplete={(res) => { setResults(res); setStage('results'); }}
+          onComplete={() => {}}
           onExit={() => setStage('instructions')}
         />
       )}
