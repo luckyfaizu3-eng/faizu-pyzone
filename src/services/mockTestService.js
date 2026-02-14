@@ -5,14 +5,17 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  updateDoc,
   query,
   where,
   addDoc,
-  Timestamp
+  Timestamp,
+  orderBy,
+  limit
 } from 'firebase/firestore';
 
 // ==========================================
-// 🔥 MOCK TEST SERVICE - Complete Logic
+// 🔥 MOCK TEST SERVICE - Complete Fixed Logic
 // ==========================================
 
 /**
@@ -64,48 +67,102 @@ export const getManualQuestions = async (level) => {
 };
 
 /**
- * Check if user can take test (7-day restriction)
+ * Get payment details for a specific level
+ */
+export const getPaymentDetails = async (userId, level) => {
+  try {
+    const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
+    const paymentDoc = await getDoc(paymentRef);
+    
+    if (paymentDoc.exists()) {
+      return {
+        hasPaid: true,
+        ...paymentDoc.data()
+      };
+    } else {
+      return {
+        hasPaid: false
+      };
+    }
+  } catch (error) {
+    console.error('❌ Error fetching payment details:', error);
+    return {
+      hasPaid: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Check if user can take test (with grace period and lock logic)
  */
 export const canUserTakeTest = async (userId, level) => {
   try {
-    const testsRef = collection(db, 'users', userId, 'mockTests');
+    const payment = await getPaymentDetails(userId, level);
     
-    // ✅ Bypass index: fetch all, then sort in memory
-    const q = query(
-      testsRef,
-      where('level', '==', level)
-    );
-    
-    const snapshot = await getDocs(q);
-    
-    if (snapshot.empty) {
-      return {
-        canTake: true,
-        message: 'You can take the test!'
-      };
-    }
-
-    // Sort in memory instead of database
-    const tests = snapshot.docs.map(doc => doc.data());
-    tests.sort((a, b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
-    const lastTest = tests[0];
-
-    const lastTestDate = lastTest.timestamp.toDate();
-    const now = new Date();
-    const daysDiff = (now - lastTestDate) / (1000 * 60 * 60 * 24);
-
-    if (daysDiff < 7) {
-      const remainingDays = Math.ceil(7 - daysDiff);
+    // If not paid, can't take test
+    if (!payment.hasPaid) {
       return {
         canTake: false,
-        message: `⏰ You can retake this test in ${remainingDays} day(s)`,
-        nextAvailable: new Date(lastTestDate.getTime() + 7 * 24 * 60 * 60 * 1000)
+        message: '💳 Purchase required to take this test'
       };
     }
 
+    const now = new Date();
+
+    // Check grace period (12 hours after purchase)
+    if (payment.purchaseValidUntil) {
+      const gracePeriodEnd = new Date(payment.purchaseValidUntil);
+      if (now < gracePeriodEnd && !payment.testSubmittedAt) {
+        const hoursLeft = Math.ceil((gracePeriodEnd - now) / (1000 * 60 * 60));
+        return {
+          canTake: true,
+          message: `✅ Test available - ${hoursLeft} hours left in grace period`,
+          status: 'grace_period',
+          timeRemaining: gracePeriodEnd - now
+        };
+      }
+    }
+
+    // Check if test is in progress
+    if (payment.testStartedAt && !payment.testSubmittedAt) {
+      return {
+        canTake: true,
+        message: '📝 Resume your test',
+        status: 'in_progress'
+      };
+    }
+
+    // Check if locked (7 days after result view)
+    if (payment.lockEndsAt) {
+      const lockEnd = new Date(payment.lockEndsAt);
+      if (now < lockEnd) {
+        const daysRemaining = Math.ceil((lockEnd - now) / (1000 * 60 * 60 * 24));
+        const hoursRemaining = Math.ceil((lockEnd - now) / (1000 * 60 * 60));
+        
+        let timeMessage;
+        if (daysRemaining > 0) {
+          const remainingHours = Math.ceil(((lockEnd - now) % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          timeMessage = `${daysRemaining}d ${remainingHours}h`;
+        } else {
+          timeMessage = `${hoursRemaining}h`;
+        }
+        
+        return {
+          canTake: false,
+          message: `🔒 Test locked. Available in ${timeMessage}`,
+          status: 'locked',
+          nextAvailable: lockEnd.toISOString(),
+          timeRemaining: lockEnd - now
+        };
+      }
+    }
+
+    // Lock expired or grace period expired, need to repurchase
     return {
-      canTake: true,
-      message: 'You can take the test!'
+      canTake: false,
+      message: '💳 Purchase again to retake this test',
+      status: 'available'
     };
   } catch (error) {
     console.error('❌ Error checking test eligibility:', error);
@@ -133,13 +190,14 @@ export const hasCertificateForLevel = async (userId, level) => {
     console.error('❌ Error checking certificate:', error);
     return {
       hasCertificate: false,
-      certificate: null
+      certificate: null,
+      error: error.message
     };
   }
 };
 
 /**
- * Save test result
+ * Save test result to history
  */
 export const saveTestResult = async (userId, testData) => {
   try {
@@ -150,7 +208,7 @@ export const saveTestResult = async (userId, testData) => {
       timestamp: Timestamp.now(),
       date: new Date().toLocaleDateString('en-IN', {
         day: '2-digit',
-        month: 'short',
+        month: 'long',
         year: 'numeric'
       })
     };
@@ -171,22 +229,23 @@ export const saveTestResult = async (userId, testData) => {
 };
 
 /**
- * Issue certificate (only once per level, EXCEPT for admin)
+ * Issue certificate (ONE per level for regular users, unlimited for admin)
  */
 export const issueCertificate = async (userId, certificateData) => {
   try {
-    const { level } = certificateData;
+    const { level, userEmail } = certificateData;
     
-    // 🔓 Check if admin (luckyfaizu3@gmail.com gets unlimited certificates)
-    const isAdmin = certificateData.userEmail === 'luckyfaizu3@gmail.com';
+    // 🔓 Check if admin
+    const isAdmin = userEmail === 'luckyfaizu3@gmail.com';
     
     // Check if certificate already exists (skip for admin)
     if (!isAdmin) {
       const certCheck = await hasCertificateForLevel(userId, level);
       if (certCheck.hasCertificate) {
+        console.log('ℹ️ Certificate already exists for this level');
         return {
           success: false,
-          message: 'Certificate already issued for this level',
+          message: 'Certificate already issued for this level (one per level)',
           alreadyExists: true
         };
       }
@@ -194,25 +253,27 @@ export const issueCertificate = async (userId, certificateData) => {
 
     // Generate unique certificate ID
     const timestamp = Date.now();
-    const certId = `CERT-${level.toUpperCase()}-${timestamp}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
+    const randomStr = Math.random().toString(36).substr(2, 9).toUpperCase();
+    const certId = `CERT-${level.toUpperCase()}-${timestamp}-${randomStr}`;
     
     const certificate = {
       ...certificateData,
       certificateId: certId,
       issuedAt: new Date().toISOString(),
       timestamp: Timestamp.now(),
-      isAdminCert: isAdmin
+      isAdminCert: isAdmin || false
     };
 
-    // 🔓 Admin gets certificates in separate collection with timestamp
+    // 🔓 Admin gets unlimited certificates with timestamp-based IDs
     if (isAdmin) {
-      // Save with timestamp-based ID for unlimited certificates
       const adminCertRef = doc(db, 'users', userId, 'certificates', `${level}_${timestamp}`);
       await setDoc(adminCertRef, certificate);
+      console.log('🔓 Admin certificate issued with ID:', `${level}_${timestamp}`);
     } else {
-      // Regular users get one certificate per level
+      // Regular users get ONE certificate per level
       const certRef = doc(db, 'users', userId, 'certificates', level);
       await setDoc(certRef, certificate);
+      console.log('✅ Certificate issued for level:', level);
     }
 
     return {
@@ -230,7 +291,7 @@ export const issueCertificate = async (userId, certificateData) => {
 };
 
 /**
- * Get user's certificate for a level
+ * Get user's certificate for a specific level
  */
 export const getCertificate = async (userId, level) => {
   try {
@@ -258,7 +319,7 @@ export const getCertificate = async (userId, level) => {
 };
 
 /**
- * Get all user certificates
+ * Get all user certificates (including admin unlimited certificates)
  */
 export const getAllCertificates = async (userId) => {
   try {
@@ -266,9 +327,17 @@ export const getAllCertificates = async (userId) => {
     const snapshot = await getDocs(certsRef);
     
     const certificates = snapshot.docs.map(doc => ({
-      level: doc.id,
+      id: doc.id,
+      level: doc.id.includes('_') ? doc.id.split('_')[0] : doc.id, // Extract level from admin cert IDs
       ...doc.data()
     }));
+
+    // Sort by timestamp (newest first)
+    certificates.sort((a, b) => {
+      const timeA = a.timestamp?.toMillis() || 0;
+      const timeB = b.timestamp?.toMillis() || 0;
+      return timeB - timeA;
+    });
 
     return {
       success: true,
@@ -285,13 +354,12 @@ export const getAllCertificates = async (userId) => {
 };
 
 /**
- * Get user's test history for a level
+ * Get user's test history (sorted by date)
  */
 export const getTestHistory = async (userId, level = null) => {
   try {
     const testsRef = collection(db, 'users', userId, 'mockTests');
     
-    // ✅ Bypass index: fetch all, then sort in memory
     let q;
     if (level) {
       q = query(testsRef, where('level', '==', level));
@@ -305,7 +373,7 @@ export const getTestHistory = async (userId, level = null) => {
       ...doc.data()
     }));
 
-    // Sort in memory instead of database
+    // Sort in memory by timestamp (newest first)
     tests.sort((a, b) => {
       const timeA = a.timestamp?.toMillis() || 0;
       const timeB = b.timestamp?.toMillis() || 0;
@@ -337,6 +405,7 @@ export const getUserDetails = async (userId) => {
     if (!detailsDoc.exists()) {
       return {
         success: false,
+        details: null,
         message: 'User details not found'
       };
     }
@@ -349,6 +418,7 @@ export const getUserDetails = async (userId) => {
     console.error('❌ Error fetching user details:', error);
     return {
       success: false,
+      details: null,
       error: error.message
     };
   }
@@ -382,32 +452,83 @@ export const saveUserDetails = async (userId, details) => {
 };
 
 /**
- * Process payment and activate test
+ * Process payment and create payment record with grace period
  */
-export const processMockTestPayment = async (userId, planId, paymentDetails) => {
+export const processMockTestPayment = async (userId, planId, paymentData) => {
   try {
-    const paymentRef = collection(db, 'users', userId, 'mockTestPayments');
+    const { level } = paymentData;
+    const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
+    
+    const now = new Date();
+    const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000); // 12 hours grace period
     
     const payment = {
       planId,
-      ...paymentDetails,
+      hasPaid: true,
+      level,
+      amount: paymentData.amount,
+      paymentId: paymentData.paymentId,
+      paidAt: paymentData.paidAt || now.toISOString(),
+      purchaseValidUntil: purchaseValidUntil.toISOString(),
+      
+      // Test progress tracking
+      testStartedAt: null,
+      testSubmittedAt: null,
+      resultsViewedAt: null,
+      
+      // Lock period tracking
+      lockStartsAt: null,
+      lockEndsAt: null,
+      
+      // Metadata
       timestamp: Timestamp.now(),
       date: new Date().toLocaleDateString('en-IN', {
         day: '2-digit',
-        month: 'short',
+        month: 'long',
         year: 'numeric'
       }),
       status: 'completed'
     };
 
-    await addDoc(paymentRef, payment);
+    await setDoc(paymentRef, payment);
+    console.log('✅ Payment processed with 12-hour grace period');
 
     return {
       success: true,
-      message: 'Payment processed successfully'
+      message: 'Payment processed successfully',
+      gracePeriodEnd: purchaseValidUntil.toISOString()
     };
   } catch (error) {
     console.error('❌ Error processing payment:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Update test attempt progress (start, submit, view results, lock)
+ */
+export const updateTestAttempt = async (userId, level, updateData) => {
+  try {
+    const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
+    
+    // Add timestamp to update data
+    const dataWithTimestamp = {
+      ...updateData,
+      lastUpdated: Timestamp.now()
+    };
+    
+    await updateDoc(paymentRef, dataWithTimestamp);
+    console.log(`✅ Test attempt updated for ${level}:`, Object.keys(updateData));
+
+    return {
+      success: true,
+      message: 'Test attempt updated successfully'
+    };
+  } catch (error) {
+    console.error('❌ Error updating test attempt:', error);
     return {
       success: false,
       error: error.message
@@ -420,24 +541,172 @@ export const processMockTestPayment = async (userId, planId, paymentDetails) => 
  */
 export const hasUserPaidForLevel = async (userId, level) => {
   try {
-    const paymentsRef = collection(db, 'users', userId, 'mockTestPayments');
-    const q = query(
-      paymentsRef,
-      where('level', '==', level),
-      where('status', '==', 'completed')
-    );
-    
-    const snapshot = await getDocs(q);
-    
-    return {
-      hasPaid: !snapshot.empty,
-      payment: !snapshot.empty ? snapshot.docs[0].data() : null
-    };
+    return await getPaymentDetails(userId, level);
   } catch (error) {
     console.error('❌ Error checking payment:', error);
     return {
       hasPaid: false,
-      payment: null
+      error: error.message
     };
   }
+};
+
+/**
+ * Reset test lock (ADMIN ONLY - for testing/support)
+ */
+export const resetTestLock = async (userId, level) => {
+  try {
+    const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
+    
+    await updateDoc(paymentRef, {
+      testStartedAt: null,
+      testSubmittedAt: null,
+      resultsViewedAt: null,
+      lockStartsAt: null,
+      lockEndsAt: null,
+      lastUpdated: Timestamp.now()
+    });
+
+    console.log(`✅ Test lock reset for user ${userId}, level ${level}`);
+
+    return {
+      success: true,
+      message: 'Test lock reset successfully'
+    };
+  } catch (error) {
+    console.error('❌ Error resetting test lock:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Get all payments for a user (for payment history display)
+ */
+export const getAllPayments = async (userId) => {
+  try {
+    const paymentsRef = collection(db, 'users', userId, 'mockTestPayments');
+    const snapshot = await getDocs(paymentsRef);
+    
+    const payments = snapshot.docs.map(doc => ({
+      level: doc.id,
+      ...doc.data()
+    }));
+
+    // Sort by timestamp (newest first)
+    payments.sort((a, b) => {
+      const timeA = a.timestamp?.toMillis() || 0;
+      const timeB = b.timestamp?.toMillis() || 0;
+      return timeB - timeA;
+    });
+
+    return {
+      success: true,
+      payments
+    };
+  } catch (error) {
+    console.error('❌ Error fetching payments:', error);
+    return {
+      success: false,
+      payments: [],
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Get test analytics for admin dashboard (basic version)
+ */
+export const getTestAnalytics = async (level = null) => {
+  try {
+    // This would require aggregation queries
+    // For now, returning basic structure
+    // Can be enhanced with Cloud Functions for better performance
+    
+    return {
+      success: true,
+      analytics: {
+        totalAttempts: 0,
+        averageScore: 0,
+        passRate: 0,
+        certificatesIssued: 0,
+        revenue: 0
+      },
+      message: 'Analytics feature - requires Cloud Functions for production use'
+    };
+  } catch (error) {
+    console.error('❌ Error fetching analytics:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Extend grace period (ADMIN ONLY - for support/special cases)
+ */
+export const extendGracePeriod = async (userId, level, additionalHours = 12) => {
+  try {
+    const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
+    const paymentDoc = await getDoc(paymentRef);
+    
+    if (!paymentDoc.exists()) {
+      return {
+        success: false,
+        message: 'Payment not found'
+      };
+    }
+
+    const payment = paymentDoc.data();
+    const currentGracePeriod = new Date(payment.purchaseValidUntil);
+    const newGracePeriod = new Date(currentGracePeriod.getTime() + additionalHours * 60 * 60 * 1000);
+    
+    await updateDoc(paymentRef, {
+      purchaseValidUntil: newGracePeriod.toISOString(),
+      graceExtended: true,
+      graceExtensionHours: additionalHours,
+      lastUpdated: Timestamp.now()
+    });
+
+    console.log(`✅ Grace period extended by ${additionalHours} hours for user ${userId}, level ${level}`);
+
+    return {
+      success: true,
+      message: `Grace period extended by ${additionalHours} hours`,
+      newGracePeriodEnd: newGracePeriod.toISOString()
+    };
+  } catch (error) {
+    console.error('❌ Error extending grace period:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+// ==========================================
+// 📊 EXPORT ALL FUNCTIONS
+// ==========================================
+export default {
+  getManualQuestions,
+  getPaymentDetails,
+  canUserTakeTest,
+  hasCertificateForLevel,
+  saveTestResult,
+  issueCertificate,
+  getCertificate,
+  getAllCertificates,
+  getTestHistory,
+  getUserDetails,
+  saveUserDetails,
+  processMockTestPayment,
+  updateTestAttempt,
+  hasUserPaidForLevel,
+  resetTestLock,
+  getAllPayments,
+  getTestAnalytics,
+  extendGracePeriod
 };

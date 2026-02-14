@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, useTheme, RAZORPAY_KEY_ID } from '../App';
-import { Clock, Trophy, Award, Zap, Loader, Download, Calendar, CheckCircle, XCircle, AlertCircle, Monitor, Smartphone } from 'lucide-react';
+import { Clock, Trophy, Award, Zap, Loader, Download, Calendar, CheckCircle, XCircle, AlertCircle, Monitor, Smartphone, History, CreditCard, TrendingUp, Lock, Unlock } from 'lucide-react';
 import { SUBSCRIPTION_PLANS } from '../data/subscriptionPlans';
 import MockTestInterface from '../components/MockTestInterface';
 import UserDetailsForm from '../components/UserDetailsForm';
@@ -19,7 +19,9 @@ import {
   getUserDetails,
   saveUserDetails,
   processMockTestPayment,
-  hasUserPaidForLevel
+  hasUserPaidForLevel,
+  getPaymentDetails,
+  updateTestAttempt
 } from '../services/mockTestService';
 
 // ==========================================
@@ -38,17 +40,44 @@ const DEFAULT_PRICES = {
   pro: 299
 };
 
+// ==========================================
+// ⏰ TIME UTILITIES
+// ==========================================
+const formatTimeRemaining = (milliseconds) => {
+  if (milliseconds <= 0) return 'Expired';
+  
+  const seconds = Math.floor(milliseconds / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) {
+    const remainingHours = hours % 24;
+    return `${days}d ${remainingHours}h`;
+  } else if (hours > 0) {
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m`;
+  } else {
+    return `${seconds}s`;
+  }
+};
+
+const getTimeRemaining = (targetDate) => {
+  if (!targetDate) return 0;
+  return new Date(targetDate) - new Date();
+};
+
 function MockTestPage() {
   const { user } = useAuth();
   const { isDark } = useTheme();
 
   // ✅ Test Flow States
-  const [currentStep, setCurrentStep] = useState('plans'); // plans → payment → form → test → results
+  const [currentStep, setCurrentStep] = useState('plans'); // plans → form → test → results
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [testQuestions, setTestQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // ✅ Desktop Warning Modal (removed - now permanent banner)
 
   // ✅ Dynamic Prices from Firebase
   const [prices, setPrices] = useState(DEFAULT_PRICES);
@@ -62,9 +91,23 @@ function MockTestPage() {
   // ✅ Test Results
   const [testResults, setTestResults] = useState(null);
 
-  // ✅ Restrictions
-  const [testRestrictions, setTestRestrictions] = useState({});
-  const [paymentStatus, setPaymentStatus] = useState({});
+  // ✅ Payment & Status Data
+  const [paymentDetails, setPaymentDetails] = useState({});
+  const [testStatus, setTestStatus] = useState({});
+
+  // ✅ Real-time countdown
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // ==========================================
+  // 🔄 Real-time Clock Update
+  // ==========================================
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   // ==========================================
   // 🔄 Load User Data on Mount
@@ -73,14 +116,8 @@ function MockTestPage() {
     if (user) {
       loadUserData();
     }
-    // Load prices on mount (even without user)
     fetchPrices();
-  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Show desktop warning on first visit
-  useEffect(() => {
-    // Desktop warning now shown as permanent banner
-  }, []);
+  }, [user]);
 
   // ==========================================
   // 💰 Fetch Prices from Firebase
@@ -91,12 +128,10 @@ function MockTestPage() {
       if (priceDoc.exists()) {
         setPrices(priceDoc.data());
       } else {
-        // Use default prices if not set
         setPrices(DEFAULT_PRICES);
       }
     } catch (error) {
       console.error('❌ Error fetching prices:', error);
-      // Fallback to default prices on error
       setPrices(DEFAULT_PRICES);
     }
   };
@@ -122,20 +157,20 @@ function MockTestPage() {
         setTestHistory(historyResult.tests);
       }
 
-      // Check restrictions and payments for each level
-      const restrictions = {};
-      const payments = {};
+      // Load payment details and status for each level
+      const statusData = {};
+      const paymentData = {};
 
       for (const level of ['basic', 'advanced', 'pro']) {
-        const canTake = await canUserTakeTest(user.uid, level);
-        restrictions[level] = canTake;
+        const payment = await getPaymentDetails(user.uid, level);
+        paymentData[level] = payment;
 
-        const hasPaid = await hasUserPaidForLevel(user.uid, level);
-        payments[level] = hasPaid;
+        const status = calculateTestStatus(payment, level);
+        statusData[level] = status;
       }
 
-      setTestRestrictions(restrictions);
-      setPaymentStatus(payments);
+      setPaymentDetails(paymentData);
+      setTestStatus(statusData);
 
     } catch (error) {
       console.error('❌ Error loading user data:', error);
@@ -143,6 +178,68 @@ function MockTestPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // ==========================================
+  // 📊 Calculate Test Status
+  // ==========================================
+  const calculateTestStatus = (payment, level) => {
+    if (!payment?.hasPaid) {
+      return {
+        canTake: true,
+        status: 'available',
+        message: 'Purchase to start test',
+        color: '#10b981'
+      };
+    }
+
+    const now = new Date();
+
+    // Check if in grace period (12 hours after purchase)
+    if (payment.purchaseValidUntil) {
+      const gracePeriodEnd = new Date(payment.purchaseValidUntil);
+      if (now < gracePeriodEnd && !payment.testSubmittedAt) {
+        return {
+          canTake: true,
+          status: 'grace_period',
+          message: 'Test available - Grace period active',
+          color: '#10b981',
+          timeRemaining: gracePeriodEnd - now
+        };
+      }
+    }
+
+    // Check if test is in progress
+    if (payment.testStartedAt && !payment.testSubmittedAt) {
+      return {
+        canTake: true,
+        status: 'in_progress',
+        message: 'Resume your test',
+        color: '#f59e0b'
+      };
+    }
+
+    // Check if locked (7 days after result view)
+    if (payment.lockEndsAt) {
+      const lockEnd = new Date(payment.lockEndsAt);
+      if (now < lockEnd) {
+        return {
+          canTake: false,
+          status: 'locked',
+          message: `Locked - Available in ${formatTimeRemaining(lockEnd - now)}`,
+          color: '#ef4444',
+          timeRemaining: lockEnd - now
+        };
+      }
+    }
+
+    // Lock expired, can purchase again
+    return {
+      canTake: true,
+      status: 'available',
+      message: 'Purchase to take test again',
+      color: '#10b981'
+    };
   };
 
   // ==========================================
@@ -159,12 +256,11 @@ function MockTestPage() {
       return;
     }
 
-    // Get dynamic price from Firebase
     const dynamicPrice = prices[plan.level] || plan.price;
 
     const options = {
       key: RAZORPAY_KEY_ID,
-      amount: dynamicPrice * 100, // Convert to paise
+      amount: dynamicPrice * 100,
       currency: "INR",
       name: "FaizUpyZone",
       description: `${plan.name} - Mock Test`,
@@ -172,21 +268,27 @@ function MockTestPage() {
       handler: async function (response) {
         window.showToast?.('✅ Payment Successful!', 'success');
         
-        // Save payment to database
+        const now = new Date();
+        const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000); // 12 hours
+
         const paymentData = {
           level: plan.level,
           amount: dynamicPrice,
-          paymentId: response.razorpay_payment_id
+          paymentId: response.razorpay_payment_id,
+          paidAt: now.toISOString(),
+          purchaseValidUntil: purchaseValidUntil.toISOString(),
+          testStartedAt: null,
+          testSubmittedAt: null,
+          resultsViewedAt: null,
+          lockStartsAt: null,
+          lockEndsAt: null
         };
 
         const result = await processMockTestPayment(user.uid, plan.id, paymentData);
         
         if (result.success) {
-          // Reload payment status
-          const hasPaid = await hasUserPaidForLevel(user.uid, plan.level);
-          setPaymentStatus(prev => ({ ...prev, [plan.level]: hasPaid }));
-          
-          // Move to form step
+          window.showToast?.(`✅ Test unlocked! Valid for 12 hours`, 'success');
+          await loadUserData();
           setSelectedPlan(plan);
           setCurrentStep('form');
         } else {
@@ -230,8 +332,6 @@ function MockTestPage() {
       if (result.success) {
         setUserDetails(formData);
         window.showToast?.('✅ Details saved!', 'success');
-        
-        // Start test
         await startTest(selectedPlan);
       } else {
         window.showToast?.('❌ Failed to save details', 'error');
@@ -252,6 +352,12 @@ function MockTestPage() {
     window.showToast?.('⏳ Loading questions...', 'info');
 
     try {
+      // Mark test as started
+      const now = new Date();
+      await updateTestAttempt(user.uid, plan.level, {
+        testStartedAt: now.toISOString()
+      });
+
       const result = await getManualQuestions(plan.level);
       
       if (result.success && result.questions.length > 0) {
@@ -283,6 +389,18 @@ function MockTestPage() {
     setLoading(true);
     
     try {
+      const now = new Date();
+      const lockStartsAt = now;
+      const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Update payment with submission and lock data
+      await updateTestAttempt(user.uid, selectedPlan.level, {
+        testSubmittedAt: now.toISOString(),
+        resultsViewedAt: now.toISOString(),
+        lockStartsAt: lockStartsAt.toISOString(),
+        lockEndsAt: lockEndsAt.toISOString()
+      });
+
       // Save test result
       const testData = {
         planId: selectedPlan.id,
@@ -292,19 +410,19 @@ function MockTestPage() {
         correct: results.correct,
         wrong: results.wrong,
         total: results.total,
-        passed: results.percentage >= 70,
+        passed: results.percentage >= 55,
         timeTaken: results.timeTaken
       };
 
       await saveTestResult(user.uid, testData);
 
-      // 🔓 Admin always gets certificate (any score)
+      // Check if should issue certificate (only if doesn't already have one)
       const shouldIssueCert = isAdmin(user.email) || results.percentage >= 55;
 
       if (shouldIssueCert) {
         const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
         
-        // 🔓 Admin can get unlimited certificates
+        // Only issue if no certificate exists OR user is admin
         if (!certCheck.hasCertificate || isAdmin(user.email)) {
           const certificateData = {
             userName: userDetails?.fullName || user.displayName || user.email,
@@ -332,8 +450,6 @@ function MockTestPage() {
               'success'
             );
             setUserCertificates(prev => [...prev, certResult.certificate]);
-          } else if (certResult.alreadyExists && !isAdmin(user.email)) {
-            window.showToast?.('ℹ️ Certificate already issued for this level', 'info');
           }
         } else {
           window.showToast?.('ℹ️ You already have a certificate for this level', 'info');
@@ -346,7 +462,7 @@ function MockTestPage() {
       setTestResults(results);
       setCurrentStep('results');
       
-      // Reload data
+      // Reload data to update status
       await loadUserData();
 
     } catch (error) {
@@ -389,45 +505,40 @@ function MockTestPage() {
 
     setSelectedPlan(plan);
 
-    // 🔓 ADMIN BYPASS - Free access for admin
+    // 🔓 ADMIN BYPASS
     if (isAdmin(user.email)) {
       window.showToast?.('🔓 Admin access - Free test!', 'success');
       
-      // Check if user details exist
       if (!userDetails) {
         setCurrentStep('form');
         return;
       }
 
-      // Start test directly
       await startTest(plan);
       return;
     }
 
-    // Check if already paid
-    const hasPaid = paymentStatus[plan.level];
-    
-    if (!hasPaid?.hasPaid) {
-      // Need to pay
+    const status = testStatus[plan.level];
+    const payment = paymentDetails[plan.level];
+
+    // If locked, show message
+    if (status?.status === 'locked') {
+      window.showToast?.(status.message, 'warning');
+      return;
+    }
+
+    // If not paid or lock expired, need to pay
+    if (!payment?.hasPaid || status?.status === 'available') {
       handlePayment(plan);
       return;
     }
 
-    // Check if can take test
-    const canTake = testRestrictions[plan.level];
-    
-    if (!canTake?.canTake) {
-      window.showToast?.(canTake?.message || '⚠️ Cannot take test now', 'warning');
-      return;
-    }
-
-    // Check if user details exist
+    // If in grace period or in progress, check user details and start
     if (!userDetails) {
       setCurrentStep('form');
       return;
     }
 
-    // Start test directly
     await startTest(plan);
   };
 
@@ -441,18 +552,6 @@ function MockTestPage() {
     } else {
       window.showToast?.('❌ Certificate not found', 'error');
     }
-  };
-
-  // ==========================================
-  // 📱 Calculate Days Remaining
-  // ==========================================
-  const getDaysRemaining = (restriction) => {
-    if (!restriction?.nextAvailable) return 0;
-    const now = new Date();
-    const next = new Date(restriction.nextAvailable);
-    const diff = next - now;
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return days > 0 ? days : 0;
   };
 
   // ==========================================
@@ -489,6 +588,7 @@ function MockTestPage() {
         onExit={handleExitTest}
         testTitle={selectedPlan?.name}
         timeLimit={selectedPlan?.timeLimit}
+        userEmail={user?.email}
       />
     );
   }
@@ -671,6 +771,25 @@ function MockTestPage() {
               </div>
             </div>
 
+            {/* Lock Info */}
+            <div style={{
+              padding: '1.5rem',
+              background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(220,38,38,0.1))',
+              border: `2px solid ${isDark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`,
+              borderRadius: '16px',
+              marginBottom: '2rem'
+            }}>
+              <Clock size={32} color="#ef4444" style={{ marginBottom: '0.75rem' }} />
+              <p style={{
+                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
+                color: isDark ? '#e2e8f0' : '#1e293b',
+                fontWeight: '600',
+                margin: 0
+              }}>
+                🔒 Test locked for 7 days. You can take it again after the lock period.
+              </p>
+            </div>
+
             {/* Certificate Info */}
             {testResults.percentage >= 55 && (
               <div style={{
@@ -688,7 +807,7 @@ function MockTestPage() {
                   margin: 0
                 }}>
                   {userCertificates.find(c => c.level === selectedPlan.level)
-                    ? '✅ Certificate already issued for this level'
+                    ? '✅ Certificate already issued for this level (One per level)'
                     : '🎓 Certificate issued! Check below to download.'}
                 </p>
               </div>
@@ -867,6 +986,35 @@ function MockTestPage() {
               </p>
             </div>
 
+            {/* Grace Period */}
+            <div style={{
+              padding: 'clamp(0.75rem, 2vw, 1rem)',
+              background: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.1)',
+              borderRadius: '12px',
+              border: `1px solid ${isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                marginBottom: '0.5rem',
+                color: '#10b981',
+                fontWeight: '700',
+                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
+              }}>
+                <Clock size={18} />
+                12-Hour Window
+              </div>
+              <p style={{
+                fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                color: isDark ? '#cbd5e1' : '#475569',
+                margin: 0,
+                lineHeight: '1.5'
+              }}>
+                After purchase, you have 12 hours to start the test. No refunds if time expires.
+              </p>
+            </div>
+
             {/* 7-Day Lock */}
             <div style={{
               padding: 'clamp(0.75rem, 2vw, 1rem)',
@@ -883,7 +1031,7 @@ function MockTestPage() {
                 fontWeight: '700',
                 fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
               }}>
-                <Clock size={18} />
+                <Lock size={18} />
                 7-Day Lock
               </div>
               <p style={{
@@ -892,23 +1040,23 @@ function MockTestPage() {
                 margin: 0,
                 lineHeight: '1.5'
               }}>
-                After taking a test, wait 7 days before attempting same level again
+                After viewing results, test locks for 7 days. Then repurchase to try again.
               </p>
             </div>
 
             {/* Pass Mark */}
             <div style={{
               padding: 'clamp(0.75rem, 2vw, 1rem)',
-              background: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.1)',
+              background: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.1)',
               borderRadius: '12px',
-              border: `1px solid ${isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`
+              border: `1px solid ${isDark ? 'rgba(245,158,11,0.3)' : 'rgba(245,158,11,0.2)'}`
             }}>
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.5rem',
                 marginBottom: '0.5rem',
-                color: '#10b981',
+                color: '#f59e0b',
                 fontWeight: '700',
                 fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
               }}>
@@ -921,7 +1069,7 @@ function MockTestPage() {
                 margin: 0,
                 lineHeight: '1.5'
               }}>
-                Score 55% or above to receive your certificate
+                Score 55% or above to receive your certificate (one per level, lifetime)
               </p>
             </div>
           </div>
@@ -1089,12 +1237,16 @@ function MockTestPage() {
           marginBottom: '3rem'
         }}>
           {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
-            const restriction = testRestrictions[plan.level];
-            const payment = paymentStatus[plan.level];
+            const status = testStatus[plan.level] || {};
+            const payment = paymentDetails[plan.level] || {};
             const hasCert = userCertificates.find(c => c.level === plan.level);
-            const canTake = restriction?.canTake ?? true;
             const userIsAdmin = isAdmin(user?.email);
-            const daysRemaining = getDaysRemaining(restriction);
+
+            // Calculate remaining time for grace period or lock
+            let timeRemainingDisplay = '';
+            if (status.timeRemaining) {
+              timeRemainingDisplay = formatTimeRemaining(status.timeRemaining);
+            }
 
             return (
               <div
@@ -1251,7 +1403,7 @@ function MockTestPage() {
                   </div>
                 )}
 
-                {!userIsAdmin && payment?.hasPaid && (
+                {!userIsAdmin && status.status === 'grace_period' && (
                   <div style={{
                     padding: '0.75rem',
                     background: 'rgba(16,185,129,0.1)',
@@ -1265,8 +1417,27 @@ function MockTestPage() {
                     color: '#10b981',
                     fontWeight: '600'
                   }}>
-                    <CheckCircle size={16} />
-                    Paid ✓
+                    <Unlock size={16} />
+                    ✅ Available - Grace Period: {timeRemainingDisplay}
+                  </div>
+                )}
+
+                {!userIsAdmin && status.status === 'in_progress' && (
+                  <div style={{
+                    padding: '0.75rem',
+                    background: 'rgba(245,158,11,0.1)',
+                    border: '1px solid rgba(245,158,11,0.3)',
+                    borderRadius: '8px',
+                    marginBottom: '1rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                    color: '#f59e0b',
+                    fontWeight: '600'
+                  }}>
+                    <TrendingUp size={16} />
+                    📝 Test in Progress - Resume
                   </div>
                 )}
 
@@ -1285,11 +1456,11 @@ function MockTestPage() {
                     fontWeight: '600'
                   }}>
                     <Award size={16} />
-                    Certificate Earned {userIsAdmin && '(Unlimited)'}
+                    Certificate Earned (One per level)
                   </div>
                 )}
 
-                {!userIsAdmin && !canTake && daysRemaining > 0 && (
+                {!userIsAdmin && status.status === 'locked' && (
                   <div style={{
                     padding: '0.75rem',
                     background: 'rgba(239,68,68,0.1)',
@@ -1303,39 +1474,22 @@ function MockTestPage() {
                     color: '#ef4444',
                     fontWeight: '600'
                   }}>
-                    <Clock size={16} />
-                    🔒 Locked - Wait {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}
-                  </div>
-                )}
-
-                {!userIsAdmin && !canTake && daysRemaining === 0 && restriction?.message && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(239,68,68,0.1)',
-                    border: '1px solid rgba(239,68,68,0.3)',
-                    borderRadius: '8px',
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                    color: '#ef4444',
-                    fontWeight: '600'
-                  }}>
-                    <AlertCircle size={16} />
-                    {restriction.message}
+                    <Lock size={16} />
+                    🔒 Locked - {timeRemainingDisplay}
                   </div>
                 )}
 
                 {/* Action Button */}
                 <button
                   onClick={() => handleSelectPlan(plan)}
-                  disabled={!userIsAdmin && !canTake && payment?.hasPaid}
+                  disabled={!userIsAdmin && status.status === 'locked'}
                   style={{
                     width: '100%',
-                    background: (!userIsAdmin && !canTake && payment?.hasPaid)
+                    background: (!userIsAdmin && status.status === 'locked')
                       ? 'rgba(99,102,241,0.3)'
                       : userIsAdmin
+                      ? 'linear-gradient(135deg, #10b981, #059669)'
+                      : status.status === 'grace_period' || status.status === 'in_progress'
                       ? 'linear-gradient(135deg, #10b981, #059669)'
                       : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                     border: 'none',
@@ -1344,34 +1498,40 @@ function MockTestPage() {
                     borderRadius: '16px',
                     fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)',
                     fontWeight: '700',
-                    cursor: (!userIsAdmin && !canTake && payment?.hasPaid) ? 'not-allowed' : 'pointer',
+                    cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer',
                     transition: 'all 0.3s ease',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     gap: '0.75rem',
-                    boxShadow: (!userIsAdmin && !canTake && payment?.hasPaid)
+                    boxShadow: (!userIsAdmin && status.status === 'locked')
                       ? 'none'
                       : userIsAdmin
+                      ? '0 4px 20px rgba(16,185,129,0.4)'
+                      : status.status === 'grace_period' || status.status === 'in_progress'
                       ? '0 4px 20px rgba(16,185,129,0.4)'
                       : '0 4px 20px rgba(99,102,241,0.4)',
                     textTransform: 'uppercase',
                     letterSpacing: '1px',
-                    opacity: (!userIsAdmin && !canTake && payment?.hasPaid) ? 0.6 : 1
+                    opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1
                   }}
                   onMouseEnter={(e) => {
-                    if (userIsAdmin || canTake || !payment?.hasPaid) {
+                    if (userIsAdmin || status.status !== 'locked') {
                       e.currentTarget.style.transform = 'translateY(-2px)';
                       e.currentTarget.style.boxShadow = userIsAdmin
+                        ? '0 8px 30px rgba(16,185,129,0.5)'
+                        : status.status === 'grace_period' || status.status === 'in_progress'
                         ? '0 8px 30px rgba(16,185,129,0.5)'
                         : '0 8px 30px rgba(99,102,241,0.5)';
                     }
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = (!userIsAdmin && !canTake && payment?.hasPaid)
+                    e.currentTarget.style.boxShadow = (!userIsAdmin && status.status === 'locked')
                       ? 'none'
                       : userIsAdmin
+                      ? '0 4px 20px rgba(16,185,129,0.4)'
+                      : status.status === 'grace_period' || status.status === 'in_progress'
                       ? '0 4px 20px rgba(16,185,129,0.4)'
                       : '0 4px 20px rgba(99,102,241,0.4)';
                   }}
@@ -1381,20 +1541,20 @@ function MockTestPage() {
                       <Zap size={24} />
                       🔓 Start Free Test
                     </>
-                  ) : !payment?.hasPaid ? (
+                  ) : status.status === 'grace_period' || status.status === 'in_progress' ? (
                     <>
                       <Zap size={24} />
-                      Buy Test (₹{prices[plan.level] || plan.price})
+                      {status.status === 'in_progress' ? 'Resume Test' : 'Start Test'}
                     </>
-                  ) : !canTake && daysRemaining > 0 ? (
+                  ) : status.status === 'locked' ? (
                     <>
-                      <Clock size={24} />
-                      🔒 Wait {daysRemaining} Day{daysRemaining !== 1 ? 's' : ''}
+                      <Lock size={24} />
+                      🔒 Locked - {timeRemainingDisplay}
                     </>
                   ) : (
                     <>
                       <Zap size={24} />
-                      Start Test
+                      Buy Test (₹{prices[plan.level] || plan.price})
                     </>
                   )}
                 </button>
@@ -1409,7 +1569,8 @@ function MockTestPage() {
             background: isDark ? '#1e293b' : '#fff',
             borderRadius: '24px',
             padding: 'clamp(1.5rem, 4vw, 2rem)',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+            boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+            marginBottom: '3rem'
           }}>
             <h2 style={{
               fontSize: 'clamp(1.2rem, 3vw, 1.5rem)',
@@ -1421,7 +1582,7 @@ function MockTestPage() {
               gap: '0.75rem',
               flexWrap: 'wrap'
             }}>
-              <Calendar size={28} color="#6366f1" />
+              <History size={28} color="#6366f1" />
               Test History
             </h2>
 
@@ -1429,7 +1590,7 @@ function MockTestPage() {
               display: 'grid',
               gap: '1rem'
             }}>
-              {testHistory.slice(0, 5).map((test, i) => (
+              {testHistory.slice(0, 10).map((test, i) => (
                 <div
                   key={i}
                   style={{
@@ -1469,13 +1630,13 @@ function MockTestPage() {
                   }}>
                     <div style={{
                       padding: '0.5rem 1rem',
-                      background: test.score >= 70
+                      background: test.score >= 55
                         ? 'rgba(16,185,129,0.2)'
                         : 'rgba(239,68,68,0.2)',
                       borderRadius: '20px',
                       fontSize: 'clamp(0.8rem, 2vw, 0.9rem)',
                       fontWeight: '700',
-                      color: test.score >= 70 ? '#10b981' : '#ef4444'
+                      color: test.score >= 55 ? '#10b981' : '#ef4444'
                     }}>
                       {test.score}%
                     </div>

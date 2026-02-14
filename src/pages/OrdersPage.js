@@ -1,984 +1,1257 @@
-import React, { useEffect, useState } from 'react';
-import { Download, CheckCircle, Trash2, FileText, X, Receipt, Package } from 'lucide-react';
-import { useAuth } from '../App';
-import { db } from '../firebase';
-import { deleteDoc, doc, updateDoc, increment } from 'firebase/firestore';
-import ConfirmModal from '../components/ConfirmModal';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, Award, XCircle, BookOpen } from 'lucide-react';
+import UserDetailsForm from './UserDetailsForm';
 
-function OrdersPage({ orders: initialOrders, refreshOrders }) {
-  const { user } = useAuth();
-  const [orders, setOrders] = useState(initialOrders || []);
-  const [showReceipt, setShowReceipt] = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-  const [downloading, setDownloading] = useState({});
+// ==========================================
+// 🎯 CONFIGURATION
+// ==========================================
+const APP_CONFIG = {
+  ADMIN_EMAIL: 'luckyfaizu3@gmail.com',
+  MAX_TAB_SWITCHES: 3,
+  PASS_PERCENTAGE: 55,
+  WARNING_TIMEOUT: 3000,
+  CRITICAL_WARNING_TIMEOUT: 5000,
+  AUTO_SUBMIT_DELAY: 3000,
+  CRITICAL_TIME_MINUTES: 5,
+};
 
-  useEffect(() => {
-    console.log('===========================================');
-    console.log('🔍 ORDERS PAGE FULL DEBUG');
-    console.log('===========================================');
-    console.log('User:', user?.email);
-    console.log('Total Orders:', orders?.length || 0);
-    console.log('Raw Orders Data:', JSON.stringify(orders, null, 2));
-    
-    // 🔍 Debug each order's items in detail
-    if (orders && orders.length > 0) {
-      orders.forEach((order, orderIdx) => {
-        console.log(`\n📦 ORDER ${orderIdx + 1}:`, order.id);
-        console.log('  Order Date:', order.date);
-        console.log('  Order Total:', order.total);
-        console.log('  Items Count:', order.items?.length || 0);
-        
-        if (order.items && order.items.length > 0) {
-          order.items.forEach((item, itemIdx) => {
-            console.log(`\n  📄 ITEM ${itemIdx + 1}:`);
-            console.log('    Title:', item.title);
-            console.log('    ID:', item.id);
-            console.log('    Price:', item.price);
-            console.log('    isBundle:', item.isBundle);
-            console.log('    Has pdfFiles key?', 'pdfFiles' in item);
-            console.log('    pdfFiles value:', item.pdfFiles);
-            console.log('    pdfFiles type:', typeof item.pdfFiles);
-            console.log('    pdfFiles is Array?', Array.isArray(item.pdfFiles));
-            console.log('    pdfFiles length:', item.pdfFiles?.length);
-            console.log('    Has bundledProducts key?', 'bundledProducts' in item);
-            console.log('    bundledProducts value:', item.bundledProducts);
-            console.log('    bundledProducts type:', typeof item.bundledProducts);
-            console.log('    bundledProducts is Array?', Array.isArray(item.bundledProducts));
-            console.log('    bundledProducts length:', item.bundledProducts?.length);
-            
-            // Check download button visibility
-            const hasPDFs = item.pdfFiles && Array.isArray(item.pdfFiles) && item.pdfFiles.length > 0;
-            const hasBundle = item.isBundle && item.bundledProducts && Array.isArray(item.bundledProducts) && item.bundledProducts.length > 0;
-            console.log('    ⭐ WILL SHOW DOWNLOAD BUTTON?', hasPDFs || hasBundle);
-            console.log('    - Has PDFs:', hasPDFs);
-            console.log('    - Has Bundle:', hasBundle);
-          });
+// ==========================================
+// 🎨 THEME & STYLES
+// ==========================================
+const THEME = {
+  colors: {
+    primary: '#3b82f6',
+    success: '#10b981',
+    danger: '#ef4444',
+    warning: '#f59e0b',
+    dark: '#1e293b',
+    light: '#f8fafc',
+  },
+  timer: {
+    safe: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
+    warning: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
+    critical: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b' },
+  }
+};
+
+// ==========================================
+// 🛠️ UTILITY FUNCTIONS
+// ==========================================
+class TestUtils {
+  static isAdmin(email) {
+    return email === APP_CONFIG.ADMIN_EMAIL;
+  }
+
+  static formatTime(totalSeconds) {
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    return {
+      hours: h,
+      minutes: m,
+      seconds: s,
+      display: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    };
+  }
+
+  static getTimerTheme(timeLeft, totalTime) {
+    const percentage = (timeLeft / totalTime) * 100;
+    if (percentage > 50) return THEME.timer.safe;
+    if (percentage > 20) return THEME.timer.warning;
+    return THEME.timer.critical;
+  }
+
+  static calculateScore(answers, questions, tabSwitches, isAdmin) {
+    let correct = 0;
+    let wrong = 0;
+    const correctQuestions = [];
+    const wrongQuestions = [];
+
+    questions.forEach((q, idx) => {
+      if (answers[idx] !== undefined) {
+        if (answers[idx] === q.correct) {
+          correct++;
+          correctQuestions.push(idx + 1);
         } else {
-          console.log('  ⚠️ No items in this order!');
+          wrong++;
+          wrongQuestions.push(idx + 1);
         }
-      });
-    } else {
-      console.log('\n⚠️ NO ORDERS FOUND!');
-    }
-    console.log('===========================================\n');
-  }, [orders, user]);
-
-  useEffect(() => {
-    if (initialOrders) {
-      console.log('📥 Orders updated from parent:', initialOrders.length);
-      setOrders(initialOrders);
-    }
-  }, [initialOrders]);
-
-  // ✅ Update product stats when PDF is downloaded
-  const updateProductStats = async (productId, price) => {
-    try {
-      const productRef = doc(db, 'products', productId);
-      await updateDoc(productRef, {
-        totalDownloads: increment(1),
-        totalRevenue: increment(price)
-      });
-      console.log('✅ Product stats updated:', productId);
-    } catch (error) {
-      console.error('❌ Failed to update product stats:', error);
-    }
-  };
-
-  // ✅ Handle Bundle Download - Downloads all PDFs from all bundled products
-  const handleDownloadBundle = async (item) => {
-    console.log('📦 Starting bundle download:', item.title);
-    console.log('Bundled products:', item.bundledProducts);
-    
-    if (!item.bundledProducts || item.bundledProducts.length === 0) {
-      window.showToast?.('❌ No products in bundle', 'error');
-      return;
-    }
-
-    // Count total PDFs
-    let totalPdfs = 0;
-    item.bundledProducts.forEach(product => {
-      if (product.pdfFiles && product.pdfFiles.length > 0) {
-        totalPdfs += product.pdfFiles.length;
+      } else {
+        wrongQuestions.push(idx + 1);
       }
     });
 
-    if (totalPdfs === 0) {
-      window.showToast?.('❌ No PDFs available in bundle', 'error');
-      return;
-    }
-
-    setDownloading(prev => ({ ...prev, [item.id]: true }));
-    window.showToast?.(`📦 Downloading ${totalPdfs} PDF(s) from ${item.bundledProducts.length} products...`, 'info');
-
-    try {
-      // Update stats once for the bundle
-      await updateProductStats(item.id, item.price);
-
-      let downloadedCount = 0;
-
-      // Download PDFs from each bundled product
-      for (let productIndex = 0; productIndex < item.bundledProducts.length; productIndex++) {
-        const product = item.bundledProducts[productIndex];
-        
-        if (!product.pdfFiles || product.pdfFiles.length === 0) {
-          console.log(`⏭️ Skipping ${product.title} - no PDFs`);
-          continue;
-        }
-
-        console.log(`📥 Downloading PDFs from: ${product.title}`);
-
-        for (let pdfIndex = 0; pdfIndex < product.pdfFiles.length; pdfIndex++) {
-          const pdf = product.pdfFiles[pdfIndex];
-          console.log(`Downloading: ${pdf.fileName}`);
-          
-          const response = await fetch(pdf.url);
-          const blob = await response.blob();
-          const blobUrl = window.URL.createObjectURL(blob);
-          
-          const link = document.createElement('a');
-          link.href = blobUrl;
-          link.download = `${product.title}_${pdf.fileName}`;
-          
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(blobUrl);
-          
-          downloadedCount++;
-          
-          // Small delay between downloads
-          if (downloadedCount < totalPdfs) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        }
-      }
-      
-      console.log(`✅ All ${downloadedCount} PDFs downloaded from bundle`);
-      window.showToast?.(`✅ Downloaded ${downloadedCount} PDF(s) from bundle!`, 'success');
-      
-    } catch (error) {
-      console.error('❌ Bundle download error:', error);
-      window.showToast?.('❌ Download failed: ' + error.message, 'error');
-    } finally {
-      setDownloading(prev => ({ ...prev, [item.id]: false }));
-    }
-  };
-
-  // ✅ Handle multi-PDF download (for single products)
-  const handleDownloadAll = async (item) => {
-    console.log('📥 Starting download for:', item.title);
-    console.log('PDFs:', item.pdfFiles);
+    let percentage = Math.round((correct / questions.length) * 100);
     
-    if (!item.pdfFiles || item.pdfFiles.length === 0) {
-      window.showToast?.('❌ No PDFs available', 'error');
-      return;
+    // Apply penalty for tab switches
+    const penalized = !isAdmin && tabSwitches >= APP_CONFIG.MAX_TAB_SWITCHES;
+    if (penalized) {
+      percentage = Math.max(0, percentage - 20);
     }
 
-    setDownloading(prev => ({ ...prev, [item.id]: true }));
-    window.showToast?.(`📥 Downloading ${item.pdfFiles.length} PDF(s)...`, 'info');
+    return {
+      correct,
+      wrong,
+      total: questions.length,
+      percentage,
+      passed: isAdmin ? true : percentage >= APP_CONFIG.PASS_PERCENTAGE,
+      correctQuestions,
+      wrongQuestions,
+      penalized
+    };
+  }
+}
 
-    try {
-      // ✅ Update stats once for the product
-      await updateProductStats(item.id, item.price);
+// ==========================================
+// 🔊 AUDIO MANAGER
+// ==========================================
+class AudioManager {
+  constructor() {
+    this.context = null;
+  }
 
-      // Download all PDFs
-      for (let i = 0; i < item.pdfFiles.length; i++) {
-        const pdf = item.pdfFiles[i];
-        console.log(`Downloading PDF ${i + 1}/${item.pdfFiles.length}:`, pdf.fileName);
-        
-        const response = await fetch(pdf.url);
-        const blob = await response.blob();
-        const blobUrl = window.URL.createObjectURL(blob);
-        
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = pdf.fileName;
-        
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(blobUrl);
-        
-        // Small delay between downloads
-        if (i < item.pdfFiles.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
-      }
-      
-      console.log('✅ All downloads complete');
-      window.showToast?.(`✅ Downloaded ${item.pdfFiles.length} PDF(s)!`, 'success');
-      
-    } catch (error) {
-      console.error('❌ Download error:', error);
-      window.showToast?.('❌ Download failed: ' + error.message, 'error');
-    } finally {
-      setDownloading(prev => ({ ...prev, [item.id]: false }));
+  init() {
+    if (!this.context) {
+      this.context = new (window.AudioContext || window.webkitAudioContext)();
     }
-  };
+  }
 
-  // ✅ Handle single PDF download
-  const handleDownloadSingle = async (item, pdfIndex) => {
-    console.log('📥 Downloading single PDF:', item.pdfFiles[pdfIndex].fileName);
+  playTick(isEven) {
+    if (!this.context) return;
     
-    setDownloading(prev => ({ ...prev, [`${item.id}-${pdfIndex}`]: true }));
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
     
-    try {
-      const pdf = item.pdfFiles[pdfIndex];
-      const response = await fetch(pdf.url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = pdf.fileName;
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
-      
-      window.showToast?.('✅ Download complete!', 'success');
-      
-    } catch (error) {
-      console.error('❌ Download error:', error);
-      window.showToast?.('❌ Download failed: ' + error.message, 'error');
-    } finally {
-      setDownloading(prev => ({ ...prev, [`${item.id}-${pdfIndex}`]: false }));
-    }
-  };
+    osc.connect(gain);
+    gain.connect(this.context.destination);
+    
+    osc.frequency.value = isEven ? 1000 : 800;
+    osc.type = 'sine';
+    
+    const now = this.context.currentTime;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+    
+    osc.start(now);
+    osc.stop(now + 0.08);
+  }
 
-  const handleDeleteOrder = async (orderId) => {
+  playAlarm() {
+    if (!this.context) return;
+    
+    const osc = this.context.createOscillator();
+    const gain = this.context.createGain();
+    
+    osc.connect(gain);
+    gain.connect(this.context.destination);
+    
+    osc.frequency.value = 880;
+    osc.type = 'square';
+    
+    const now = this.context.currentTime;
+    gain.gain.setValueAtTime(0.2, now);
+    
+    osc.start(now);
+    osc.stop(now + 1);
+  }
+
+  destroy() {
+    if (this.context) {
+      this.context.close();
+      this.context = null;
+    }
+  }
+}
+
+// ==========================================
+// 🖥️ FULLSCREEN MANAGER
+// ==========================================
+class FullscreenManager {
+  static async enter() {
     try {
-      window.showToast?.('🗑️ Deleting order...', 'info');
-      
-      await deleteDoc(doc(db, 'orders', orderId));
-      
-      window.showToast?.('✅ Order deleted successfully!', 'success');
-      
-      if (refreshOrders) {
-        console.log('🔄 Refreshing orders after delete...');
-        await refreshOrders();
-      } else {
-        setOrders(orders.filter(order => order.id !== orderId));
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+      } else if (elem.webkitRequestFullscreen) {
+        await elem.webkitRequestFullscreen();
+      } else if (elem.msRequestFullscreen) {
+        await elem.msRequestFullscreen();
       }
-      
-      setConfirmDelete(null);
-      
-    } catch (error) {
-      console.error('❌ Delete error:', error);
-      window.showToast?.('❌ Failed to delete order. Please try again.', 'error');
+      return true;
+    } catch (err) {
+      if (process.env.NODE_ENV === 'production') {
+        console.error('Fullscreen error:', err);
+      }
+      return false;
     }
-  };
+  }
 
-  if (!orders || orders.length === 0) {
-    return (
-      <div style={{
-        paddingTop: '100px',
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '100px 1.5rem 2rem'
-      }}>
-        <div style={{
-          textAlign: 'center',
-          animation: 'fadeInUp 0.6s ease'
-        }}>
-          <div style={{
-            fontSize: '5rem',
-            marginBottom: '1.5rem',
-            opacity: 0.3
-          }}>📦</div>
-          <h2 style={{
-            fontSize: '2rem',
-            fontWeight: '900',
-            marginBottom: '1rem',
-            color: '#1e293b'
-          }}>
-            No orders yet
-          </h2>
-          <p style={{
-            color: '#64748b',
-            fontSize: '1.1rem'
-          }}>
-            Start shopping to see your orders here!
-          </p>
-        </div>
-      </div>
+  static async exit() {
+    try {
+      if (!FullscreenManager.isActive()) {
+        return;
+      }
+
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+      } else if (document.msExitFullscreen) {
+        await document.msExitFullscreen();
+      }
+    } catch (err) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Fullscreen exit (expected in dev mode):', err.message);
+      }
+    }
+  }
+
+  static isActive() {
+    return !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.msFullscreenElement
     );
   }
 
+  static onChange(callback) {
+    const events = ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'];
+    events.forEach(event => document.addEventListener(event, callback));
+    return () => events.forEach(event => document.removeEventListener(event, callback));
+  }
+}
+
+// ==========================================
+// 🔒 SECURITY MANAGER
+// ==========================================
+class SecurityManager {
+  constructor(onWarning) {
+    this.onWarning = onWarning;
+    this.handlers = {
+      copy: (e) => { e.preventDefault(); this.onWarning('⚠️ Copying disabled!'); },
+      cut: (e) => { e.preventDefault(); this.onWarning('⚠️ Cutting disabled!'); },
+      paste: (e) => { e.preventDefault(); },
+      contextMenu: (e) => { e.preventDefault(); this.onWarning('⚠️ Right-click disabled!'); },
+      keydown: (e) => {
+        const isCopyPaste = e.ctrlKey && ['c', 'v', 'x', 'a', 'u'].includes(e.key.toLowerCase());
+        const isDevTools = e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()));
+        
+        if (isCopyPaste || isDevTools) {
+          e.preventDefault();
+          this.onWarning('⚠️ Shortcut disabled!');
+        }
+      }
+    };
+  }
+
+  enable() {
+    Object.entries(this.handlers).forEach(([event, handler]) => {
+      document.addEventListener(event, handler);
+    });
+  }
+
+  disable() {
+    Object.entries(this.handlers).forEach(([event, handler]) => {
+      document.removeEventListener(event, handler);
+    });
+  }
+}
+
+// ==========================================
+// 🎨 CONFIRMATION DIALOG
+// ==========================================
+function ConfirmDialog({ message, onConfirm, onCancel }) {
   return (
     <div style={{
-      paddingTop: '100px',
-      paddingBottom: '3rem',
-      minHeight: '100vh',
-      padding: '100px 1.5rem 3rem'
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 99999999, backdropFilter: 'blur(12px)',
+      animation: 'fadeIn 0.3s ease', padding: '1rem'
     }}>
       <div style={{
-        maxWidth: '900px',
-        margin: '0 auto'
+        background: 'linear-gradient(135deg, #fff 0%, #f8fafc 100%)',
+        padding: 'clamp(1.5rem, 5vw, 2.5rem)',
+        borderRadius: '28px',
+        maxWidth: '480px',
+        width: '100%',
+        border: '4px solid #e2e8f0',
+        boxShadow: '0 30px 80px rgba(0,0,0,0.3)',
+        textAlign: 'center',
+        animation: 'scaleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
       }}>
-        {/* Header */}
-        <h1 style={{
-          fontSize: 'clamp(2rem, 6vw, 3rem)',
-          fontWeight: '900',
-          textAlign: 'center',
-          marginBottom: '2rem',
-          background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          animation: 'fadeInUp 0.6s ease'
-        }}>
-          My Orders ({orders.length})
-        </h1>
-        
-        {/* 🔍 DEBUG PANEL - Remove this after fixing */}
         <div style={{
-          background: '#fff3cd',
-          border: '2px solid #ffc107',
-          borderRadius: '12px',
-          padding: '1rem',
-          marginBottom: '1.5rem',
-          fontSize: '0.85rem'
-        }}>
-          <div style={{ fontWeight: 'bold', marginBottom: '0.5rem', color: '#856404' }}>
-            🔍 DEBUG INFO - Check Console for Full Details
-          </div>
-          <div style={{ color: '#856404' }}>
-            • Open browser console (F12)<br/>
-            • Look for detailed order item logs<br/>
-            • Check if pdfFiles/bundledProducts exist
-          </div>
-        </div>
-        
-        {/* Orders List */}
-        {orders.map((order, index) => (
-          <div 
-            key={order.id} 
-            style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '20px',
-              padding: '1.5rem',
-              marginBottom: '1.5rem',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-              animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`
-            }}
-          >
-            {/* Order Header */}
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              marginBottom: '1.5rem',
-              gap: '0.75rem'
-            }}>
-              <div style={{ flex: 1 }}>
-                <h3 style={{
-                  fontSize: '1.1rem',
-                  fontWeight: '800',
-                  color: '#1e293b',
-                  marginBottom: '0.25rem'
-                }}>
-                  Order #{order.id?.substring(0, 8)}
-                </h3>
-                <p style={{
-                  color: '#64748b',
-                  fontSize: '0.85rem'
-                }}>
-                  {order.date}
-                </p>
-              </div>
-              
-              {/* Action Buttons */}
-              <div style={{ 
-                display: 'flex', 
-                gap: '0.5rem',
-                flexShrink: 0
-              }}>
-                <button
-                  onClick={() => setShowReceipt(order)}
-                  style={{
-                    background: 'rgba(99,102,241,0.1)',
-                    border: '1px solid rgba(99,102,241,0.3)',
-                    padding: '0.6rem',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <Receipt size={18} color="#6366f1" />
-                </button>
-
-                <button
-                  onClick={() => setConfirmDelete(order.id)}
-                  style={{
-                    background: 'rgba(239,68,68,0.1)',
-                    border: '1px solid rgba(239,68,68,0.2)',
-                    padding: '0.6rem',
-                    borderRadius: '12px',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <Trash2 size={18} color="#ef4444" />
-                </button>
-              </div>
-            </div>
-
-            {/* Status Badge */}
-            <div style={{
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              padding: '0.6rem 1rem',
-              borderRadius: '30px',
-              fontSize: '0.85rem',
-              fontWeight: '700',
-              color: '#fff',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginBottom: '1.5rem'
-            }}>
-              <CheckCircle size={16} />
-              {order.status}
-            </div>
-            
-            {/* Order Items */}
-            <div style={{
-              borderTop: '1px solid #e2e8f0',
-              paddingTop: '1.5rem'
-            }}>
-              {/* Total */}
-              <div style={{
-                marginBottom: '1.5rem',
-                textAlign: 'center'
-              }}>
-                <div style={{
-                  fontSize: '0.85rem',
-                  color: '#64748b',
-                  marginBottom: '0.25rem',
-                  fontWeight: '600'
-                }}>
-                  Total Amount
-                </div>
-                <div style={{
-                  fontSize: '2rem',
-                  fontWeight: '900',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent'
-                }}>
-                  ₹{order.total}
-                </div>
-              </div>
-
-              {/* Items */}
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1rem'
-              }}>
-                {order.items?.map((item, itemIdx) => {
-                  // 🔍 Check if download button should be shown
-                  const hasPDFs = item.pdfFiles && Array.isArray(item.pdfFiles) && item.pdfFiles.length > 0;
-                  const hasBundle = item.isBundle && item.bundledProducts && Array.isArray(item.bundledProducts) && item.bundledProducts.length > 0;
-                  const showDownload = hasPDFs || hasBundle;
-                  
-                  console.log(`🎯 Rendering item ${itemIdx + 1}:`, {
-                    title: item.title,
-                    hasPDFs,
-                    pdfCount: item.pdfFiles?.length,
-                    hasBundle,
-                    bundleCount: item.bundledProducts?.length,
-                    showDownload
-                  });
-                  
-                  return (
-                    <div key={item.id || itemIdx} style={{
-                      background: 'rgba(99,102,241,0.03)',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '16px',
-                      padding: '1.25rem',
-                    }}>
-                      {/* Item Header */}
-                      <div style={{
-                        marginBottom: '1rem'
-                      }}>
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.5rem',
-                          marginBottom: '0.5rem'
-                        }}>
-                          <h4 style={{
-                            fontSize: '1.05rem',
-                            fontWeight: '700',
-                            color: '#1e293b',
-                            lineHeight: 1.3,
-                            flex: 1
-                          }}>
-                            {item.isBundle ? '📦' : '📄'} {item.title}
-                          </h4>
-                          {item.isBundle && (
-                            <span style={{
-                              background: 'rgba(139,92,246,0.1)',
-                              color: '#8b5cf6',
-                              padding: '0.25rem 0.6rem',
-                              borderRadius: '12px',
-                              fontSize: '0.75rem',
-                              fontWeight: '700'
-                            }}>
-                              BUNDLE
-                            </span>
-                          )}
-                        </div>
-                        
-                        {/* Bundle or Single Product Info */}
-                        {item.isBundle ? (
-                          <div style={{
-                            fontSize: '0.85rem',
-                            color: '#64748b',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem'
-                          }}>
-                            <Package size={14} />
-                            {item.bundledProducts?.length || 0} products included
-                          </div>
-                        ) : (
-                          item.pdfFiles && (
-                            <div style={{
-                              fontSize: '0.85rem',
-                              color: '#64748b',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.5rem'
-                            }}>
-                              <FileText size={14} />
-                              {item.pdfFiles.length} PDF file{item.pdfFiles.length > 1 ? 's' : ''}
-                            </div>
-                          )
-                        )}
-                      </div>
-                      
-                      {/* 🔍 DEBUG INFO FOR THIS ITEM */}
-                      <div style={{
-                        background: showDownload ? '#d4edda' : '#f8d7da',
-                        border: showDownload ? '1px solid #c3e6cb' : '1px solid #f5c6cb',
-                        borderRadius: '8px',
-                        padding: '0.75rem',
-                        marginBottom: '1rem',
-                        fontSize: '0.8rem',
-                        color: showDownload ? '#155724' : '#721c24'
-                      }}>
-                        <div style={{ fontWeight: 'bold', marginBottom: '0.25rem' }}>
-                          {showDownload ? '✅ Download Button: VISIBLE' : '❌ Download Button: HIDDEN'}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', opacity: 0.8 }}>
-                          Has PDFs: {hasPDFs ? 'Yes' : 'No'} ({item.pdfFiles?.length || 0} files)<br/>
-                          Has Bundle: {hasBundle ? 'Yes' : 'No'} ({item.bundledProducts?.length || 0} products)
-                        </div>
-                      </div>
-                        
-                      {/* Download All Button - WITH BETTER VISIBILITY CHECK */}
-                      {showDownload ? (
-                        <button
-                          onClick={() => item.isBundle ? handleDownloadBundle(item) : handleDownloadAll(item)}
-                          disabled={downloading[item.id]}
-                          style={{
-                            width: '100%',
-                            background: downloading[item.id] 
-                              ? 'rgba(99,102,241,0.2)' 
-                              : item.isBundle
-                                ? 'linear-gradient(135deg, #8b5cf6, #7c3aed)'
-                                : 'linear-gradient(135deg, #10b981, #059669)',
-                            border: 'none',
-                            color: 'white',
-                            padding: '1rem',
-                            borderRadius: '14px',
-                            cursor: downloading[item.id] ? 'not-allowed' : 'pointer',
-                            fontWeight: '700',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '0.5rem',
-                            transition: 'all 0.3s ease',
-                            fontSize: '0.95rem',
-                            opacity: downloading[item.id] ? 0.7 : 1,
-                            marginBottom: item.isBundle ? '0' : '1rem',
-                            boxShadow: downloading[item.id] ? 'none' : item.isBundle ? '0 4px 12px rgba(139,92,246,0.3)' : '0 4px 12px rgba(16,185,129,0.3)'
-                          }}
-                        >
-                          <Download size={18} /> 
-                          {downloading[item.id] ? 'Downloading...' : 
-                            item.isBundle ? `Download All Bundle Files` : `Download All (${item.pdfFiles?.length || 0})`
-                          }
-                        </button>
-                      ) : (
-                        <div style={{
-                          background: '#fff3cd',
-                          border: '1px solid #ffc107',
-                          borderRadius: '12px',
-                          padding: '1rem',
-                          textAlign: 'center',
-                          color: '#856404',
-                          fontSize: '0.9rem'
-                        }}>
-                          ⚠️ No downloadable files found in this order item
-                        </div>
-                      )}
-
-                      {/* Individual PDF List (only for non-bundle products) */}
-                      {!item.isBundle && hasPDFs && (
-                        <div style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '0.75rem'
-                        }}>
-                          {item.pdfFiles.map((pdf, pdfIndex) => (
-                            <div key={pdfIndex} style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              padding: '0.9rem',
-                              background: '#ffffff',
-                              border: '1px solid #e2e8f0',
-                              borderRadius: '12px',
-                              gap: '0.75rem'
-                            }}>
-                              <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                flex: 1,
-                                minWidth: 0
-                              }}>
-                                <FileText size={18} color="#6366f1" style={{ flexShrink: 0 }} />
-                                <div style={{
-                                  flex: 1,
-                                  minWidth: 0
-                                }}>
-                                  <div style={{
-                                    fontWeight: '600',
-                                    color: '#1e293b',
-                                    fontSize: '0.9rem',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap'
-                                  }}>
-                                    {pdf.fileName}
-                                  </div>
-                                  {pdf.size && (
-                                    <div style={{
-                                      fontSize: '0.75rem',
-                                      color: '#64748b'
-                                    }}>
-                                      {pdf.size}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                              
-                              <button
-                                onClick={() => handleDownloadSingle(item, pdfIndex)}
-                                disabled={downloading[`${item.id}-${pdfIndex}`]}
-                                style={{
-                                  background: downloading[`${item.id}-${pdfIndex}`]
-                                    ? 'rgba(99,102,241,0.2)'
-                                    : 'rgba(99,102,241,0.1)',
-                                  border: '1px solid rgba(99,102,241,0.3)',
-                                  color: '#6366f1',
-                                  padding: '0.6rem 0.9rem',
-                                  borderRadius: '10px',
-                                  cursor: downloading[`${item.id}-${pdfIndex}`] ? 'not-allowed' : 'pointer',
-                                  fontWeight: '600',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.4rem',
-                                  fontSize: '0.8rem',
-                                  transition: 'all 0.3s ease',
-                                  flexShrink: 0
-                                }}
-                              >
-                                <Download size={14} />
-                                {downloading[`${item.id}-${pdfIndex}`] ? '...' : 'Get'}
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      
-                      {/* Bundle Products List */}
-                      {item.isBundle && hasBundle && (
-                        <div style={{
-                          marginTop: '1rem',
-                          padding: '1rem',
-                          background: 'rgba(139,92,246,0.05)',
-                          borderRadius: '12px',
-                          border: '1px solid rgba(139,92,246,0.2)'
-                        }}>
-                          <div style={{
-                            fontSize: '0.9rem',
-                            fontWeight: '700',
-                            color: '#8b5cf6',
-                            marginBottom: '0.75rem'
-                          }}>
-                            📦 Included Products:
-                          </div>
-                          {item.bundledProducts.map((bundledProduct, idx) => (
-                            <div key={idx} style={{
-                              padding: '0.75rem',
-                              background: '#ffffff',
-                              borderRadius: '8px',
-                              marginBottom: idx < item.bundledProducts.length - 1 ? '0.5rem' : '0',
-                              border: '1px solid #e2e8f0'
-                            }}>
-                              <div style={{
-                                fontWeight: '600',
-                                color: '#1e293b',
-                                fontSize: '0.9rem',
-                                marginBottom: '0.25rem'
-                              }}>
-                                {bundledProduct.title}
-                              </div>
-                              {bundledProduct.pdfFiles && bundledProduct.pdfFiles.length > 0 && (
-                                <div style={{
-                                  fontSize: '0.75rem',
-                                  color: '#64748b',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: '0.25rem'
-                                }}>
-                                  <FileText size={12} />
-                                  {bundledProduct.pdfFiles.length} PDF file{bundledProduct.pdfFiles.length > 1 ? 's' : ''}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Receipt Modal */}
-      {showReceipt && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(10px)',
+          width: 'clamp(60px, 15vw, 80px)',
+          height: 'clamp(60px, 15vw, 80px)',
+          margin: '0 auto 1.5rem',
+          background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+          borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: 2000,
-          padding: '1rem',
-          overflowY: 'auto',
-          animation: 'fadeIn 0.3s ease'
-        }}
-        onClick={() => setShowReceipt(null)}
-        >
-          <div style={{
+          boxShadow: '0 10px 30px rgba(251,191,36,0.4)'
+        }}>
+          <AlertTriangle size={window.innerWidth < 768 ? 32 : 42} color="#fff" strokeWidth={2.5} />
+        </div>
+        
+        <div style={{
+          fontSize: 'clamp(1.1rem, 4vw, 1.5rem)',
+          fontWeight: '800',
+          color: '#1e293b',
+          marginBottom: '2rem',
+          lineHeight: 1.4
+        }}>
+          {message}
+        </div>
+        
+        <div style={{
+          display: 'flex',
+          gap: '1rem',
+          flexDirection: window.innerWidth < 768 ? 'column' : 'row'
+        }}>
+          <button onClick={onCancel} style={{
+            flex: 1,
+            padding: 'clamp(0.75rem, 3vw, 1rem) clamp(1rem, 3vw, 1.5rem)',
             background: '#fff',
-            borderRadius: '24px',
-            padding: '2rem 1.5rem',
-            maxWidth: '500px',
-            width: '100%',
-            maxHeight: '90vh',
-            overflow: 'auto',
-            position: 'relative',
-            animation: 'slideUp 0.3s ease',
-            margin: '1rem 0'
-          }}
-          onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setShowReceipt(null)}
-              style={{
-                position: 'absolute',
-                top: '1rem',
-                right: '1rem',
-                background: 'rgba(239,68,68,0.1)',
-                border: 'none',
-                borderRadius: '50%',
-                width: '40px',
-                height: '40px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              <X size={20} color="#ef4444" />
-            </button>
+            border: '3px solid #e2e8f0',
+            borderRadius: '14px',
+            color: '#64748b',
+            fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)',
+            fontWeight: '700',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}>
+            ✕ Cancel
+          </button>
+          
+          <button onClick={onConfirm} style={{
+            flex: 1,
+            padding: 'clamp(0.75rem, 3vw, 1rem) clamp(1rem, 3vw, 1.5rem)',
+            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+            border: '3px solid #dc2626',
+            borderRadius: '14px',
+            color: '#fff',
+            fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)',
+            fontWeight: '800',
+            cursor: 'pointer',
+            boxShadow: '0 8px 24px rgba(239,68,68,0.4)',
+            transition: 'all 0.2s'
+          }}>
+            ✓ Yes, Exit
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-            <h2 style={{
-              fontSize: '1.5rem',
-              fontWeight: '900',
-              marginBottom: '1.5rem',
-              color: '#1e293b',
-              textAlign: 'center',
-              paddingRight: '2rem'
+// ==========================================
+// 📋 INSTRUCTION SCREEN
+// ==========================================
+function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
+  const [accepted, setAccepted] = useState(false);
+
+  const instructions = [
+    { text: `Test duration is ${timeLimit} minutes. Timer starts immediately after you begin.` },
+    { text: `Do NOT switch tabs or windows. After 3 tab switches, test auto-submits.` },
+    { text: 'Copy, paste, right-click, and screenshots are disabled during the test.' },
+    { text: 'Test runs in fullscreen mode. Exiting fullscreen will trigger a warning.' },
+    { text: 'You can navigate between questions freely before submitting.' },
+    { text: 'ALL questions must be answered (A to Z completion required).' },
+    { text: 'Score 55% or above to PASS and receive your Certificate of Achievement.' },
+    { text: 'This test must be taken honestly. Malpractice leads to disqualification.' },
+  ];
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: '#f8fafc',
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+      padding: 'clamp(1rem, 3vw, 2rem)',
+      overflowY: 'auto'
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: '680px',
+        padding: 'clamp(1rem, 3vw, 2rem) 0'
+      }}>
+        {/* Header */}
+        <div style={{
+          background: '#fff',
+          border: '3px solid #e2e8f0',
+          borderRadius: '20px',
+          padding: 'clamp(1.25rem, 4vw, 1.5rem)',
+          marginBottom: '1rem',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+          textAlign: 'center'
+        }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            background: '#eff6ff',
+            border: '2px solid #bfdbfe',
+            borderRadius: '50px',
+            padding: '0.5rem 1.25rem',
+            marginBottom: '1rem'
+          }}>
+            <Shield size={18} color="#3b82f6" />
+            <span style={{
+              color: '#1d4ed8',
+              fontWeight: '800',
+              fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+              letterSpacing: '0.06em'
             }}>
-              🧾 Receipt
-            </h2>
+              EXAM INSTRUCTIONS
+            </span>
+          </div>
+          <h1 style={{
+            fontSize: 'clamp(1.3rem, 5vw, 1.9rem)',
+            fontWeight: '800',
+            color: '#1e293b',
+            margin: '0 0 0.75rem'
+          }}>
+            {testTitle}
+          </h1>
 
-            <div style={{
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.05), rgba(139,92,246,0.05))',
-              border: '2px solid rgba(99,102,241,0.2)',
-              borderRadius: '16px',
-              padding: '1.5rem',
-              marginBottom: '1.5rem'
-            }}>
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Order ID</div>
-                <div style={{ fontWeight: '700', fontSize: '1rem', color: '#1e293b' }}>#{showReceipt.id}</div>
-              </div>
-
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Payment ID</div>
-                <div style={{ 
-                  fontWeight: '700', 
-                  fontSize: '0.85rem', 
-                  color: '#1e293b', 
-                  wordBreak: 'break-all'
-                }}>
-                  {showReceipt.paymentId || 'N/A'}
-                </div>
-              </div>
-
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Date</div>
-                <div style={{ fontWeight: '700', fontSize: '1rem', color: '#1e293b' }}>{showReceipt.date}</div>
-              </div>
-
-              <div style={{ marginBottom: '1.25rem' }}>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.4rem', fontWeight: '600' }}>Customer</div>
-                <div style={{ 
-                  fontWeight: '700', 
-                  fontSize: '0.9rem', 
-                  color: '#1e293b',
-                  wordBreak: 'break-all'
-                }}>
-                  {showReceipt.userEmail}
-                </div>
-              </div>
-
-              <div style={{
-                borderTop: '2px dashed rgba(99,102,241,0.2)',
-                paddingTop: '1.25rem',
-                marginTop: '1.25rem'
-              }}>
-                <div style={{ color: '#64748b', fontSize: '0.8rem', marginBottom: '0.75rem', fontWeight: '600' }}>Items</div>
-                {showReceipt.items.map((item, idx) => (
-                  <div key={idx} style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    marginBottom: '0.75rem',
-                    fontSize: '0.9rem',
-                    gap: '1rem'
-                  }}>
-                    <span style={{ flex: 1 }}>
-                      {item.isBundle && '📦 '}{item.title}
-                    </span>
-                    <span style={{ fontWeight: '700', flexShrink: 0 }}>₹{item.price}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{
-                borderTop: '2px solid rgba(99,102,241,0.3)',
-                paddingTop: '1.25rem',
-                marginTop: '1.25rem',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: '1rem'
-              }}>
-                <span style={{ fontSize: '1.2rem', fontWeight: '900', color: '#1e293b' }}>Total Paid</span>
-                <span style={{
-                  fontSize: '1.75rem',
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            gap: 'clamp(1rem, 4vw, 1.5rem)',
+            flexWrap: 'wrap'
+          }}>
+            {[
+              { label: 'Duration', value: `${timeLimit} Min` },
+              { label: 'Questions', value: `${totalQuestions} Qs` },
+              { label: 'Pass Mark', value: '55%' }
+            ].map((s, i) => (
+              <div key={i}>
+                <div style={{
+                  fontSize: 'clamp(1rem, 3vw, 1.2rem)',
                   fontWeight: '900',
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent'
+                  color: '#3b82f6'
                 }}>
-                  ₹{showReceipt.total}
+                  {s.value}
+                </div>
+                <div style={{
+                  fontSize: 'clamp(0.7rem, 2vw, 0.75rem)',
+                  color: '#64748b',
+                  fontWeight: '700'
+                }}>
+                  {s.label}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Instructions */}
+        <div style={{
+          background: '#fff',
+          border: '3px solid #e2e8f0',
+          borderRadius: '20px',
+          padding: 'clamp(1.25rem, 4vw, 1.5rem)',
+          marginBottom: '1rem',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.08)'
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            marginBottom: '1.25rem'
+          }}>
+            <BookOpen size={18} color="#3b82f6" />
+            <span style={{
+              color: '#1e293b',
+              fontWeight: '800',
+              fontSize: 'clamp(0.85rem, 2.5vw, 0.95rem)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em'
+            }}>
+              Test Instructions
+            </span>
+          </div>
+
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '0.75rem',
+            marginBottom: '1.5rem'
+          }}>
+            {instructions.map((item, idx) => (
+              <div key={idx} style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.85rem',
+                padding: 'clamp(0.85rem, 2.5vw, 1rem)',
+                background: '#f8fafc',
+                border: '2px solid #e2e8f0',
+                borderRadius: '14px'
+              }}>
+                <div style={{
+                  width: '26px',
+                  height: '26px',
+                  minWidth: '26px',
+                  borderRadius: '8px',
+                  border: '2.5px solid #cbd5e1',
+                  background: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#64748b',
+                  fontWeight: '800',
+                  fontSize: '0.85rem'
+                }}>
+                  {idx + 1}
+                </div>
+                <span style={{
+                  color: '#475569',
+                  fontSize: 'clamp(0.85rem, 2.5vw, 0.95rem)',
+                  fontWeight: '600',
+                  lineHeight: 1.55,
+                  flex: 1
+                }}>
+                  {item.text}
                 </span>
               </div>
-            </div>
+            ))}
+          </div>
 
+          <div onClick={() => setAccepted(!accepted)} style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '1rem',
+            padding: 'clamp(1rem, 3vw, 1.25rem)',
+            background: accepted ? '#f0fdf4' : '#fff',
+            border: `3px solid ${accepted ? '#10b981' : '#e2e8f0'}`,
+            borderRadius: '14px',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}>
             <div style={{
-              background: 'linear-gradient(135deg, rgba(16,185,129,0.1), rgba(5,150,105,0.1))',
-              border: '2px solid rgba(16,185,129,0.3)',
-              borderRadius: '12px',
-              padding: '1rem',
-              textAlign: 'center',
-              color: '#10b981',
-              fontWeight: '700',
-              fontSize: '0.95rem'
+              width: '32px',
+              height: '32px',
+              minWidth: '32px',
+              borderRadius: '8px',
+              border: `3px solid ${accepted ? '#10b981' : '#cbd5e1'}`,
+              background: accepted ? '#10b981' : '#fff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.2s'
             }}>
-              ✅ Payment Successful
+              {accepted && <CheckCircle size={20} color="#fff" strokeWidth={3} />}
             </div>
+            <span style={{
+              color: accepted ? '#065f46' : '#475569',
+              fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)',
+              fontWeight: accepted ? '800' : '700',
+              lineHeight: 1.4,
+              flex: 1
+            }}>
+              ✅ I have read and understood all instructions above
+            </span>
+          </div>
+        </div>
+
+        <button onClick={() => accepted && onAccept()} disabled={!accepted} style={{
+          width: '100%',
+          padding: 'clamp(1rem, 3vw, 1.1rem)',
+          background: accepted ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
+          border: accepted ? '3px solid #059669' : '3px solid #e2e8f0',
+          borderRadius: '16px',
+          color: accepted ? '#fff' : '#94a3b8',
+          fontSize: 'clamp(0.95rem, 2.5vw, 1.05rem)',
+          fontWeight: '800',
+          cursor: accepted ? 'pointer' : 'not-allowed',
+          boxShadow: accepted ? '0 8px 24px rgba(16,185,129,0.35)' : 'none',
+          transition: 'all 0.3s'
+        }}>
+          {accepted ? '✅ Proceed to Fill Details' : '☑️ Please Accept Instructions First'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 🎮 MAIN TEST INTERFACE
+// ==========================================
+function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, userEmail, studentInfo }) {
+  // State
+  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [timeLeft, setTimeLeft] = useState(timeLimit * 60);
+  const [tabSwitches, setTabSwitches] = useState(0);
+  const [showWarning, setShowWarning] = useState(false);
+  const [warningMsg, setWarningMsg] = useState('');
+  const [showExitDialog, setShowExitDialog] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+  // Refs
+  const startTimeRef = useRef(Date.now());
+  const audioManagerRef = useRef(new AudioManager());
+  const securityManagerRef = useRef(null);
+  const warningTimerRef = useRef(null);
+
+  // Computed
+  const isAdmin = TestUtils.isAdmin(userEmail);
+  const answeredCount = Object.keys(answers).length;
+  const allAnswered = answeredCount === questions.length;
+  const timeData = TestUtils.formatTime(timeLeft);
+  const timerTheme = TestUtils.getTimerTheme(timeLeft, timeLimit * 60);
+  const isCriticalTime = timeLeft < APP_CONFIG.CRITICAL_TIME_MINUTES * 60;
+
+  // ==========================================
+  // 🛠️ HANDLERS
+  // ==========================================
+  const showWarningMessage = useCallback((message, critical = false) => {
+    setWarningMsg(message);
+    setShowWarning(true);
+
+    if (warningTimerRef.current) {
+      clearTimeout(warningTimerRef.current);
+    }
+
+    const timeout = critical ? APP_CONFIG.CRITICAL_WARNING_TIMEOUT : APP_CONFIG.WARNING_TIMEOUT;
+    warningTimerRef.current = setTimeout(() => {
+      setShowWarning(false);
+    }, timeout);
+  }, []);
+
+  const handleAnswer = useCallback((qIndex, optionIndex) => {
+    setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
+  }, []);
+
+  const handleSubmit = useCallback((penalized = false) => {
+    if (!isAdmin && !allAnswered) {
+      showWarningMessage(`⚠️ Answer ALL questions! (${answeredCount}/${questions.length} done)`, true);
+      return;
+    }
+
+    const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
+    const score = TestUtils.calculateScore(answers, questions, tabSwitches, isAdmin);
+
+    const results = {
+      ...score,
+      timeTaken: `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`,
+      tabSwitches,
+      penalized,
+      studentInfo
+    };
+
+    onComplete(results);
+  }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
+
+  // ==========================================
+  // ✅ AUTO-SCROLL TO TOP ON QUESTION CHANGE
+  // ==========================================
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentQuestion]);
+
+  // ==========================================
+  // 🎬 INITIALIZATION
+  // ==========================================
+  useEffect(() => {
+    const navbar = document.querySelector('nav');
+    const header = document.querySelector('header');
+    if (navbar) navbar.style.display = 'none';
+    if (header) header.style.display = 'none';
+
+    const currentAudioManager = audioManagerRef.current;
+    const currentSecurityManager = securityManagerRef.current;
+
+    if (!isAdmin) {
+      currentAudioManager.init();
+      securityManagerRef.current = new SecurityManager(showWarningMessage);
+      securityManagerRef.current.enable();
+    }
+
+    return () => {
+      if (navbar) navbar.style.display = '';
+      if (header) header.style.display = '';
+      currentAudioManager.destroy();
+      if (currentSecurityManager) {
+        currentSecurityManager.disable();
+      }
+    };
+  }, [isAdmin, showWarningMessage]);
+
+  // ==========================================
+  // 🖥️ FULLSCREEN MANAGEMENT
+  // ==========================================
+  useEffect(() => {
+    if (isAdmin) return;
+
+    const handleFullscreenChange = () => {
+      const isFullscreen = FullscreenManager.isActive();
+      
+      if (!isFullscreen) {
+        showWarningMessage('⚠️ Stay in fullscreen mode!');
+        setTimeout(() => {
+          FullscreenManager.enter();
+        }, 2000);
+      }
+    };
+
+    const cleanup = FullscreenManager.onChange(handleFullscreenChange);
+
+    return () => {
+      cleanup();
+      if (FullscreenManager.isActive()) {
+        FullscreenManager.exit();
+      }
+    };
+  }, [isAdmin, showWarningMessage]);
+
+  // ==========================================
+  // ⏱️ TIMER
+  // ==========================================
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      audioManagerRef.current.playAlarm();
+      showWarningMessage('⏰ TIME UP! Auto-submitting...', true);
+      setTimeout(() => handleSubmit(false), APP_CONFIG.AUTO_SUBMIT_DELAY);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, showWarningMessage, handleSubmit]);
+
+  // ==========================================
+  // 🔊 TICK SOUND
+  // ==========================================
+  useEffect(() => {
+    if (isAdmin || timeLeft <= 0) return;
+
+    const tickTimer = setInterval(() => {
+      audioManagerRef.current.playTick(timeLeft % 2 === 0);
+    }, 1000);
+
+    return () => clearInterval(tickTimer);
+  }, [timeLeft, isAdmin]);
+
+  // ==========================================
+  // 🚫 TAB SWITCH DETECTION
+  // ==========================================
+  useEffect(() => {
+    if (isAdmin) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        const newCount = tabSwitches + 1;
+        setTabSwitches(newCount);
+
+        if (newCount >= APP_CONFIG.MAX_TAB_SWITCHES) {
+          showWarningMessage('🚨 Maximum tab switches! Auto-submitting...', true);
+          setTimeout(() => handleSubmit(true), APP_CONFIG.AUTO_SUBMIT_DELAY);
+        } else {
+          showWarningMessage(`⚠️ Tab Switch ${newCount}/${APP_CONFIG.MAX_TAB_SWITCHES}!`);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [tabSwitches, isAdmin, showWarningMessage, handleSubmit]);
+
+  // ==========================================
+  // 📱 MOBILE DETECTION
+  // ==========================================
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ==========================================
+  // 🛠️ NAVIGATION HANDLER
+  // ==========================================
+  const handleNavigation = useCallback((direction) => {
+    if (direction === 'next' && currentQuestion < questions.length - 1) {
+      setCurrentQuestion(prev => prev + 1);
+    } else if (direction === 'prev' && currentQuestion > 0) {
+      setCurrentQuestion(prev => prev - 1);
+    }
+  }, [currentQuestion, questions.length]);
+
+  const currentQ = questions[currentQuestion];
+
+  // ==========================================
+  // 🎨 RENDER
+  // ==========================================
+  return (
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: '#f8fafc',
+      zIndex: 999999,
+      overflowY: 'auto',
+      userSelect: isAdmin ? 'auto' : 'none'
+    }}>
+      {/* Admin Badge */}
+      {isAdmin && (
+        <div style={{
+          position: 'fixed',
+          top: '10px',
+          left: '10px',
+          background: 'linear-gradient(135deg, #10b981, #059669)',
+          color: '#fff',
+          padding: 'clamp(0.5rem, 2vw, 0.6rem) clamp(0.8rem, 3vw, 1.2rem)',
+          borderRadius: '12px',
+          fontSize: 'clamp(0.7rem, 2vw, 0.8rem)',
+          fontWeight: '900',
+          zIndex: 10000000,
+          boxShadow: '0 6px 20px rgba(16,185,129,0.5)',
+          border: '2px solid #047857'
+        }}>
+          👑 ADMIN MODE
+        </div>
+      )}
+
+      {/* Warning Modal */}
+      {showWarning && !isAdmin && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.9)',
+          zIndex: 9999999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(10px)',
+          padding: '1rem'
+        }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+            padding: 'clamp(2rem, 5vw, 3rem)',
+            borderRadius: '28px',
+            maxWidth: '500px',
+            width: '100%',
+            border: '5px solid #ef4444',
+            boxShadow: '0 30px 80px rgba(239,68,68,0.6)',
+            textAlign: 'center',
+            animation: 'pulse 0.5s infinite'
+          }}>
+            <AlertTriangle
+              size={isMobile ? 64 : 80}
+              color="#dc2626"
+              strokeWidth={3}
+              style={{ marginBottom: '1rem', animation: 'shake 0.5s infinite' }}
+            />
+            <div style={{
+              fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
+              fontWeight: '900',
+              color: '#991b1b',
+              lineHeight: 1.4
+            }}>
+              {warningMsg}
+            </div>
+            {tabSwitches > 0 && (
+              <div style={{
+                fontSize: 'clamp(0.9rem, 2.5vw, 1rem)',
+                color: '#7f1d1d',
+                fontWeight: '700',
+                marginTop: '1rem'
+              }}>
+                Tab Switches: {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      <ConfirmModal
-        show={confirmDelete !== null}
-        onConfirm={() => handleDeleteOrder(confirmDelete)}
-        onCancel={() => setConfirmDelete(null)}
-        title="Delete Order?"
-        message="Are you sure you want to delete this order? This action cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
-        type="danger"
-      />
+      {/* Exit Dialog */}
+      {showExitDialog && (
+        <ConfirmDialog
+          message="Are you sure you want to exit and submit the test?"
+          onConfirm={() => { handleSubmit(false); onExit(); }}
+          onCancel={() => setShowExitDialog(false)}
+        />
+      )}
 
+      {/* Header */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        background: '#fff',
+        borderBottom: '3px solid #e2e8f0',
+        padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1rem, 3vw, 1.5rem)',
+        zIndex: 1000,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+      }}>
+        <div style={{
+          maxWidth: '1400px',
+          margin: '0 auto',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: '1rem',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ flex: 1, minWidth: '200px' }}>
+            <h1 style={{
+              fontSize: 'clamp(1rem, 3vw, 1.4rem)',
+              fontWeight: '800',
+              color: '#1e293b',
+              margin: '0 0 0.25rem'
+            }}>
+              {testTitle}
+            </h1>
+            <div style={{
+              fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
+              color: '#64748b',
+              fontWeight: '600',
+              display: 'flex',
+              gap: '0.75rem',
+              alignItems: 'center',
+              flexWrap: 'wrap'
+            }}>
+              <span>Q {currentQuestion + 1}/{questions.length}</span>
+              <span style={{
+                background: allAnswered ? '#dcfce7' : '#fef3c7',
+                color: allAnswered ? '#065f46' : '#92400e',
+                padding: '0.15rem 0.5rem',
+                borderRadius: '6px',
+                fontSize: 'clamp(0.65rem, 1.8vw, 0.7rem)',
+                fontWeight: '800'
+              }}>
+                {allAnswered ? '✅' : '📝'} {answeredCount}/{questions.length}
+              </span>
+              {tabSwitches > 0 && !isAdmin && (
+                <span style={{
+                  background: '#fee2e2',
+                  color: '#dc2626',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: '6px',
+                  fontSize: 'clamp(0.65rem, 1.8vw, 0.7rem)',
+                  fontWeight: '800'
+                }}>
+                  ⚠️ {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Timer */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            padding: 'clamp(0.4rem, 2vw, 0.65rem) clamp(0.8rem, 3vw, 1.25rem)',
+            background: `linear-gradient(135deg, ${timerTheme.bg}, ${timerTheme.bg})`,
+            borderRadius: '12px',
+            border: `3px solid ${timerTheme.border}`,
+            boxShadow: `0 4px 12px ${timerTheme.border}33`
+          }}>
+            <Clock
+              size={isMobile ? 18 : 22}
+              color={timerTheme.text}
+              strokeWidth={2.5}
+              style={{ animation: isCriticalTime ? 'shake 0.6s infinite' : 'none' }}
+            />
+            <div style={{
+              fontSize: 'clamp(1rem, 3vw, 1.4rem)',
+              fontWeight: '900',
+              color: timerTheme.text,
+              fontFamily: 'monospace',
+              animation: isCriticalTime ? 'blink 1s infinite' : 'none'
+            }}>
+              {timeData.display}
+            </div>
+          </div>
+
+          {/* Exit Button */}
+          <button onClick={() => setShowExitDialog(true)} style={{
+            background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+            border: '3px solid #ef4444',
+            borderRadius: '12px',
+            width: 'clamp(38px, 10vw, 52px)',
+            height: 'clamp(38px, 10vw, 52px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            flexShrink: 0,
+            boxShadow: '0 4px 12px rgba(239,68,68,0.3)'
+          }}>
+            <X size={isMobile ? 20 : 28} color="#ef4444" strokeWidth={3} />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div style={{
+        padding: 'clamp(1.5rem, 4vw, 2rem) clamp(1rem, 3vw, 1.5rem)',
+        maxWidth: '1400px',
+        margin: '0 auto',
+        paddingBottom: '6rem'
+      }}>
+        {/* Question Box */}
+        <div key={currentQuestion} style={{
+          background: '#fff',
+          padding: 'clamp(1.5rem, 4vw, 2.5rem)',
+          borderRadius: '20px',
+          marginBottom: '2rem',
+          border: '3px solid #e2e8f0',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
+          animation: 'slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
+        }}>
+          <div style={{
+            fontSize: 'clamp(1.1rem, 3.5vw, 1.6rem)',
+            fontWeight: '700',
+            color: '#1e293b',
+            marginBottom: '1.5rem',
+            lineHeight: 1.6
+          }}>
+            {currentQ.question}
+          </div>
+          {currentQ.code && (
+            <div style={{
+              background: '#f8fafc',
+              border: '3px solid #cbd5e1',
+              borderRadius: '16px',
+              padding: 'clamp(1.5rem, 4vw, 2.5rem)',
+              overflowX: 'auto',
+              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.05)'
+            }}>
+              <pre style={{
+                margin: 0,
+                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+                fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)',
+                lineHeight: 1.8,
+                color: '#000',
+                fontWeight: '500',
+                whiteSpace: 'pre',
+                wordWrap: 'normal'
+              }}>
+{currentQ.code}
+              </pre>
+            </div>
+          )}
+        </div>
+
+        {/* Options */}
+        <div key={`options-${currentQuestion}`} style={{
+          display: 'grid',
+          gap: 'clamp(1rem, 3vw, 1.5rem)',
+          marginBottom: '2.5rem'
+        }}>
+          {currentQ.options.map((option, idx) => {
+            const isSelected = answers[currentQuestion] === idx;
+            return (
+              <button key={idx} onClick={() => handleAnswer(currentQuestion, idx)} style={{
+                padding: 'clamp(1.25rem, 3.5vw, 1.75rem)',
+                background: isSelected ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#fff',
+                border: `3px solid ${isSelected ? '#3b82f6' : '#e2e8f0'}`,
+                borderRadius: '16px',
+                cursor: 'pointer',
+                textAlign: 'left',
+                color: isSelected ? '#fff' : '#1e293b',
+                fontSize: 'clamp(0.95rem, 2.8vw, 1.3rem)',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'clamp(1rem, 3vw, 1.5rem)',
+                boxShadow: isSelected ? '0 8px 24px rgba(59,130,246,0.3)' : '0 4px 12px rgba(0,0,0,0.05)',
+                transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+                transition: 'all 0.3s',
+                animation: `fadeInUp 0.3s ease ${idx * 0.1}s backwards`
+              }}>
+                <span style={{
+                  width: 'clamp(36px, 10vw, 52px)',
+                  height: 'clamp(36px, 10vw, 52px)',
+                  borderRadius: '50%',
+                  background: isSelected ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: '900',
+                  fontSize: 'clamp(1rem, 3vw, 1.4rem)',
+                  flexShrink: 0
+                }}>
+                  {String.fromCharCode(65 + idx)}
+                </span>
+                <span style={{ flex: 1, lineHeight: 1.5 }}>{option}</span>
+                {isSelected && <CheckCircle size={isMobile ? 20 : 28} color="#fff" strokeWidth={2.5} />}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Navigation */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: '1rem',
+          marginBottom: '2.5rem'
+        }}>
+          <button onClick={() => handleNavigation('prev')} disabled={currentQuestion === 0} style={{
+            padding: 'clamp(0.9rem, 2.5vw, 1.25rem) clamp(1.25rem, 4vw, 2rem)',
+            background: currentQuestion === 0 ? '#f1f5f9' : 'linear-gradient(135deg, #fff, #f8fafc)',
+            border: `3px solid ${currentQuestion === 0 ? '#e2e8f0' : '#cbd5e1'}`,
+            borderRadius: '12px',
+            cursor: currentQuestion === 0 ? 'not-allowed' : 'pointer',
+            fontWeight: '700',
+            color: currentQuestion === 0 ? '#94a3b8' : '#1e293b',
+            fontSize: 'clamp(0.85rem, 2.5vw, 1.1rem)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            transition: 'all 0.2s'
+          }}>
+            <ChevronLeft size={isMobile ? 18 : 22} />
+            {!isMobile && 'Previous'}
+          </button>
+
+          {currentQuestion === questions.length - 1 ? (
+            <button onClick={() => handleSubmit(false)} disabled={!allAnswered && !isAdmin} style={{
+              padding: 'clamp(0.9rem, 2.5vw, 1.25rem) clamp(1.5rem, 5vw, 3rem)',
+              background: (allAnswered || isAdmin) ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
+              border: `3px solid ${(allAnswered || isAdmin) ? '#059669' : '#e2e8f0'}`,
+              borderRadius: '12px',
+              cursor: (allAnswered || isAdmin) ? 'pointer' : 'not-allowed',
+              fontWeight: '800',
+              color: (allAnswered || isAdmin) ? '#fff' : '#94a3b8',
+              fontSize: 'clamp(0.9rem, 2.8vw, 1.2rem)',
+              boxShadow: (allAnswered || isAdmin) ? '0 8px 24px rgba(16,185,129,0.4)' : 'none',
+              textTransform: 'uppercase',
+              transition: 'all 0.2s'
+            }}>
+              {(allAnswered || isAdmin) ? '✅ Submit Test' : '⚠️ Answer All'}
+            </button>
+          ) : (
+            <button onClick={() => handleNavigation('next')} style={{
+              padding: 'clamp(0.9rem, 2.5vw, 1.25rem) clamp(1.25rem, 4vw, 2rem)',
+              background: 'linear-gradient(135deg, #fff, #f8fafc)',
+              border: '3px solid #cbd5e1',
+              borderRadius: '12px',
+              cursor: 'pointer',
+              fontWeight: '700',
+              color: '#1e293b',
+              fontSize: 'clamp(0.85rem, 2.5vw, 1.1rem)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              transition: 'all 0.2s'
+            }}>
+              {!isMobile && 'Next'}
+              <ChevronRight size={isMobile ? 18 : 22} />
+            </button>
+          )}
+        </div>
+
+        {/* Progress Grid */}
+        <div style={{
+          background: '#fff',
+          padding: 'clamp(1.25rem, 3.5vw, 1.75rem)',
+          borderRadius: '20px',
+          border: '3px solid #e2e8f0',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.06)'
+        }}>
+          <div style={{
+            fontSize: 'clamp(0.85rem, 2.5vw, 1.05rem)',
+            fontWeight: '800',
+            color: '#64748b',
+            marginBottom: '1.25rem',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em'
+          }}>
+            Progress: {answeredCount}/{questions.length} Answered
+          </div>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(40px, 1fr))' : 'repeat(auto-fill, minmax(56px, 1fr))',
+            gap: 'clamp(0.6rem, 2vw, 0.85rem)'
+          }}>
+            {questions.map((_, idx) => {
+              const isAnswered = answers[idx] !== undefined;
+              const isCurrent = idx === currentQuestion;
+              return (
+                <button key={idx} onClick={() => setCurrentQuestion(idx)} style={{
+                  height: 'clamp(40px, 12vw, 56px)',
+                  borderRadius: '10px',
+                  border: isCurrent ? '3px solid #3b82f6' : 'none',
+                  background: isAnswered ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
+                  color: isAnswered ? '#fff' : '#1e293b',
+                  fontWeight: '800',
+                  cursor: 'pointer',
+                  fontSize: 'clamp(0.85rem, 2.5vw, 1.15rem)',
+                  boxShadow: isAnswered ? '0 4px 12px rgba(16,185,129,0.3)' : 'none',
+                  transition: 'all 0.2s',
+                  transform: isCurrent ? 'scale(1.05)' : 'scale(1)'
+                }}>
+                  {idx + 1}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Animations */}
       <style>{`
-        @keyframes fadeInUp {
-          from {
-            opacity: 0;
-            transform: translateY(30px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        @keyframes slideUp {
-          from {
-            opacity: 0;
-            transform: translateY(50px) scale(0.9);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-          }
-        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes slideIn { 0% { opacity: 0; transform: translateY(40px) scale(0.9); } 60% { opacity: 1; transform: translateY(-5px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px) rotate(-3deg); } 75% { transform: translateX(4px) rotate(3deg); } }
+        @keyframes blink { 0%, 49%, 100% { opacity: 1; } 50%, 99% { opacity: 0.3; } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
       `}</style>
     </div>
   );
 }
 
-export default OrdersPage;
+// ==========================================
+// 🎯 MAIN APP
+// ==========================================
+export default function MockTestApp({ questions, testTitle, timeLimit, userEmail }) {
+  const [stage, setStage] = useState('instructions');
+  const [studentInfo, setStudentInfo] = useState(null);
+  const [results, setResults] = useState(null);
+
+  const handleInstructionsAccept = () => {
+    if (userEmail !== APP_CONFIG.ADMIN_EMAIL) {
+      FullscreenManager.enter();
+    }
+    setStage('form');
+  };
+
+  return (
+    <>
+      {stage === 'instructions' && (
+        <InstructionScreen
+          testTitle={testTitle}
+          timeLimit={timeLimit}
+          totalQuestions={questions.length}
+          onAccept={handleInstructionsAccept}
+        />
+      )}
+      {stage === 'form' && (
+        <UserDetailsForm
+          onSubmit={(info) => { setStudentInfo(info); setStage('test'); }}
+          onCancel={() => setStage('instructions')}
+        />
+      )}
+      {stage === 'test' && (
+        <TestInterface
+          questions={questions}
+          testTitle={testTitle}
+          timeLimit={timeLimit}
+          userEmail={userEmail}
+          studentInfo={studentInfo}
+          onComplete={(res) => { setResults(res); setStage('results'); }}
+          onExit={() => setStage('instructions')}
+        />
+      )}
+    </>
+  );
+}
