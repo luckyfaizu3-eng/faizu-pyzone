@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, Award, XCircle, BookOpen } from 'lucide-react';
-import UserDetailsForm from './UserDetailsForm';
+import UserDetailsForm from '../components/UserDetailsForm';
 
 // ==========================================
 // 🎯 CONFIGURATION
