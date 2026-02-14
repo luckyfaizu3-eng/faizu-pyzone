@@ -519,12 +519,13 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     return () => {
       if (navbar) navbar.style.display = '';
       if (header) header.style.display = '';
-      audioManagerRef.current.destroy();
+      const audioManager = audioManagerRef.current;
+      if (audioManager) audioManager.destroy();
       if (securityManagerRef.current) {
         securityManagerRef.current.disable();
       }
     };
-  }, [isAdmin]);
+  }, [isAdmin, showWarningMessage]);
 
   // ==========================================
   // 🖥️ FULLSCREEN MANAGEMENT
@@ -554,7 +555,7 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
         FullscreenManager.exit();
       }
     };
-  }, [isAdmin]);
+  }, [isAdmin, showWarningMessage]);
 
   // ==========================================
   // ⏱️ TIMER
@@ -572,7 +573,7 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft]);
+  }, [timeLeft, showWarningMessage, handleSubmit]);
 
   // ==========================================
   // 🔊 TICK SOUND
@@ -609,7 +610,7 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [tabSwitches, isAdmin]);
+  }, [tabSwitches, isAdmin, showWarningMessage, handleSubmit]);
 
   // ==========================================
   // 📱 MOBILE DETECTION
@@ -620,8 +621,10 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+
+
   // ==========================================
-  // 🛠️ HANDLERS
+  // 🛠️ HANDLERS (moved above useEffects to fix no-use-before-define)
   // ==========================================
   const showWarningMessage = useCallback((message, critical = false) => {
     setWarningMsg(message);
@@ -635,10 +638,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     warningTimerRef.current = setTimeout(() => {
       setShowWarning(false);
     }, timeout);
-  }, []);
-
-  const handleAnswer = useCallback((qIndex, optionIndex) => {
-    setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
   }, []);
 
   const handleSubmit = useCallback((penalized = false) => {
@@ -660,6 +659,10 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
 
     onComplete(results);
   }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
+
+  const handleAnswer = useCallback((qIndex, optionIndex) => {
+    setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
+  }, []);
 
   const handleNavigation = useCallback((direction) => {
     if (direction === 'next' && currentQuestion < questions.length - 1) {

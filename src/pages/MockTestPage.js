@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, useTheme, RAZORPAY_KEY_ID } from '../App';
-import { Clock, Trophy, Award, Zap, Loader, Download, Calendar, CheckCircle, XCircle, AlertCircle, Monitor, Smartphone, History, CreditCard, TrendingUp, Lock, Unlock } from 'lucide-react';
+import { Clock, Trophy, Award, Zap, Loader, Download, CheckCircle, XCircle, Monitor, Smartphone, History, TrendingUp, Lock, Unlock } from 'lucide-react';
 import { SUBSCRIPTION_PLANS } from '../data/subscriptionPlans';
 import MockTestInterface from '../components/MockTestInterface';
 import UserDetailsForm from '../components/UserDetailsForm';
@@ -9,7 +9,7 @@ import { db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import {
   getManualQuestions,
-  canUserTakeTest,
+  // canUserTakeTest,
   hasCertificateForLevel,
   saveTestResult,
   issueCertificate,
@@ -19,7 +19,7 @@ import {
   getUserDetails,
   saveUserDetails,
   processMockTestPayment,
-  hasUserPaidForLevel,
+  // hasUserPaidForLevel,
   getPaymentDetails,
   updateTestAttempt
 } from '../services/mockTestService';
@@ -45,12 +45,10 @@ const DEFAULT_PRICES = {
 // ==========================================
 const formatTimeRemaining = (milliseconds) => {
   if (milliseconds <= 0) return 'Expired';
-  
   const seconds = Math.floor(milliseconds / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-
   if (days > 0) {
     const remainingHours = hours % 24;
     return `${days}d ${remainingHours}h`;
@@ -64,60 +62,37 @@ const formatTimeRemaining = (milliseconds) => {
   }
 };
 
-const getTimeRemaining = (targetDate) => {
-  if (!targetDate) return 0;
-  return new Date(targetDate) - new Date();
-};
+// const getTimeRemaining = (targetDate) => {
+//   if (!targetDate) return 0;
+//   return new Date(targetDate) - new Date();
+// };
 
 function MockTestPage() {
+
   const { user } = useAuth();
   const { isDark } = useTheme();
-
-  // ✅ Test Flow States
   const [currentStep, setCurrentStep] = useState('plans'); // plans → form → test → results
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [testQuestions, setTestQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
-
-  // ✅ Dynamic Prices from Firebase
   const [prices, setPrices] = useState(DEFAULT_PRICES);
-
-  // ✅ User Data
   const [userDetails, setUserDetails] = useState(null);
   const [userCertificates, setUserCertificates] = useState([]);
   const [testHistory, setTestHistory] = useState([]);
   const [selectedCertificate, setSelectedCertificate] = useState(null);
-
-  // ✅ Test Results
   const [testResults, setTestResults] = useState(null);
-
-  // ✅ Payment & Status Data
   const [paymentDetails, setPaymentDetails] = useState({});
   const [testStatus, setTestStatus] = useState({});
-
-  // ✅ Real-time countdown
-  const [currentTime, setCurrentTime] = useState(Date.now());
 
   // ==========================================
   // 🔄 Real-time Clock Update
   // ==========================================
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // ==========================================
-  // 🔄 Load User Data on Mount
-  // ==========================================
-  useEffect(() => {
-    if (user) {
-      loadUserData();
-    }
-    fetchPrices();
-  }, [user]);
+  // useEffect(() => {
+  //   const timer = setInterval(() => {
+  //     setCurrentTime(Date.now());
+  //   }, 1000);
+  //   return () => clearInterval(timer);
+  // }, []);
 
   // ==========================================
   // 💰 Fetch Prices from Firebase
@@ -136,7 +111,19 @@ function MockTestPage() {
     }
   };
 
-  const loadUserData = async () => {
+  // ==========================================
+  // 🔄 Load User Data on Mount
+  // ==========================================
+  useEffect(() => {
+    if (user) {
+      loadUserData();
+    }
+    (async () => {
+      await fetchPrices();
+    })();
+  }, [user, loadUserData]);
+
+  const loadUserData = React.useCallback(async () => {
     setLoading(true);
     try {
       // Load user details
@@ -178,7 +165,7 @@ function MockTestPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
   // ==========================================
   // 📊 Calculate Test Status
@@ -1238,7 +1225,7 @@ function MockTestPage() {
         }}>
           {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
             const status = testStatus[plan.level] || {};
-            const payment = paymentDetails[plan.level] || {};
+            // const payment = paymentDetails[plan.level] || {};
             const hasCert = userCertificates.find(c => c.level === plan.level);
             const userIsAdmin = isAdmin(user?.email);
 
