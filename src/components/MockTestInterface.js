@@ -488,7 +488,140 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
   const isCriticalTime = timeLeft < APP_CONFIG.CRITICAL_TIME_MINUTES * 60;
 
   // ==========================================
-  // 🛠️ HANDLERS (Defined early before useEffect)
+  // ✅ AUTO-SCROLL TO TOP ON QUESTION CHANGE
+  // ==========================================
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [currentQuestion]);
+
+  // ==========================================
+  // 🎬 INITIALIZATION
+  // ==========================================
+  useEffect(() => {
+    // Hide navbar/header
+    const navbar = document.querySelector('nav');
+    const header = document.querySelector('header');
+    if (navbar) navbar.style.display = 'none';
+    if (header) header.style.display = 'none';
+
+    // Setup audio
+    if (!isAdmin) {
+      audioManagerRef.current.init();
+    }
+
+    // Setup security
+    if (!isAdmin) {
+      securityManagerRef.current = new SecurityManager(showWarningMessage);
+      securityManagerRef.current.enable();
+    }
+
+    // Cleanup
+    return () => {
+      if (navbar) navbar.style.display = '';
+      if (header) header.style.display = '';
+      audioManagerRef.current.destroy();
+      if (securityManagerRef.current) {
+        securityManagerRef.current.disable();
+      }
+    };
+  }, [isAdmin]);
+
+  // ==========================================
+  // 🖥️ FULLSCREEN MANAGEMENT
+  // ==========================================
+  useEffect(() => {
+    if (isAdmin) return;
+
+    const handleFullscreenChange = () => {
+      const isFullscreen = FullscreenManager.isActive();
+      
+      // If user exits fullscreen, show warning and re-enter
+      if (!isFullscreen) {
+        showWarningMessage('⚠️ Stay in fullscreen mode!');
+        setTimeout(() => {
+          FullscreenManager.enter();
+        }, 2000);
+      }
+    };
+
+    // Listen for fullscreen changes
+    const cleanup = FullscreenManager.onChange(handleFullscreenChange);
+
+    return () => {
+      cleanup();
+      // Only exit if actually in fullscreen
+      if (FullscreenManager.isActive()) {
+        FullscreenManager.exit();
+      }
+    };
+  }, [isAdmin]);
+
+  // ==========================================
+  // ⏱️ TIMER
+  // ==========================================
+  useEffect(() => {
+    if (timeLeft <= 0) {
+      audioManagerRef.current.playAlarm();
+      showWarningMessage('⏰ TIME UP! Auto-submitting...', true);
+      setTimeout(() => handleSubmit(false), APP_CONFIG.AUTO_SUBMIT_DELAY);
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft]);
+
+  // ==========================================
+  // 🔊 TICK SOUND
+  // ==========================================
+  useEffect(() => {
+    if (isAdmin || timeLeft <= 0) return;
+
+    const tickTimer = setInterval(() => {
+      audioManagerRef.current.playTick(timeLeft % 2 === 0);
+    }, 1000);
+
+    return () => clearInterval(tickTimer);
+  }, [timeLeft, isAdmin]);
+
+  // ==========================================
+  // 🚫 TAB SWITCH DETECTION
+  // ==========================================
+  useEffect(() => {
+    if (isAdmin) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        const newCount = tabSwitches + 1;
+        setTabSwitches(newCount);
+
+        if (newCount >= APP_CONFIG.MAX_TAB_SWITCHES) {
+          showWarningMessage('🚨 Maximum tab switches! Auto-submitting...', true);
+          setTimeout(() => handleSubmit(true), APP_CONFIG.AUTO_SUBMIT_DELAY);
+        } else {
+          showWarningMessage(`⚠️ Tab Switch ${newCount}/${APP_CONFIG.MAX_TAB_SWITCHES}!`);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [tabSwitches, isAdmin]);
+
+  // ==========================================
+  // 📱 MOBILE DETECTION
+  // ==========================================
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ==========================================
+  // 🛠️ HANDLERS
   // ==========================================
   const showWarningMessage = useCallback((message, critical = false) => {
     setWarningMsg(message);
@@ -527,148 +660,7 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
 
     onComplete(results);
   }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
-  // ✅ AUTO-SCROLL TO TOP ON QUESTION CHANGE
-  // ==========================================
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentQuestion]);
 
-  // ==========================================
-  // 🎬 INITIALIZATION
-  // ==========================================
-  // 🎬 INITIALIZATION
-  // ==========================================
-  useEffect(() => {
-    // Hide navbar/header
-    const navbar = document.querySelector('nav');
-    const header = document.querySelector('header');
-    if (navbar) navbar.style.display = 'none';
-    if (header) header.style.display = 'none';
-
-    // Get current ref values to use in cleanup
-    const currentAudioManager = audioManagerRef.current;
-    const currentSecurityManager = securityManagerRef.current;
-
-    // Setup audio
-    if (!isAdmin) {
-      currentAudioManager.init();
-    }
-
-    // Setup security
-    if (!isAdmin) {
-      // eslint-disable-next-line no-use-before-define
-      securityManagerRef.current = new SecurityManager(showWarningMessage);
-      securityManagerRef.current.enable();
-    }
-
-    // Cleanup
-    return () => {
-      if (navbar) navbar.style.display = '';
-      if (header) header.style.display = '';
-      currentAudioManager.destroy();
-      if (currentSecurityManager) {
-        currentSecurityManager.disable();
-      }
-    };
-  }, [isAdmin, showWarningMessage]);
-
-  // ==========================================
-  // 🖥️ FULLSCREEN MANAGEMENT
-  // ==========================================
-  useEffect(() => {
-    if (isAdmin) return;
-
-    const handleFullscreenChange = () => {
-      const isFullscreen = FullscreenManager.isActive();
-      
-      // If user exits fullscreen, show warning and re-enter
-      if (!isFullscreen) {
-        showWarningMessage('⚠️ Stay in fullscreen mode!');
-        setTimeout(() => {
-          FullscreenManager.enter();
-        }, 2000);
-      }
-    };
-
-    // Listen for fullscreen changes
-    const cleanup = FullscreenManager.onChange(handleFullscreenChange);
-
-    return () => {
-      cleanup();
-      // Only exit if actually in fullscreen
-      if (FullscreenManager.isActive()) {
-        FullscreenManager.exit();
-      }
-    };
-  }, [isAdmin, showWarningMessage]);
-
-  // ==========================================
-  // ⏱️ TIMER
-  // ==========================================
-  useEffect(() => {
-    if (timeLeft <= 0) {
-      audioManagerRef.current.playAlarm();
-      showWarningMessage('⏰ TIME UP! Auto-submitting...', true);
-      setTimeout(() => handleSubmit(false), APP_CONFIG.AUTO_SUBMIT_DELAY);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeLeft, showWarningMessage, handleSubmit]);
-
-  // ==========================================
-  // 🔊 TICK SOUND
-  // ==========================================
-  useEffect(() => {
-    if (isAdmin || timeLeft <= 0) return;
-
-    const tickTimer = setInterval(() => {
-      audioManagerRef.current.playTick(timeLeft % 2 === 0);
-    }, 1000);
-
-    return () => clearInterval(tickTimer);
-  }, [timeLeft, isAdmin]);
-
-  // ==========================================
-  // 🚫 TAB SWITCH DETECTION
-  // ==========================================
-  useEffect(() => {
-    if (isAdmin) return;
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        const newCount = tabSwitches + 1;
-        setTabSwitches(newCount);
-
-        if (newCount >= APP_CONFIG.MAX_TAB_SWITCHES) {
-          showWarningMessage('🚨 Maximum tab switches! Auto-submitting...', true);
-          setTimeout(() => handleSubmit(true), APP_CONFIG.AUTO_SUBMIT_DELAY);
-        } else {
-          showWarningMessage(`⚠️ Tab Switch ${newCount}/${APP_CONFIG.MAX_TAB_SWITCHES}!`);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [tabSwitches, isAdmin, showWarningMessage, handleSubmit]);
-
-  // ==========================================
-  // 📱 MOBILE DETECTION
-  // ==========================================
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // ==========================================
-  // 🛠️ HANDLERS
-  // ==========================================
   const handleNavigation = useCallback((direction) => {
     if (direction === 'next' && currentQuestion < questions.length - 1) {
       setCurrentQuestion(prev => prev + 1);

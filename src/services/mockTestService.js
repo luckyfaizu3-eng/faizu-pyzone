@@ -9,9 +9,7 @@ import {
   query,
   where,
   addDoc,
-  Timestamp,
-  orderBy,
-  limit
+  Timestamp
 } from 'firebase/firestore';
 
 // ==========================================
@@ -619,7 +617,7 @@ export const getAllPayments = async (userId) => {
 /**
  * Get test analytics for admin dashboard (basic version)
  */
-export const getTestAnalytics = async (level = null) => {
+export const getTestAnalytics = async () => {
   try {
     // This would require aggregation queries
     // For now, returning basic structure
@@ -685,28 +683,4 @@ export const extendGracePeriod = async (userId, level, additionalHours = 12) => 
       error: error.message
     };
   }
-};
-
-// ==========================================
-// 📊 EXPORT ALL FUNCTIONS
-// ==========================================
-export default {
-  getManualQuestions,
-  getPaymentDetails,
-  canUserTakeTest,
-  hasCertificateForLevel,
-  saveTestResult,
-  issueCertificate,
-  getCertificate,
-  getAllCertificates,
-  getTestHistory,
-  getUserDetails,
-  saveUserDetails,
-  processMockTestPayment,
-  updateTestAttempt,
-  hasUserPaidForLevel,
-  resetTestLock,
-  getAllPayments,
-  getTestAnalytics,
-  extendGracePeriod
 };
