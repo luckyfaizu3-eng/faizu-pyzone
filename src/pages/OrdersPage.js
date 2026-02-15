@@ -1,1256 +1,448 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, BookOpen } from 'lucide-react';
-import UserDetailsForm from '../components/UserDetailsForm';
+import React, { useState } from 'react';
+import { useTheme } from '../App';
+import {
+  Download, Clock, CheckCircle, ShoppingBag,
+  RefreshCw, AlertCircle, ChevronDown, ChevronUp,
+  FileText, Package, Trash2
+} from 'lucide-react';
 
-// ==========================================
-// 🎯 CONFIGURATION
-// ==========================================
-const APP_CONFIG = {
-  ADMIN_EMAIL: 'luckyfaizu3@gmail.com',
-  MAX_TAB_SWITCHES: 3,
-  PASS_PERCENTAGE: 55,
-  WARNING_TIMEOUT: 3000,
-  CRITICAL_WARNING_TIMEOUT: 5000,
-  AUTO_SUBMIT_DELAY: 3000,
-  CRITICAL_TIME_MINUTES: 5,
-};
+// =====================================================
+// ✅ PDF FORCE DOWNLOAD BUTTON
+// Browser mein open nahi hoga — seedha download hoga
+// =====================================================
+function PdfDownloadButton({ pdf, isDark }) {
+  const [status, setStatus] = useState('idle'); // idle | downloading | done | error
 
-// ==========================================
-// 🎨 THEME & STYLES
-// ==========================================
-const THEME = {
-  colors: {
-    primary: '#3b82f6',
-    success: '#10b981',
-    danger: '#ef4444',
-    warning: '#f59e0b',
-    dark: '#1e293b',
-    light: '#f8fafc',
-  },
-  timer: {
-    safe: { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
-    warning: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
-    critical: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b' },
-  }
-};
+  const handleDownload = async () => {
+    if (status === 'downloading') return;
+    setStatus('downloading');
+    window.showToast?.('⏳ Downloading PDF...', 'info');
 
-// ==========================================
-// 🛠️ UTILITY FUNCTIONS
-// ==========================================
-class TestUtils {
-  static isAdmin(email) {
-    return email === APP_CONFIG.ADMIN_EMAIL;
-  }
-
-  static formatTime(totalSeconds) {
-    const h = Math.floor(totalSeconds / 3600);
-    const m = Math.floor((totalSeconds % 3600) / 60);
-    const s = totalSeconds % 60;
-    return {
-      hours: h,
-      minutes: m,
-      seconds: s,
-      display: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-    };
-  }
-
-  static getTimerTheme(timeLeft, totalTime) {
-    const percentage = (timeLeft / totalTime) * 100;
-    if (percentage > 50) return THEME.timer.safe;
-    if (percentage > 20) return THEME.timer.warning;
-    return THEME.timer.critical;
-  }
-
-  static calculateScore(answers, questions, tabSwitches, isAdmin) {
-    let correct = 0;
-    let wrong = 0;
-    const correctQuestions = [];
-    const wrongQuestions = [];
-
-    questions.forEach((q, idx) => {
-      if (answers[idx] !== undefined) {
-        if (answers[idx] === q.correct) {
-          correct++;
-          correctQuestions.push(idx + 1);
-        } else {
-          wrong++;
-          wrongQuestions.push(idx + 1);
-        }
-      } else {
-        wrongQuestions.push(idx + 1);
-      }
-    });
-
-    let percentage = Math.round((correct / questions.length) * 100);
-    
-    // Apply penalty for tab switches
-    const penalized = !isAdmin && tabSwitches >= APP_CONFIG.MAX_TAB_SWITCHES;
-    if (penalized) {
-      percentage = Math.max(0, percentage - 20);
+    try {
+      const response = await fetch(pdf.url);
+      if (!response.ok) throw new Error('Fetch failed');
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = pdf.name.endsWith('.pdf') ? pdf.name : pdf.name + '.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+      setStatus('done');
+      window.showToast?.('✅ PDF Downloaded!', 'success');
+      setTimeout(() => setStatus('idle'), 3000);
+    } catch (err) {
+      console.error('PDF download error:', err);
+      // Fallback: direct link with download attribute
+      const a = document.createElement('a');
+      a.href = pdf.url;
+      a.download = pdf.name.endsWith('.pdf') ? pdf.name : pdf.name + '.pdf';
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setStatus('error');
+      window.showToast?.('📄 Opening PDF...', 'info');
+      setTimeout(() => setStatus('idle'), 3000);
     }
+  };
 
-    return {
-      correct,
-      wrong,
-      total: questions.length,
-      percentage,
-      passed: isAdmin ? true : percentage >= APP_CONFIG.PASS_PERCENTAGE,
-      correctQuestions,
-      wrongQuestions,
-      penalized
-    };
-  }
+  const bgColor =
+    status === 'downloading' ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' :
+    status === 'done'        ? 'linear-gradient(135deg,#10b981,#059669)' :
+    status === 'error'       ? 'linear-gradient(135deg,#f59e0b,#d97706)' :
+                               'linear-gradient(135deg,#10b981,#059669)';
+
+  const label =
+    status === 'downloading' ? '⏳ Downloading...' :
+    status === 'done'        ? '✅ Downloaded!' :
+    status === 'error'       ? '📄 Opening...' :
+                               pdf.name;
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={status === 'downloading'}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.75rem',
+        background: bgColor,
+        color: '#fff',
+        padding: '0.85rem 1.25rem',
+        borderRadius: '12px',
+        border: 'none',
+        fontWeight: '700',
+        fontSize: '0.9rem',
+        cursor: status === 'downloading' ? 'not-allowed' : 'pointer',
+        boxShadow: '0 4px 16px rgba(16,185,129,0.3)',
+        transition: 'all 0.3s',
+        width: '100%',
+        textAlign: 'left',
+        opacity: status === 'downloading' ? 0.85 : 1
+      }}
+    >
+      {status === 'downloading'
+        ? <div style={{
+            width: 18, height: 18, border: '3px solid rgba(255,255,255,0.4)',
+            borderTopColor: '#fff', borderRadius: '50%',
+            animation: 'spin 0.7s linear infinite', flexShrink: 0
+          }}/>
+        : <Download size={18} style={{ flexShrink: 0 }}/>
+      }
+      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {label}
+      </span>
+    </button>
+  );
 }
 
-// ==========================================
-// 🔊 AUDIO MANAGER
-// ==========================================
-class AudioManager {
-  constructor() {
-    this.context = null;
-  }
+// =====================================================
+// MAIN ORDERS PAGE
+// =====================================================
+export default function OrdersPage({ orders, user, refreshOrders }) {
+  const { isDark } = useTheme();
+  const [expandedOrder, setExpandedOrder] = useState(null);
+  const [refreshing, setRefreshing]       = useState(false);
+  const [deletingId, setDeletingId]       = useState(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  init() {
-    if (!this.context) {
-      this.context = new (window.AudioContext || window.webkitAudioContext)();
-    }
-  }
+  // colours
+  const pageBg   = isDark ? '#0f172a' : '#f8fafc';
+  const cardBg   = isDark ? '#1e293b' : '#ffffff';
+  const textMain = isDark ? '#f1f5f9' : '#1e293b';
+  const textSub  = isDark ? '#94a3b8' : '#64748b';
+  const borderC  = isDark ? '#334155' : '#e2e8f0';
 
-  playTick(isEven) {
-    if (!this.context) return;
-    
-    const osc = this.context.createOscillator();
-    const gain = this.context.createGain();
-    
-    osc.connect(gain);
-    gain.connect(this.context.destination);
-    
-    osc.frequency.value = isEven ? 1000 : 800;
-    osc.type = 'sine';
-    
-    const now = this.context.currentTime;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-    
-    osc.start(now);
-    osc.stop(now + 0.08);
-  }
+  // split orders — defined BEFORE any early return
+  const allOrders       = orders || [];
+  const completedOrders = allOrders.filter(o => o.status === 'completed');
+  const pendingOrders   = allOrders.filter(o => o.status === 'pending');
 
-  playAlarm() {
-    if (!this.context) return;
-    
-    const osc = this.context.createOscillator();
-    const gain = this.context.createGain();
-    
-    osc.connect(gain);
-    gain.connect(this.context.destination);
-    
-    osc.frequency.value = 880;
-    osc.type = 'square';
-    
-    const now = this.context.currentTime;
-    gain.gain.setValueAtTime(0.2, now);
-    
-    osc.start(now);
-    osc.stop(now + 1);
-  }
+  // handlers
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await refreshOrders();
+    setTimeout(() => setRefreshing(false), 1000);
+  };
 
-  destroy() {
-    if (this.context) {
-      this.context.close();
-      this.context = null;
-    }
-  }
-}
-
-// ==========================================
-// 🖥️ FULLSCREEN MANAGER
-// ==========================================
-class FullscreenManager {
-  static async enter() {
+  const handleDeleteOrder = async (orderId) => {
+    setDeletingId(orderId);
     try {
-      const elem = document.documentElement;
-      if (elem.requestFullscreen) {
-        await elem.requestFullscreen();
-      } else if (elem.webkitRequestFullscreen) {
-        await elem.webkitRequestFullscreen();
-      } else if (elem.msRequestFullscreen) {
-        await elem.msRequestFullscreen();
-      }
-      return true;
+      const { db }          = await import('../firebase');
+      const { doc, deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(doc(db, 'orders', orderId));
+      window.showToast?.('🗑️ Order deleted!', 'info');
+      await refreshOrders();
     } catch (err) {
-      if (process.env.NODE_ENV === 'production') {
-        console.error('Fullscreen error:', err);
-      }
-      return false;
+      console.error(err);
+      window.showToast?.('❌ Delete failed!', 'error');
     }
-  }
+    setDeletingId(null);
+    setConfirmDeleteId(null);
+  };
 
-  static async exit() {
-    try {
-      if (!FullscreenManager.isActive()) {
-        return;
-      }
+  // invoice download
+  const downloadInvoice = (order) => {
+    const rows = (order.items || []).map((item, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${item.title || 'Product'}</td>
+        <td style="text-align:right;font-weight:700;">&#8377;${item.price || 0}</td>
+      </tr>`).join('');
 
-      if (document.exitFullscreen) {
-        await document.exitFullscreen();
-      } else if (document.webkitExitFullscreen) {
-        await document.webkitExitFullscreen();
-      } else if (document.msExitFullscreen) {
-        await document.msExitFullscreen();
-      }
-    } catch (err) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Fullscreen exit (expected in dev mode):', err.message);
-      }
-    }
-  }
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/>
+<title>Invoice - ${order.id}</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:Arial,sans-serif;padding:40px;color:#1e293b;}
+  .header{display:flex;justify-content:space-between;border-bottom:3px solid #6366f1;padding-bottom:20px;margin-bottom:30px;}
+  .brand{font-size:26px;font-weight:900;color:#6366f1;}
+  .right{text-align:right;}
+  .badge{display:inline-block;background:#dcfce7;color:#166534;padding:4px 14px;border-radius:20px;font-size:12px;font-weight:700;margin-top:6px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:28px;}
+  .box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;}
+  .lbl{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin-bottom:4px;}
+  .val{font-size:14px;font-weight:700;word-break:break-all;}
+  table{width:100%;border-collapse:collapse;}
+  th{background:#f1f5f9;padding:12px;text-align:left;font-size:12px;font-weight:800;color:#64748b;text-transform:uppercase;}
+  td{padding:12px;border-bottom:1px solid #f1f5f9;font-size:14px;}
+  .total td{font-weight:800;font-size:16px;color:#6366f1;border-top:2px solid #e2e8f0;border-bottom:none;background:#faf5ff;}
+  .footer{margin-top:40px;text-align:center;color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;padding-top:20px;}
+  .pid{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:13px;color:#1d4ed8;font-weight:700;margin-top:20px;word-break:break-all;}
+</style></head><body>
+<div class="header">
+  <div><div class="brand">&#127891; FaizUpyZone</div><div style="font-size:13px;color:#64748b;margin-top:4px;">Premium Study Materials</div></div>
+  <div class="right"><h2 style="font-size:22px;font-weight:800;">INVOICE</h2><p style="color:#64748b;font-size:13px;margin-top:4px;">Date: ${order.date || new Date().toLocaleDateString('en-IN')}</p><div class="badge">&#10003; PAID</div></div>
+</div>
+<div class="grid">
+  <div class="box"><div class="lbl">Billed To</div><div class="val">${order.userEmail || ''}</div></div>
+  <div class="box"><div class="lbl">Order ID</div><div class="val" style="font-size:11px;">${order.id}</div></div>
+</div>
+<table>
+  <thead><tr><th>#</th><th>Product</th><th style="text-align:right">Price</th></tr></thead>
+  <tbody>
+    ${rows}
+    <tr class="total"><td colspan="2">Total Amount</td><td style="text-align:right">&#8377;${order.total || 0}</td></tr>
+  </tbody>
+</table>
+${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''}
+<div class="footer"><p>Thank you for purchasing from FaizUpyZone!</p><p style="margin-top:6px;">Computer-generated invoice. No signature required.</p></div>
+</body></html>`;
 
-  static isActive() {
-    return !!(
-      document.fullscreenElement ||
-      document.webkitFullscreenElement ||
-      document.msFullscreenElement
+    const blob = new Blob([html], { type: 'text/html' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `Invoice_${order.paymentId || order.id}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    window.showToast?.('📄 Invoice downloaded!', 'success');
+  };
+
+  // empty guards
+  if (!user) {
+    return (
+      <div style={{ minHeight:'80vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:pageBg, padding:'2rem', textAlign:'center' }}>
+        <div style={{ width:80, height:80, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'1.5rem', boxShadow:'0 12px 40px rgba(99,102,241,0.4)' }}>
+          <ShoppingBag size={36} color="#fff" />
+        </div>
+        <h2 style={{ fontSize:'1.5rem', fontWeight:800, color:textMain, marginBottom:'0.5rem' }}>Please Login</h2>
+        <p style={{ color:textSub }}>Login karke apne orders dekho.</p>
+      </div>
     );
   }
 
-  static onChange(callback) {
-    const events = ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'];
-    events.forEach(event => document.addEventListener(event, callback));
-    return () => events.forEach(event => document.removeEventListener(event, callback));
-  }
-}
-
-// ==========================================
-// 🔒 SECURITY MANAGER
-// ==========================================
-class SecurityManager {
-  constructor(onWarning) {
-    this.onWarning = onWarning;
-    this.handlers = {
-      copy: (e) => { e.preventDefault(); this.onWarning('⚠️ Copying disabled!'); },
-      cut: (e) => { e.preventDefault(); this.onWarning('⚠️ Cutting disabled!'); },
-      paste: (e) => { e.preventDefault(); },
-      contextMenu: (e) => { e.preventDefault(); this.onWarning('⚠️ Right-click disabled!'); },
-      keydown: (e) => {
-        const isCopyPaste = e.ctrlKey && ['c', 'v', 'x', 'a', 'u'].includes(e.key.toLowerCase());
-        const isDevTools = e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()));
-        
-        if (isCopyPaste || isDevTools) {
-          e.preventDefault();
-          this.onWarning('⚠️ Shortcut disabled!');
-        }
-      }
-    };
-  }
-
-  enable() {
-    Object.entries(this.handlers).forEach(([event, handler]) => {
-      document.addEventListener(event, handler);
-    });
-  }
-
-  disable() {
-    Object.entries(this.handlers).forEach(([event, handler]) => {
-      document.removeEventListener(event, handler);
-    });
-  }
-}
-
-// ==========================================
-// 🎨 CONFIRMATION DIALOG
-// ==========================================
-function ConfirmDialog({ message, onConfirm, onCancel }) {
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 99999999, backdropFilter: 'blur(12px)',
-      animation: 'fadeIn 0.3s ease', padding: '1rem'
-    }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #fff 0%, #f8fafc 100%)',
-        padding: 'clamp(1.5rem, 5vw, 2.5rem)',
-        borderRadius: '28px',
-        maxWidth: '480px',
-        width: '100%',
-        border: '4px solid #e2e8f0',
-        boxShadow: '0 30px 80px rgba(0,0,0,0.3)',
-        textAlign: 'center',
-        animation: 'scaleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
-      }}>
-        <div style={{
-          width: 'clamp(60px, 15vw, 80px)',
-          height: 'clamp(60px, 15vw, 80px)',
-          margin: '0 auto 1.5rem',
-          background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: '0 10px 30px rgba(251,191,36,0.4)'
-        }}>
-          <AlertTriangle size={window.innerWidth < 768 ? 32 : 42} color="#fff" strokeWidth={2.5} />
+  if (allOrders.length === 0) {
+    return (
+      <div style={{ minHeight:'80vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', background:pageBg, padding:'2rem', textAlign:'center' }}>
+        <div style={{ width:80, height:80, borderRadius:'50%', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center', marginBottom:'1.5rem', boxShadow:'0 12px 40px rgba(99,102,241,0.4)' }}>
+          <Package size={36} color="#fff" />
         </div>
-        
-        <div style={{
-          fontSize: 'clamp(1.1rem, 4vw, 1.5rem)',
-          fontWeight: '800',
-          color: '#1e293b',
-          marginBottom: '2rem',
-          lineHeight: 1.4
-        }}>
-          {message}
-        </div>
-        
-        <div style={{
-          display: 'flex',
-          gap: '1rem',
-          flexDirection: window.innerWidth < 768 ? 'column' : 'row'
-        }}>
-          <button onClick={onCancel} style={{
-            flex: 1,
-            padding: 'clamp(0.75rem, 3vw, 1rem) clamp(1rem, 3vw, 1.5rem)',
-            background: '#fff',
-            border: '3px solid #e2e8f0',
-            borderRadius: '14px',
-            color: '#64748b',
-            fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)',
-            fontWeight: '700',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}>
-            ✕ Cancel
-          </button>
-          
-          <button onClick={onConfirm} style={{
-            flex: 1,
-            padding: 'clamp(0.75rem, 3vw, 1rem) clamp(1rem, 3vw, 1.5rem)',
-            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-            border: '3px solid #dc2626',
-            borderRadius: '14px',
-            color: '#fff',
-            fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)',
-            fontWeight: '800',
-            cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(239,68,68,0.4)',
-            transition: 'all 0.2s'
-          }}>
-            ✓ Yes, Exit
-          </button>
-        </div>
+        <h2 style={{ fontSize:'1.5rem', fontWeight:800, color:textMain, marginBottom:'0.5rem' }}>No Orders Yet</h2>
+        <p style={{ color:textSub }}>Abhi tak koi purchase nahi kiya!</p>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-// ==========================================
-// 📋 INSTRUCTION SCREEN
-// ==========================================
-function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
-  const [accepted, setAccepted] = useState(false);
+  // render one order card
+  const renderOrderCard = (order) => {
+    const isPending    = order.status === 'pending';
+    const isExpanded   = expandedOrder === order.id;
+    const isDeleting   = deletingId === order.id;
+    const isConfirming = confirmDeleteId === order.id;
 
-  const instructions = [
-    { text: `Test duration is ${timeLimit} minutes. Timer starts immediately after you begin.` },
-    { text: `Do NOT switch tabs or windows. After 3 tab switches, test auto-submits.` },
-    { text: 'Copy, paste, right-click, and screenshots are disabled during the test.' },
-    { text: 'Test runs in fullscreen mode. Exiting fullscreen will trigger a warning.' },
-    { text: 'You can navigate between questions freely before submitting.' },
-    { text: 'ALL questions must be answered (A to Z completion required).' },
-    { text: 'Score 55% or above to PASS and receive your Certificate of Achievement.' },
-    { text: 'This test must be taken honestly. Malpractice leads to disqualification.' },
-  ];
+    // collect pdf links
+    const pdfLinks = (order.items || []).flatMap(item => {
+      if (item.isBundle && item.bundledProducts?.length > 0) {
+        return item.bundledProducts.flatMap(bp =>
+          (bp.pdfFiles || []).map((pdf, pi) => ({
+            name: pdf.name || `${bp.title} - PDF ${pi + 1}`,
+            url: pdf.url
+          }))
+        );
+      }
+      return (item.pdfFiles || []).map((pdf, pi) => ({
+        name: pdf.name || `${item.title} - PDF ${pi + 1}`,
+        url: pdf.url
+      }));
+    });
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#f8fafc',
-      display: 'flex',
-      alignItems: 'flex-start',
-      justifyContent: 'center',
-      padding: 'clamp(1rem, 3vw, 2rem)',
-      overflowY: 'auto'
-    }}>
-      <div style={{
-        width: '100%',
-        maxWidth: '680px',
-        padding: 'clamp(1rem, 3vw, 2rem) 0'
+    return (
+      <div key={order.id} style={{
+        background: cardBg,
+        border: `2px solid ${isPending ? '#f59e0b' : borderC}`,
+        borderRadius: '20px', marginBottom: '1.25rem', overflow: 'hidden',
+        boxShadow: isPending ? '0 4px 20px rgba(245,158,11,0.15)' : '0 4px 20px rgba(0,0,0,0.06)'
       }}>
-        {/* Header */}
-        <div style={{
-          background: '#fff',
-          border: '3px solid #e2e8f0',
-          borderRadius: '20px',
-          padding: 'clamp(1.25rem, 4vw, 1.5rem)',
-          marginBottom: '1rem',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-          textAlign: 'center'
-        }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            background: '#eff6ff',
-            border: '2px solid #bfdbfe',
-            borderRadius: '50px',
-            padding: '0.5rem 1.25rem',
-            marginBottom: '1rem'
-          }}>
-            <Shield size={18} color="#3b82f6" />
-            <span style={{
-              color: '#1d4ed8',
-              fontWeight: '800',
-              fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-              letterSpacing: '0.06em'
-            }}>
-              EXAM INSTRUCTIONS
-            </span>
-          </div>
-          <h1 style={{
-            fontSize: 'clamp(1.3rem, 5vw, 1.9rem)',
-            fontWeight: '800',
-            color: '#1e293b',
-            margin: '0 0 0.75rem'
-          }}>
-            {testTitle}
-          </h1>
 
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: 'clamp(1rem, 4vw, 1.5rem)',
-            flexWrap: 'wrap'
-          }}>
-            {[
-              { label: 'Duration', value: `${timeLimit} Min` },
-              { label: 'Questions', value: `${totalQuestions} Qs` },
-              { label: 'Pass Mark', value: '55%' }
-            ].map((s, i) => (
-              <div key={i}>
-                <div style={{
-                  fontSize: 'clamp(1rem, 3vw, 1.2rem)',
-                  fontWeight: '900',
-                  color: '#3b82f6'
-                }}>
-                  {s.value}
-                </div>
-                <div style={{
-                  fontSize: 'clamp(0.7rem, 2vw, 0.75rem)',
-                  color: '#64748b',
-                  fontWeight: '700'
-                }}>
-                  {s.label}
-                </div>
+        {/* top */}
+        <div style={{ padding:'clamp(1rem,3vw,1.5rem)' }}>
+
+          {/* status + date */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem', flexWrap:'wrap', gap:'0.5rem' }}>
+            {isPending ? (
+              <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', background:'#fef3c7', color:'#92400e', padding:'0.35rem 0.9rem', borderRadius:'20px', fontSize:'0.78rem', fontWeight:'800', border:'1.5px solid #f59e0b' }}>
+                <div style={{ width:10, height:10, borderRadius:'50%', border:'2px solid #f59e0b', borderTopColor:'transparent', animation:'spin 0.8s linear infinite' }}/>
+                Payment Verifying
               </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Instructions */}
-        <div style={{
-          background: '#fff',
-          border: '3px solid #e2e8f0',
-          borderRadius: '20px',
-          padding: 'clamp(1.25rem, 4vw, 1.5rem)',
-          marginBottom: '1rem',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)'
-        }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            marginBottom: '1.25rem'
-          }}>
-            <BookOpen size={18} color="#3b82f6" />
-            <span style={{
-              color: '#1e293b',
-              fontWeight: '800',
-              fontSize: 'clamp(0.85rem, 2.5vw, 0.95rem)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em'
-            }}>
-              Test Instructions
-            </span>
-          </div>
-
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '0.75rem',
-            marginBottom: '1.5rem'
-          }}>
-            {instructions.map((item, idx) => (
-              <div key={idx} style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.85rem',
-                padding: 'clamp(0.85rem, 2.5vw, 1rem)',
-                background: '#f8fafc',
-                border: '2px solid #e2e8f0',
-                borderRadius: '14px'
-              }}>
-                <div style={{
-                  width: '26px',
-                  height: '26px',
-                  minWidth: '26px',
-                  borderRadius: '8px',
-                  border: '2.5px solid #cbd5e1',
-                  background: '#fff',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#64748b',
-                  fontWeight: '800',
-                  fontSize: '0.85rem'
-                }}>
-                  {idx + 1}
-                </div>
-                <span style={{
-                  color: '#475569',
-                  fontSize: 'clamp(0.85rem, 2.5vw, 0.95rem)',
-                  fontWeight: '600',
-                  lineHeight: 1.55,
-                  flex: 1
-                }}>
-                  {item.text}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div onClick={() => setAccepted(!accepted)} style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            padding: 'clamp(1rem, 3vw, 1.25rem)',
-            background: accepted ? '#f0fdf4' : '#fff',
-            border: `3px solid ${accepted ? '#10b981' : '#e2e8f0'}`,
-            borderRadius: '14px',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              minWidth: '32px',
-              borderRadius: '8px',
-              border: `3px solid ${accepted ? '#10b981' : '#cbd5e1'}`,
-              background: accepted ? '#10b981' : '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.2s'
-            }}>
-              {accepted && <CheckCircle size={20} color="#fff" strokeWidth={3} />}
-            </div>
-            <span style={{
-              color: accepted ? '#065f46' : '#475569',
-              fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)',
-              fontWeight: accepted ? '800' : '700',
-              lineHeight: 1.4,
-              flex: 1
-            }}>
-              ✅ I have read and understood all instructions above
-            </span>
-          </div>
-        </div>
-
-        <button onClick={() => accepted && onAccept()} disabled={!accepted} style={{
-          width: '100%',
-          padding: 'clamp(1rem, 3vw, 1.1rem)',
-          background: accepted ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
-          border: accepted ? '3px solid #059669' : '3px solid #e2e8f0',
-          borderRadius: '16px',
-          color: accepted ? '#fff' : '#94a3b8',
-          fontSize: 'clamp(0.95rem, 2.5vw, 1.05rem)',
-          fontWeight: '800',
-          cursor: accepted ? 'pointer' : 'not-allowed',
-          boxShadow: accepted ? '0 8px 24px rgba(16,185,129,0.35)' : 'none',
-          transition: 'all 0.3s'
-        }}>
-          {accepted ? '✅ Proceed to Fill Details' : '☑️ Please Accept Instructions First'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 🎮 MAIN TEST INTERFACE
-// ==========================================
-function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, userEmail, studentInfo }) {
-  // State
-  const [currentQuestion, setCurrentQuestion] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [timeLeft, setTimeLeft] = useState(timeLimit * 60);
-  const [tabSwitches, setTabSwitches] = useState(0);
-  const [showWarning, setShowWarning] = useState(false);
-  const [warningMsg, setWarningMsg] = useState('');
-  const [showExitDialog, setShowExitDialog] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
-
-  // Refs
-  const startTimeRef = useRef(Date.now());
-  const audioManagerRef = useRef(new AudioManager());
-  const securityManagerRef = useRef(null);
-  const warningTimerRef = useRef(null);
-
-  // Computed
-  const isAdmin = TestUtils.isAdmin(userEmail);
-  const answeredCount = Object.keys(answers).length;
-  const allAnswered = answeredCount === questions.length;
-  const timeData = TestUtils.formatTime(timeLeft);
-  const timerTheme = TestUtils.getTimerTheme(timeLeft, timeLimit * 60);
-  const isCriticalTime = timeLeft < APP_CONFIG.CRITICAL_TIME_MINUTES * 60;
-
-  // ==========================================
-  // 🛠️ HANDLERS
-  // ==========================================
-  const showWarningMessage = useCallback((message, critical = false) => {
-    setWarningMsg(message);
-    setShowWarning(true);
-
-    if (warningTimerRef.current) {
-      clearTimeout(warningTimerRef.current);
-    }
-
-    const timeout = critical ? APP_CONFIG.CRITICAL_WARNING_TIMEOUT : APP_CONFIG.WARNING_TIMEOUT;
-    warningTimerRef.current = setTimeout(() => {
-      setShowWarning(false);
-    }, timeout);
-  }, []);
-
-  const handleAnswer = useCallback((qIndex, optionIndex) => {
-    setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
-  }, []);
-
-  const handleSubmit = useCallback((penalized = false) => {
-    if (!isAdmin && !allAnswered) {
-      showWarningMessage(`⚠️ Answer ALL questions! (${answeredCount}/${questions.length} done)`, true);
-      return;
-    }
-
-    const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const score = TestUtils.calculateScore(answers, questions, tabSwitches, isAdmin);
-
-    const testResults = {
-      ...score,
-      timeTaken: `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`,
-      tabSwitches,
-      penalized,
-      studentInfo
-    };
-
-    onComplete(testResults);
-  }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
-
-  // ==========================================
-  // ✅ AUTO-SCROLL TO TOP ON QUESTION CHANGE
-  // ==========================================
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [currentQuestion]);
-
-  // ==========================================
-  // 🎬 INITIALIZATION
-  // ==========================================
-  useEffect(() => {
-    const navbar = document.querySelector('nav');
-    const header = document.querySelector('header');
-    if (navbar) navbar.style.display = 'none';
-    if (header) header.style.display = 'none';
-
-    const currentAudioManager = audioManagerRef.current;
-    const currentSecurityManager = securityManagerRef.current;
-
-    if (!isAdmin) {
-      currentAudioManager.init();
-      securityManagerRef.current = new SecurityManager(showWarningMessage);
-      securityManagerRef.current.enable();
-    }
-
-    return () => {
-      if (navbar) navbar.style.display = '';
-      if (header) header.style.display = '';
-      currentAudioManager.destroy();
-      if (currentSecurityManager) {
-        currentSecurityManager.disable();
-      }
-    };
-  }, [isAdmin, showWarningMessage]);
-
-  // ==========================================
-  // 🖥️ FULLSCREEN MANAGEMENT
-  // ==========================================
-  useEffect(() => {
-    if (isAdmin) return;
-
-    const handleFullscreenChange = () => {
-      const isFullscreen = FullscreenManager.isActive();
-      
-      if (!isFullscreen) {
-        showWarningMessage('⚠️ Stay in fullscreen mode!');
-        setTimeout(() => {
-          FullscreenManager.enter();
-        }, 2000);
-      }
-    };
-
-    const cleanup = FullscreenManager.onChange(handleFullscreenChange);
-
-    return () => {
-      cleanup();
-      if (FullscreenManager.isActive()) {
-        FullscreenManager.exit();
-      }
-    };
-  }, [isAdmin, showWarningMessage]);
-
-  // ==========================================
-  // ⏱️ TIMER
-  // ==========================================
-  useEffect(() => {
-    if (timeLeft <= 0) {
-      audioManagerRef.current.playAlarm();
-      showWarningMessage('⏰ TIME UP! Auto-submitting...', true);
-      setTimeout(() => handleSubmit(false), APP_CONFIG.AUTO_SUBMIT_DELAY);
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeLeft, showWarningMessage, handleSubmit]);
-
-  // ==========================================
-  // 🔊 TICK SOUND
-  // ==========================================
-  useEffect(() => {
-    if (isAdmin || timeLeft <= 0) return;
-
-    const tickTimer = setInterval(() => {
-      audioManagerRef.current.playTick(timeLeft % 2 === 0);
-    }, 1000);
-
-    return () => clearInterval(tickTimer);
-  }, [timeLeft, isAdmin]);
-
-  // ==========================================
-  // 🚫 TAB SWITCH DETECTION
-  // ==========================================
-  useEffect(() => {
-    if (isAdmin) return;
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        const newCount = tabSwitches + 1;
-        setTabSwitches(newCount);
-
-        if (newCount >= APP_CONFIG.MAX_TAB_SWITCHES) {
-          showWarningMessage('🚨 Maximum tab switches! Auto-submitting...', true);
-          setTimeout(() => handleSubmit(true), APP_CONFIG.AUTO_SUBMIT_DELAY);
-        } else {
-          showWarningMessage(`⚠️ Tab Switch ${newCount}/${APP_CONFIG.MAX_TAB_SWITCHES}!`);
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [tabSwitches, isAdmin, showWarningMessage, handleSubmit]);
-
-  // ==========================================
-  // 📱 MOBILE DETECTION
-  // ==========================================
-  useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth <= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  // ==========================================
-  // 🛠️ NAVIGATION HANDLER
-  // ==========================================
-  const handleNavigation = useCallback((direction) => {
-    if (direction === 'next' && currentQuestion < questions.length - 1) {
-      setCurrentQuestion(prev => prev + 1);
-    } else if (direction === 'prev' && currentQuestion > 0) {
-      setCurrentQuestion(prev => prev - 1);
-    }
-  }, [currentQuestion, questions.length]);
-
-  const currentQ = questions[currentQuestion];
-
-  // ==========================================
-  // 🎨 RENDER
-  // ==========================================
-  return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: '#f8fafc',
-      zIndex: 999999,
-      overflowY: 'auto',
-      userSelect: isAdmin ? 'auto' : 'none'
-    }}>
-      {/* Admin Badge */}
-      {isAdmin && (
-        <div style={{
-          position: 'fixed',
-          top: '10px',
-          left: '10px',
-          background: 'linear-gradient(135deg, #10b981, #059669)',
-          color: '#fff',
-          padding: 'clamp(0.5rem, 2vw, 0.6rem) clamp(0.8rem, 3vw, 1.2rem)',
-          borderRadius: '12px',
-          fontSize: 'clamp(0.7rem, 2vw, 0.8rem)',
-          fontWeight: '900',
-          zIndex: 10000000,
-          boxShadow: '0 6px 20px rgba(16,185,129,0.5)',
-          border: '2px solid #047857'
-        }}>
-          👑 ADMIN MODE
-        </div>
-      )}
-
-      {/* Warning Modal */}
-      {showWarning && !isAdmin && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.9)',
-          zIndex: 9999999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backdropFilter: 'blur(10px)',
-          padding: '1rem'
-        }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
-            padding: 'clamp(2rem, 5vw, 3rem)',
-            borderRadius: '28px',
-            maxWidth: '500px',
-            width: '100%',
-            border: '5px solid #ef4444',
-            boxShadow: '0 30px 80px rgba(239,68,68,0.6)',
-            textAlign: 'center',
-            animation: 'pulse 0.5s infinite'
-          }}>
-            <AlertTriangle
-              size={isMobile ? 64 : 80}
-              color="#dc2626"
-              strokeWidth={3}
-              style={{ marginBottom: '1rem', animation: 'shake 0.5s infinite' }}
-            />
-            <div style={{
-              fontSize: 'clamp(1.2rem, 4vw, 1.8rem)',
-              fontWeight: '900',
-              color: '#991b1b',
-              lineHeight: 1.4
-            }}>
-              {warningMsg}
-            </div>
-            {tabSwitches > 0 && (
-              <div style={{
-                fontSize: 'clamp(0.9rem, 2.5vw, 1rem)',
-                color: '#7f1d1d',
-                fontWeight: '700',
-                marginTop: '1rem'
-              }}>
-                Tab Switches: {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
+            ) : (
+              <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', background:'#dcfce7', color:'#166534', padding:'0.35rem 0.9rem', borderRadius:'20px', fontSize:'0.78rem', fontWeight:'800', border:'1.5px solid #bbf7d0' }}>
+                <CheckCircle size={12}/> Completed
               </div>
             )}
+            <span style={{ fontSize:'0.8rem', color:textSub, fontWeight:'600' }}>🗓️ {order.date || 'N/A'}</span>
+          </div>
+
+          {/* items */}
+          <div style={{ marginBottom:'1rem' }}>
+            {(order.items || []).map((item, idx) => (
+              <div key={idx} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'0.6rem 0', borderBottom: idx < (order.items.length - 1) ? `1px solid ${borderC}` : 'none' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
+                  {item.thumbnail
+                    ? <img src={item.thumbnail} alt="" style={{ width:36, height:36, borderRadius:8, objectFit:'cover' }}/>
+                    : <div style={{ width:36, height:36, borderRadius:8, background:'linear-gradient(135deg,#6366f1,#8b5cf6)', display:'flex', alignItems:'center', justifyContent:'center' }}><FileText size={18} color="#fff"/></div>
+                  }
+                  <span style={{ fontWeight:'700', color:textMain, fontSize:'0.95rem' }}>{item.title || 'Product'}</span>
+                </div>
+                <span style={{ fontWeight:'800', color:'#6366f1', fontSize:'1rem' }}>₹{item.price || 0}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* total + toggle */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'0.5rem' }}>
+            <div style={{ background: isDark ? '#0f172a' : '#f8fafc', border:`1.5px solid ${borderC}`, borderRadius:'12px', padding:'0.5rem 1rem', display:'flex', alignItems:'center', gap:'0.5rem' }}>
+              <span style={{ color:textSub, fontSize:'0.85rem', fontWeight:'700' }}>Total:</span>
+              <span style={{ color:textMain, fontSize:'1.1rem', fontWeight:'900' }}>₹{order.total || 0}</span>
+            </div>
+            <button onClick={() => setExpandedOrder(isExpanded ? null : order.id)} style={{ background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.3rem', color:textSub, fontSize:'0.85rem', fontWeight:'700' }}>
+              {isExpanded ? <><ChevronUp size={16}/> Hide</> : <><ChevronDown size={16}/> Details</>}
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Exit Dialog */}
-      {showExitDialog && (
-        <ConfirmDialog
-          message="Are you sure you want to exit and submit the test?"
-          onConfirm={() => { handleSubmit(false); onExit(); }}
-          onCancel={() => setShowExitDialog(false)}
-        />
-      )}
+        {/* expanded */}
+        {isExpanded && (
+          <div style={{ borderTop:`2px solid ${borderC}`, padding:'clamp(1rem,3vw,1.5rem)', background: isDark ? '#0f172a' : '#f8fafc' }}>
 
-      {/* Header */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        background: '#fff',
-        borderBottom: '3px solid #e2e8f0',
-        padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1rem, 3vw, 1.5rem)',
-        zIndex: 1000,
-        boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
-      }}>
-        <div style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: '1rem',
-          flexWrap: 'wrap'
-        }}>
-          <div style={{ flex: 1, minWidth: '200px' }}>
-            <h1 style={{
-              fontSize: 'clamp(1rem, 3vw, 1.4rem)',
-              fontWeight: '800',
-              color: '#1e293b',
-              margin: '0 0 0.25rem'
-            }}>
-              {testTitle}
-            </h1>
-            <div style={{
-              fontSize: 'clamp(0.7rem, 2vw, 0.9rem)',
-              color: '#64748b',
-              fontWeight: '600',
-              display: 'flex',
-              gap: '0.75rem',
-              alignItems: 'center',
-              flexWrap: 'wrap'
-            }}>
-              <span>Q {currentQuestion + 1}/{questions.length}</span>
-              <span style={{
-                background: allAnswered ? '#dcfce7' : '#fef3c7',
-                color: allAnswered ? '#065f46' : '#92400e',
-                padding: '0.15rem 0.5rem',
-                borderRadius: '6px',
-                fontSize: 'clamp(0.65rem, 1.8vw, 0.7rem)',
-                fontWeight: '800'
-              }}>
-                {allAnswered ? '✅' : '📝'} {answeredCount}/{questions.length}
-              </span>
-              {tabSwitches > 0 && !isAdmin && (
-                <span style={{
-                  background: '#fee2e2',
-                  color: '#dc2626',
-                  padding: '0.15rem 0.5rem',
-                  borderRadius: '6px',
-                  fontSize: 'clamp(0.65rem, 1.8vw, 0.7rem)',
-                  fontWeight: '800'
-                }}>
-                  ⚠️ {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
-                </span>
+            {/* payment id */}
+            {order.paymentId && (
+              <div style={{ background: isDark ? '#1e293b' : '#eff6ff', border:`1.5px solid ${isDark ? '#334155' : '#bfdbfe'}`, borderRadius:'12px', padding:'0.85rem 1rem', marginBottom:'1.25rem' }}>
+                <div style={{ fontSize:'0.75rem', fontWeight:'800', color:textSub, marginBottom:'0.25rem', textTransform:'uppercase' }}>Payment ID</div>
+                <div style={{ fontSize:'0.85rem', fontWeight:'700', color: isDark ? '#93c5fd' : '#1d4ed8', wordBreak:'break-all' }}>{order.paymentId}</div>
+              </div>
+            )}
+
+            {/* pending warning */}
+            {isPending && (
+              <div style={{ background:'linear-gradient(135deg,#fef3c7,#fde68a)', border:'2px solid #f59e0b', borderRadius:'14px', padding:'1rem 1.25rem', marginBottom:'1.25rem', display:'flex', alignItems:'flex-start', gap:'0.75rem' }}>
+                <AlertCircle size={20} color="#92400e" style={{ flexShrink:0, marginTop:2 }}/>
+                <div>
+                  <div style={{ fontWeight:'800', fontSize:'0.9rem', color:'#92400e', marginBottom:'0.25rem' }}>Payment Verification Pending</div>
+                  <div style={{ fontSize:'0.8rem', color:'#b45309', lineHeight:1.5 }}>
+                    Agar aapka payment successful tha toh 24–72 hours mein automatically confirm ho jayega. Kisi problem ke liye admin se contact karein.
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ✅ PDF Downloads - FORCE DOWNLOAD (browser mein nahi khulega) */}
+            {!isPending && (
+              <div style={{ marginBottom:'1.25rem' }}>
+                <div style={{ fontSize:'0.8rem', fontWeight:'800', color:textSub, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'0.75rem' }}>
+                  📥 Download Your PDFs
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'0.6rem' }}>
+                  {pdfLinks.length > 0 ? (
+                    pdfLinks.map((pdf, idx) => (
+                      <PdfDownloadButton key={idx} pdf={pdf} isDark={isDark} />
+                    ))
+                  ) : (
+                    <div style={{ padding:'1rem', borderRadius:'12px', background: isDark ? '#1e293b' : '#f1f5f9', color:textSub, fontSize:'0.85rem', fontWeight:'600' }}>
+                      ℹ️ PDF links admin se milenge. Contact karo.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* action buttons */}
+            <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap' }}>
+
+              {/* invoice */}
+              {!isPending && (
+                <button
+                  onClick={() => downloadInvoice(order)}
+                  style={{ flex:1, minWidth:140, display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', background: isDark ? '#1e293b' : '#fff', border:'2px solid #6366f1', borderRadius:'12px', padding:'0.85rem 1rem', color:'#6366f1', fontWeight:'700', fontSize:'0.9rem', cursor:'pointer', transition:'all 0.2s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background='#6366f1'; e.currentTarget.style.color='#fff'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background=isDark?'#1e293b':'#fff'; e.currentTarget.style.color='#6366f1'; }}
+                >
+                  <FileText size={16}/> Download Invoice
+                </button>
+              )}
+
+              {/* delete */}
+              {!isConfirming ? (
+                <button
+                  onClick={() => setConfirmDeleteId(order.id)}
+                  style={{ flex:1, minWidth:140, display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', background: isDark ? '#1e293b' : '#fff', border:'2px solid #ef4444', borderRadius:'12px', padding:'0.85rem 1rem', color:'#ef4444', fontWeight:'700', fontSize:'0.9rem', cursor:'pointer', transition:'all 0.2s' }}
+                  onMouseEnter={e => { e.currentTarget.style.background='#ef4444'; e.currentTarget.style.color='#fff'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background=isDark?'#1e293b':'#fff'; e.currentTarget.style.color='#ef4444'; }}
+                >
+                  <Trash2 size={16}/> Delete Order
+                </button>
+              ) : (
+                <div style={{ flex:1, display:'flex', gap:'0.5rem', alignItems:'center', background:'#fef2f2', border:'2px solid #ef4444', borderRadius:'12px', padding:'0.75rem 1rem' }}>
+                  <span style={{ fontSize:'0.82rem', fontWeight:'700', color:'#dc2626', flex:1 }}>Confirm delete?</span>
+                  <button onClick={() => handleDeleteOrder(order.id)} disabled={isDeleting} style={{ background:'#ef4444', color:'#fff', border:'none', borderRadius:'8px', padding:'0.4rem 0.85rem', fontWeight:'800', fontSize:'0.82rem', cursor:'pointer' }}>
+                    {isDeleting ? '...' : 'Yes'}
+                  </button>
+                  <button onClick={() => setConfirmDeleteId(null)} style={{ background:'#fff', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'0.4rem 0.85rem', fontWeight:'700', fontSize:'0.82rem', cursor:'pointer' }}>
+                    No
+                  </button>
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Timer */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: 'clamp(0.4rem, 2vw, 0.65rem) clamp(0.8rem, 3vw, 1.25rem)',
-            background: `linear-gradient(135deg, ${timerTheme.bg}, ${timerTheme.bg})`,
-            borderRadius: '12px',
-            border: `3px solid ${timerTheme.border}`,
-            boxShadow: `0 4px 12px ${timerTheme.border}33`
-          }}>
-            <Clock
-              size={isMobile ? 18 : 22}
-              color={timerTheme.text}
-              strokeWidth={2.5}
-              style={{ animation: isCriticalTime ? 'shake 0.6s infinite' : 'none' }}
-            />
-            <div style={{
-              fontSize: 'clamp(1rem, 3vw, 1.4rem)',
-              fontWeight: '900',
-              color: timerTheme.text,
-              fontFamily: 'monospace',
-              animation: isCriticalTime ? 'blink 1s infinite' : 'none'
-            }}>
-              {timeData.display}
-            </div>
           </div>
-
-          {/* Exit Button */}
-          <button onClick={() => setShowExitDialog(true)} style={{
-            background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
-            border: '3px solid #ef4444',
-            borderRadius: '12px',
-            width: 'clamp(38px, 10vw, 52px)',
-            height: 'clamp(38px, 10vw, 52px)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            flexShrink: 0,
-            boxShadow: '0 4px 12px rgba(239,68,68,0.3)'
-          }}>
-            <X size={isMobile ? 20 : 28} color="#ef4444" strokeWidth={3} />
-          </button>
-        </div>
+        )}
       </div>
-
-      {/* Main Content */}
-      <div style={{
-        padding: 'clamp(1.5rem, 4vw, 2rem) clamp(1rem, 3vw, 1.5rem)',
-        maxWidth: '1400px',
-        margin: '0 auto',
-        paddingBottom: '6rem'
-      }}>
-        {/* Question Box */}
-        <div key={currentQuestion} style={{
-          background: '#fff',
-          padding: 'clamp(1.5rem, 4vw, 2.5rem)',
-          borderRadius: '20px',
-          marginBottom: '2rem',
-          border: '3px solid #e2e8f0',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)',
-          animation: 'slideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)'
-        }}>
-          <div style={{
-            fontSize: 'clamp(1.1rem, 3.5vw, 1.6rem)',
-            fontWeight: '700',
-            color: '#1e293b',
-            marginBottom: '1.5rem',
-            lineHeight: 1.6
-          }}>
-            {currentQ.question}
-          </div>
-          {currentQ.code && (
-            <div style={{
-              background: '#f8fafc',
-              border: '3px solid #cbd5e1',
-              borderRadius: '16px',
-              padding: 'clamp(1.5rem, 4vw, 2.5rem)',
-              overflowX: 'auto',
-              boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.05)'
-            }}>
-              <pre style={{
-                margin: 0,
-                fontFamily: 'Consolas, Monaco, "Courier New", monospace',
-                fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)',
-                lineHeight: 1.8,
-                color: '#000',
-                fontWeight: '500',
-                whiteSpace: 'pre',
-                wordWrap: 'normal'
-              }}>
-{currentQ.code}
-              </pre>
-            </div>
-          )}
-        </div>
-
-        {/* Options */}
-        <div key={`options-${currentQuestion}`} style={{
-          display: 'grid',
-          gap: 'clamp(1rem, 3vw, 1.5rem)',
-          marginBottom: '2.5rem'
-        }}>
-          {currentQ.options.map((option, idx) => {
-            const isSelected = answers[currentQuestion] === idx;
-            return (
-              <button key={idx} onClick={() => handleAnswer(currentQuestion, idx)} style={{
-                padding: 'clamp(1.25rem, 3.5vw, 1.75rem)',
-                background: isSelected ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#fff',
-                border: `3px solid ${isSelected ? '#3b82f6' : '#e2e8f0'}`,
-                borderRadius: '16px',
-                cursor: 'pointer',
-                textAlign: 'left',
-                color: isSelected ? '#fff' : '#1e293b',
-                fontSize: 'clamp(0.95rem, 2.8vw, 1.3rem)',
-                fontWeight: '600',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'clamp(1rem, 3vw, 1.5rem)',
-                boxShadow: isSelected ? '0 8px 24px rgba(59,130,246,0.3)' : '0 4px 12px rgba(0,0,0,0.05)',
-                transform: isSelected ? 'scale(1.02)' : 'scale(1)',
-                transition: 'all 0.3s',
-                animation: `fadeInUp 0.3s ease ${idx * 0.1}s backwards`
-              }}>
-                <span style={{
-                  width: 'clamp(36px, 10vw, 52px)',
-                  height: 'clamp(36px, 10vw, 52px)',
-                  borderRadius: '50%',
-                  background: isSelected ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontWeight: '900',
-                  fontSize: 'clamp(1rem, 3vw, 1.4rem)',
-                  flexShrink: 0
-                }}>
-                  {String.fromCharCode(65 + idx)}
-                </span>
-                <span style={{ flex: 1, lineHeight: 1.5 }}>{option}</span>
-                {isSelected && <CheckCircle size={isMobile ? 20 : 28} color="#fff" strokeWidth={2.5} />}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Navigation */}
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          gap: '1rem',
-          marginBottom: '2.5rem'
-        }}>
-          <button onClick={() => handleNavigation('prev')} disabled={currentQuestion === 0} style={{
-            padding: 'clamp(0.9rem, 2.5vw, 1.25rem) clamp(1.25rem, 4vw, 2rem)',
-            background: currentQuestion === 0 ? '#f1f5f9' : 'linear-gradient(135deg, #fff, #f8fafc)',
-            border: `3px solid ${currentQuestion === 0 ? '#e2e8f0' : '#cbd5e1'}`,
-            borderRadius: '12px',
-            cursor: currentQuestion === 0 ? 'not-allowed' : 'pointer',
-            fontWeight: '700',
-            color: currentQuestion === 0 ? '#94a3b8' : '#1e293b',
-            fontSize: 'clamp(0.85rem, 2.5vw, 1.1rem)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            transition: 'all 0.2s'
-          }}>
-            <ChevronLeft size={isMobile ? 18 : 22} />
-            {!isMobile && 'Previous'}
-          </button>
-
-          {currentQuestion === questions.length - 1 ? (
-            <button onClick={() => handleSubmit(false)} disabled={!allAnswered && !isAdmin} style={{
-              padding: 'clamp(0.9rem, 2.5vw, 1.25rem) clamp(1.5rem, 5vw, 3rem)',
-              background: (allAnswered || isAdmin) ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
-              border: `3px solid ${(allAnswered || isAdmin) ? '#059669' : '#e2e8f0'}`,
-              borderRadius: '12px',
-              cursor: (allAnswered || isAdmin) ? 'pointer' : 'not-allowed',
-              fontWeight: '800',
-              color: (allAnswered || isAdmin) ? '#fff' : '#94a3b8',
-              fontSize: 'clamp(0.9rem, 2.8vw, 1.2rem)',
-              boxShadow: (allAnswered || isAdmin) ? '0 8px 24px rgba(16,185,129,0.4)' : 'none',
-              textTransform: 'uppercase',
-              transition: 'all 0.2s'
-            }}>
-              {(allAnswered || isAdmin) ? '✅ Submit Test' : '⚠️ Answer All'}
-            </button>
-          ) : (
-            <button onClick={() => handleNavigation('next')} style={{
-              padding: 'clamp(0.9rem, 2.5vw, 1.25rem) clamp(1.25rem, 4vw, 2rem)',
-              background: 'linear-gradient(135deg, #fff, #f8fafc)',
-              border: '3px solid #cbd5e1',
-              borderRadius: '12px',
-              cursor: 'pointer',
-              fontWeight: '700',
-              color: '#1e293b',
-              fontSize: 'clamp(0.85rem, 2.5vw, 1.1rem)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              transition: 'all 0.2s'
-            }}>
-              {!isMobile && 'Next'}
-              <ChevronRight size={isMobile ? 18 : 22} />
-            </button>
-          )}
-        </div>
-
-        {/* Progress Grid */}
-        <div style={{
-          background: '#fff',
-          padding: 'clamp(1.25rem, 3.5vw, 1.75rem)',
-          borderRadius: '20px',
-          border: '3px solid #e2e8f0',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.06)'
-        }}>
-          <div style={{
-            fontSize: 'clamp(0.85rem, 2.5vw, 1.05rem)',
-            fontWeight: '800',
-            color: '#64748b',
-            marginBottom: '1.25rem',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em'
-          }}>
-            Progress: {answeredCount}/{questions.length} Answered
-          </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(40px, 1fr))' : 'repeat(auto-fill, minmax(56px, 1fr))',
-            gap: 'clamp(0.6rem, 2vw, 0.85rem)'
-          }}>
-            {questions.map((_, idx) => {
-              const isAnswered = answers[idx] !== undefined;
-              const isCurrent = idx === currentQuestion;
-              return (
-                <button key={idx} onClick={() => setCurrentQuestion(idx)} style={{
-                  height: 'clamp(40px, 12vw, 56px)',
-                  borderRadius: '10px',
-                  border: isCurrent ? '3px solid #3b82f6' : 'none',
-                  background: isAnswered ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
-                  color: isAnswered ? '#fff' : '#1e293b',
-                  fontWeight: '800',
-                  cursor: 'pointer',
-                  fontSize: 'clamp(0.85rem, 2.5vw, 1.15rem)',
-                  boxShadow: isAnswered ? '0 4px 12px rgba(16,185,129,0.3)' : 'none',
-                  transition: 'all 0.2s',
-                  transform: isCurrent ? 'scale(1.05)' : 'scale(1)'
-                }}>
-                  {idx + 1}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Animations */}
-      <style>{`
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes scaleIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
-        @keyframes slideIn { 0% { opacity: 0; transform: translateY(40px) scale(0.9); } 60% { opacity: 1; transform: translateY(-5px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-4px) rotate(-3deg); } 75% { transform: translateX(4px) rotate(3deg); } }
-        @keyframes blink { 0%, 49%, 100% { opacity: 1; } 50%, 99% { opacity: 0.3; } }
-        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
-      `}</style>
-    </div>
-  );
-}
-
-// ==========================================
-// 🎯 MAIN APP
-// ==========================================
-export default function MockTestApp({ questions, testTitle, timeLimit, userEmail }) {
-  const [stage, setStage] = useState('instructions');
-  const [studentInfo, setStudentInfo] = useState(null);
-
-  const handleInstructionsAccept = () => {
-    if (userEmail !== APP_CONFIG.ADMIN_EMAIL) {
-      FullscreenManager.enter();
-    }
-    setStage('form');
+    );
   };
 
+  // main render
   return (
-    <>
-      {stage === 'instructions' && (
-        <InstructionScreen
-          testTitle={testTitle}
-          timeLimit={timeLimit}
-          totalQuestions={questions.length}
-          onAccept={handleInstructionsAccept}
-        />
-      )}
-      {stage === 'form' && (
-        <UserDetailsForm
-          onSubmit={(info) => { setStudentInfo(info); setStage('test'); }}
-          onCancel={() => setStage('instructions')}
-        />
-      )}
-      {stage === 'test' && (
-        <TestInterface
-          questions={questions}
-          testTitle={testTitle}
-          timeLimit={timeLimit}
-          userEmail={userEmail}
-          studentInfo={studentInfo}
-          onComplete={() => {}}
-          onExit={() => setStage('instructions')}
-        />
-      )}
-    </>
+    <div style={{ minHeight:'100vh', background:pageBg, padding:'clamp(1rem,3vw,2rem)' }}>
+      <div style={{ maxWidth:800, margin:'0 auto' }}>
+
+        {/* header */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1.75rem', flexWrap:'wrap', gap:'1rem' }}>
+          <div>
+            <h1 style={{ fontSize:'clamp(1.4rem,4vw,1.8rem)', fontWeight:900, color:textMain, margin:0 }}>📦 My Orders</h1>
+            <p style={{ color:textSub, fontSize:'0.88rem', marginTop:'0.25rem' }}>
+              {completedOrders.length} completed · {pendingOrders.length} pending
+            </p>
+          </div>
+          <button onClick={handleRefresh} style={{ display:'flex', alignItems:'center', gap:'0.5rem', background: isDark ? '#1e293b' : '#fff', border:`2px solid ${borderC}`, borderRadius:'12px', padding:'0.65rem 1.25rem', color:textSub, fontWeight:'700', fontSize:'0.9rem', cursor:'pointer' }}>
+            <RefreshCw size={16} style={{ animation: refreshing ? 'spin 0.8s linear infinite' : 'none' }}/>
+            Refresh
+          </button>
+        </div>
+
+        {/* pending section */}
+        {pendingOrders.length > 0 && (
+          <div style={{ marginBottom:'2rem' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem' }}>
+              <Clock size={16} color="#f59e0b"/>
+              <span style={{ fontWeight:'800', fontSize:'0.9rem', color:'#f59e0b', textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                Pending Verification ({pendingOrders.length})
+              </span>
+            </div>
+            {pendingOrders.map(order => renderOrderCard(order))}
+          </div>
+        )}
+
+        {/* completed section */}
+        {completedOrders.length > 0 && (
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem' }}>
+              <CheckCircle size={16} color="#10b981"/>
+              <span style={{ fontWeight:'800', fontSize:'0.9rem', color:'#10b981', textTransform:'uppercase', letterSpacing:'0.06em' }}>
+                Completed Orders ({completedOrders.length})
+              </span>
+            </div>
+            {completedOrders.map(order => renderOrderCard(order))}
+          </div>
+        )}
+
+      </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
   );
 }

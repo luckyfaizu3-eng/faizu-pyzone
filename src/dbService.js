@@ -231,6 +231,56 @@ export const addReview = async (productId, reviewData) => {
   }
 };
 
+// ========================================
+// ✅ FIXED: Pending Order Create (payment se PEHLE)
+// ========================================
+export const createPendingOrder = async (orderData, userId) => {
+  try {
+    console.log('⏳ Creating PENDING order...');
+
+    const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
+      ...orderData,
+      userId: userId,
+      status: 'pending',
+      paymentId: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log('✅ Pending order created:', docRef.id);
+    return { success: true, id: docRef.id };
+  } catch (error) {
+    console.error('❌ Pending order error:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// ========================================
+// ✅ FIXED: Confirm Order (payment success ke baad)
+// ========================================
+export const confirmOrder = async (pendingOrderId, paymentId) => {
+  try {
+    console.log('✅ Confirming order:', pendingOrderId, 'PaymentId:', paymentId);
+
+    const orderRef = doc(db, ORDERS_COLLECTION, pendingOrderId);
+    await updateDoc(orderRef, {
+      status: 'completed',
+      paymentId: paymentId,
+      confirmedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log('✅ Order confirmed!');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Confirm order error:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+// ========================================
+// ORIGINAL addOrder - purane code ke liye rakha hai
+// ========================================
 export const addOrder = async (orderData, userId) => {
   try {
     console.log('💾 Saving order:', JSON.stringify(orderData, null, 2));
@@ -249,6 +299,9 @@ export const addOrder = async (orderData, userId) => {
   }
 };
 
+// ========================================
+// ✅ FIXED: getUserOrders - pending + completed dono fetch karo
+// ========================================
 export const getUserOrders = async (userId) => {
   try {
     if (!userId) {
@@ -266,8 +319,8 @@ export const getUserOrders = async (userId) => {
     const querySnapshot = await getDocs(q);
     const orders = [];
     
-    querySnapshot.forEach((doc) => {
-      orders.push({ id: doc.id, ...doc.data() });
+    querySnapshot.forEach((docSnap) => {
+      orders.push({ id: docSnap.id, ...docSnap.data() });
     });
     
     console.log('✅ Orders found:', orders.length);
@@ -283,8 +336,8 @@ export const getUserOrders = async (userId) => {
         );
         const querySnapshot = await getDocs(q);
         const orders = [];
-        querySnapshot.forEach((doc) => {
-          orders.push({ id: doc.id, ...doc.data() });
+        querySnapshot.forEach((docSnap) => {
+          orders.push({ id: docSnap.id, ...docSnap.data() });
         });
         return { success: true, orders };
       } catch (err) {
@@ -612,7 +665,6 @@ export const getManualQuestions = async (level) => {
   } catch (error) {
     console.error('❌ getManualQuestions error:', error.message);
 
-    // index error fallback
     if (error.message.includes('index')) {
       try {
         const q = query(
@@ -646,7 +698,6 @@ export const getTestPrices = async () => {
       console.log('✅ Prices loaded:', priceDoc.data());
       return { success: true, prices: priceDoc.data() };
     } else {
-      // Return default prices if not found
       const defaultPrices = {
         basic: 99,
         advanced: 199,

@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocs,
   updateDoc,
+  deleteDoc,
   query,
   where,
   addDoc,
@@ -227,18 +228,64 @@ export const saveTestResult = async (userId, testData) => {
 };
 
 /**
+ * Delete test result from history
+ */
+export const deleteTestResult = async (userId, testId) => {
+  try {
+    const testRef = doc(db, 'users', userId, 'mockTests', testId);
+    await deleteDoc(testRef);
+    
+    console.log(`✅ Test result deleted: ${testId} for user ${userId}`);
+    
+    return {
+      success: true,
+      message: 'Test result deleted successfully'
+    };
+  } catch (error) {
+    console.error('❌ Error deleting test result:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
  * Issue certificate (ONE per level for regular users, unlimited for admin)
  */
 export const issueCertificate = async (userId, certificateData) => {
   try {
+    console.log('🎓 Starting certificate issuance...');
+    console.log('📋 User ID:', userId);
+    console.log('📋 Certificate Data:', certificateData);
+    
     const { level, userEmail } = certificateData;
+    
+    if (!level) {
+      console.error('❌ Missing level in certificateData');
+      return {
+        success: false,
+        error: 'Level is required'
+      };
+    }
+    
+    if (!userEmail) {
+      console.error('❌ Missing userEmail in certificateData');
+      return {
+        success: false,
+        error: 'User email is required'
+      };
+    }
     
     // 🔓 Check if admin
     const isAdmin = userEmail === 'luckyfaizu3@gmail.com';
+    console.log('👤 Is Admin:', isAdmin);
     
     // Check if certificate already exists (skip for admin)
     if (!isAdmin) {
       const certCheck = await hasCertificateForLevel(userId, level);
+      console.log('📋 Certificate check result:', certCheck);
+      
       if (certCheck.hasCertificate) {
         console.log('ℹ️ Certificate already exists for this level');
         return {
@@ -262,17 +309,24 @@ export const issueCertificate = async (userId, certificateData) => {
       isAdminCert: isAdmin || false
     };
 
+    console.log('📋 Final certificate object:', certificate);
+
     // 🔓 Admin gets unlimited certificates with timestamp-based IDs
     if (isAdmin) {
-      const adminCertRef = doc(db, 'users', userId, 'certificates', `${level}_${timestamp}`);
+      const docId = `${level}_${timestamp}`;
+      const adminCertRef = doc(db, 'users', userId, 'certificates', docId);
+      console.log('📁 Saving admin certificate to:', `users/${userId}/certificates/${docId}`);
       await setDoc(adminCertRef, certificate);
-      console.log('🔓 Admin certificate issued with ID:', `${level}_${timestamp}`);
+      console.log('✅ Admin certificate issued with ID:', docId);
     } else {
       // Regular users get ONE certificate per level
       const certRef = doc(db, 'users', userId, 'certificates', level);
+      console.log('📁 Saving user certificate to:', `users/${userId}/certificates/${level}`);
       await setDoc(certRef, certificate);
       console.log('✅ Certificate issued for level:', level);
     }
+
+    console.log('🎉 Certificate successfully saved to Firebase!');
 
     return {
       success: true,
@@ -281,6 +335,8 @@ export const issueCertificate = async (userId, certificateData) => {
     };
   } catch (error) {
     console.error('❌ Error issuing certificate:', error);
+    console.error('❌ Error details:', error.message);
+    console.error('❌ Error stack:', error.stack);
     return {
       success: false,
       error: error.message
@@ -326,7 +382,7 @@ export const getAllCertificates = async (userId) => {
     
     const certificates = snapshot.docs.map(doc => ({
       id: doc.id,
-      level: doc.id.includes('_') ? doc.id.split('_')[0] : doc.id, // Extract level from admin cert IDs
+      level: doc.id.includes('_') ? doc.id.split('_')[0] : doc.id,
       ...doc.data()
     }));
 
@@ -512,7 +568,6 @@ export const updateTestAttempt = async (userId, level, updateData) => {
   try {
     const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
     
-    // Add timestamp to update data
     const dataWithTimestamp = {
       ...updateData,
       lastUpdated: Timestamp.now()
@@ -618,29 +673,17 @@ export const getAllPayments = async (userId) => {
  * Get test analytics for admin dashboard (basic version)
  */
 export const getTestAnalytics = async () => {
-  try {
-    // This would require aggregation queries
-    // For now, returning basic structure
-    // Can be enhanced with Cloud Functions for better performance
-    
-    return {
-      success: true,
-      analytics: {
-        totalAttempts: 0,
-        averageScore: 0,
-        passRate: 0,
-        certificatesIssued: 0,
-        revenue: 0
-      },
-      message: 'Analytics feature - requires Cloud Functions for production use'
-    };
-  } catch (error) {
-    console.error('❌ Error fetching analytics:', error);
-    return {
-      success: false,
-      error: error.message
-    };
-  }
+  return {
+    success: true,
+    analytics: {
+      totalAttempts: 0,
+      averageScore: 0,
+      passRate: 0,
+      certificatesIssued: 0,
+      revenue: 0
+    },
+    message: 'Analytics feature - requires Cloud Functions for production use'
+  };
 };
 
 /**

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, useTheme, RAZORPAY_KEY_ID } from '../App';
-import { Clock, Trophy, Award, Zap, Loader, Download, CheckCircle, XCircle, Monitor, Smartphone, History, TrendingUp, Lock, Unlock } from 'lucide-react';
+import { Clock, Trophy, Award, Zap, Loader, CheckCircle, XCircle, Monitor, Smartphone, Lock, Unlock, TrendingUp, AlertTriangle } from 'lucide-react';
 import { SUBSCRIPTION_PLANS } from '../data/subscriptionPlans';
 import MockTestInterface from '../components/MockTestInterface';
 import UserDetailsForm from '../components/UserDetailsForm';
 import CertificateViewer from '../components/CertificateViewer';
+import Resultsdisplay from '../components/Resultsdisplay';
+import Certificatesection from '../components/Certificatesection';
 import { db } from '../firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import {
   getManualQuestions,
-  // canUserTakeTest,
   hasCertificateForLevel,
   saveTestResult,
   issueCertificate,
@@ -19,9 +20,9 @@ import {
   getUserDetails,
   saveUserDetails,
   processMockTestPayment,
-  // hasUserPaidForLevel,
   getPaymentDetails,
-  updateTestAttempt
+  updateTestAttempt,
+  deleteTestResult
 } from '../services/mockTestService';
 
 // ==========================================
@@ -45,10 +46,12 @@ const DEFAULT_PRICES = {
 // ==========================================
 const formatTimeRemaining = (milliseconds) => {
   if (milliseconds <= 0) return 'Expired';
+  
   const seconds = Math.floor(milliseconds / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
+
   if (days > 0) {
     const remainingHours = hours % 24;
     return `${days}d ${remainingHours}h`;
@@ -62,37 +65,39 @@ const formatTimeRemaining = (milliseconds) => {
   }
 };
 
-// const getTimeRemaining = (targetDate) => {
-//   if (!targetDate) return 0;
-//   return new Date(targetDate) - new Date();
-// };
-
 function MockTestPage() {
-
   const { user } = useAuth();
   const { isDark } = useTheme();
-  const [currentStep, setCurrentStep] = useState('plans'); // plans → form → test → results
+
+  // ✅ Test Flow States
+  const [currentStep, setCurrentStep] = useState('plans');
   const [selectedPlan, setSelectedPlan] = useState(null);
   const [testQuestions, setTestQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
+
+  // ✅ Dynamic Prices from Firebase
   const [prices, setPrices] = useState(DEFAULT_PRICES);
+
+  // ✅ User Data
   const [userDetails, setUserDetails] = useState(null);
   const [userCertificates, setUserCertificates] = useState([]);
   const [testHistory, setTestHistory] = useState([]);
   const [selectedCertificate, setSelectedCertificate] = useState(null);
+
+  // ✅ Test Results
   const [testResults, setTestResults] = useState(null);
+
+  // ✅ Payment & Status Data
   const [paymentDetails, setPaymentDetails] = useState({});
   const [testStatus, setTestStatus] = useState({});
 
-  // ==========================================
-  // 🔄 Real-time Clock Update
-  // ==========================================
-  // useEffect(() => {
-  //   const timer = setInterval(() => {
-  //     setCurrentTime(Date.now());
-  //   }, 1000);
-  //   return () => clearInterval(timer);
-  // }, []);
+  // ✅ Delete Confirmation Dialog
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [testToDelete, setTestToDelete] = useState(null);
+  
+  // ✅ Certificate Delete Dialog
+  const [showDeleteCertDialog, setShowDeleteCertDialog] = useState(false);
+  const [certToDelete, setCertToDelete] = useState(null);
 
   // ==========================================
   // 💰 Fetch Prices from Firebase
@@ -112,62 +117,6 @@ function MockTestPage() {
   };
 
   // ==========================================
-  // 🔄 Load User Data on Mount
-  // ==========================================
-  useEffect(() => {
-    if (user) {
-      loadUserData();
-    }
-    (async () => {
-      await fetchPrices();
-    })();
-  }, [user, loadUserData]);
-
-  const loadUserData = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      // Load user details
-      const detailsResult = await getUserDetails(user.uid);
-      if (detailsResult.success) {
-        setUserDetails(detailsResult.details);
-      }
-
-      // Load certificates
-      const certsResult = await getAllCertificates(user.uid);
-      if (certsResult.success) {
-        setUserCertificates(certsResult.certificates);
-      }
-
-      // Load test history
-      const historyResult = await getTestHistory(user.uid);
-      if (historyResult.success) {
-        setTestHistory(historyResult.tests);
-      }
-
-      // Load payment details and status for each level
-      const statusData = {};
-      const paymentData = {};
-
-      for (const level of ['basic', 'advanced', 'pro']) {
-        const payment = await getPaymentDetails(user.uid, level);
-        paymentData[level] = payment;
-
-        const status = calculateTestStatus(payment, level);
-        statusData[level] = status;
-      }
-
-      setPaymentDetails(paymentData);
-      setTestStatus(statusData);
-
-    } catch (error) {
-      console.error('❌ Error loading user data:', error);
-      window.showToast?.('Failed to load data', 'error');
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
-
-  // ==========================================
   // 📊 Calculate Test Status
   // ==========================================
   const calculateTestStatus = (payment, level) => {
@@ -182,7 +131,6 @@ function MockTestPage() {
 
     const now = new Date();
 
-    // Check if in grace period (12 hours after purchase)
     if (payment.purchaseValidUntil) {
       const gracePeriodEnd = new Date(payment.purchaseValidUntil);
       if (now < gracePeriodEnd && !payment.testSubmittedAt) {
@@ -196,7 +144,6 @@ function MockTestPage() {
       }
     }
 
-    // Check if test is in progress
     if (payment.testStartedAt && !payment.testSubmittedAt) {
       return {
         canTake: true,
@@ -206,7 +153,6 @@ function MockTestPage() {
       };
     }
 
-    // Check if locked (7 days after result view)
     if (payment.lockEndsAt) {
       const lockEnd = new Date(payment.lockEndsAt);
       if (now < lockEnd) {
@@ -220,7 +166,6 @@ function MockTestPage() {
       }
     }
 
-    // Lock expired, can purchase again
     return {
       canTake: true,
       status: 'available',
@@ -229,9 +174,63 @@ function MockTestPage() {
     };
   };
 
-  // ==========================================
-  // 💳 Payment Handler
-  // ==========================================
+  const loadUserData = async () => {
+    setLoading(true);
+    try {
+      console.log('🔄 Loading user data for:', user.uid);
+      
+      const detailsResult = await getUserDetails(user.uid);
+      console.log('📋 User Details Result:', detailsResult);
+      if (detailsResult.success) {
+        setUserDetails(detailsResult.details);
+      }
+
+      const certsResult = await getAllCertificates(user.uid);
+      console.log('🎓 Certificates Result:', certsResult);
+      if (certsResult.success) {
+        console.log('📋 Found certificates:', certsResult.certificates.length);
+        setUserCertificates(certsResult.certificates);
+      }
+
+      const historyResult = await getTestHistory(user.uid);
+      console.log('📊 Test History Result:', historyResult);
+      if (historyResult.success) {
+        console.log('📋 Found test results:', historyResult.tests.length);
+        setTestHistory(historyResult.tests);
+      }
+
+      const statusData = {};
+      const paymentData = {};
+
+      for (const level of ['basic', 'advanced', 'pro']) {
+        const payment = await getPaymentDetails(user.uid, level);
+        paymentData[level] = payment;
+
+        const status = calculateTestStatus(payment, level);
+        statusData[level] = status;
+      }
+
+      setPaymentDetails(paymentData);
+      setTestStatus(statusData);
+
+      console.log('✅ User data loaded successfully');
+
+    } catch (error) {
+      console.error('❌ Error loading user data:', error);
+      window.showToast?.('Failed to load data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      loadUserData();
+    }
+    fetchPrices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const handlePayment = (plan) => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -256,7 +255,7 @@ function MockTestPage() {
         window.showToast?.('✅ Payment Successful!', 'success');
         
         const now = new Date();
-        const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000); // 12 hours
+        const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000);
 
         const paymentData = {
           level: plan.level,
@@ -308,9 +307,6 @@ function MockTestPage() {
     }
   };
 
-  // ==========================================
-  // 📝 Form Submit Handler
-  // ==========================================
   const handleFormSubmit = async (formData) => {
     setLoading(true);
     try {
@@ -331,15 +327,11 @@ function MockTestPage() {
     }
   };
 
-  // ==========================================
-  // 🎯 Start Test
-  // ==========================================
   const startTest = async (plan) => {
     setLoading(true);
     window.showToast?.('⏳ Loading questions...', 'info');
 
     try {
-      // Mark test as started
       const now = new Date();
       await updateTestAttempt(user.uid, plan.level, {
         testStartedAt: now.toISOString()
@@ -369,18 +361,15 @@ function MockTestPage() {
     }
   };
 
-  // ==========================================
-  // ✅ Test Complete Handler
-  // ==========================================
   const handleTestComplete = async (results) => {
+    console.log('🎯 [MockTestPage] Test completed, received results:', results);
     setLoading(true);
     
     try {
       const now = new Date();
       const lockStartsAt = now;
-      const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-      // Update payment with submission and lock data
       await updateTestAttempt(user.uid, selectedPlan.level, {
         testSubmittedAt: now.toISOString(),
         resultsViewedAt: now.toISOString(),
@@ -388,7 +377,7 @@ function MockTestPage() {
         lockEndsAt: lockEndsAt.toISOString()
       });
 
-      // Save test result
+      // ✅ COMPLETE TEST DATA with all details
       const testData = {
         planId: selectedPlan.id,
         planName: selectedPlan.name,
@@ -398,24 +387,51 @@ function MockTestPage() {
         wrong: results.wrong,
         total: results.total,
         passed: results.percentage >= 55,
-        timeTaken: results.timeTaken
+        timeTaken: results.timeTaken,
+        
+        // ✅ Additional details from results
+        tabSwitches: results.tabSwitches || 0,
+        correctQuestions: results.correctQuestions || [],
+        wrongQuestions: results.wrongQuestions || [],
+        penalized: results.penalized || false,
+        
+        // ✅ Student information
+        studentInfo: results.studentInfo || userDetails || {
+          fullName: user.displayName || user.email.split('@')[0],
+          email: user.email,
+          age: 'N/A',
+          address: 'N/A'
+        },
+        
+        // ✅ Test metadata
+        testDate: now.toLocaleDateString('en-IN', {
+          day: '2-digit',
+          month: 'long',
+          year: 'numeric'
+        }),
+        testTime: now.toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        }),
+        completedAt: now.toISOString()
       };
+
+      console.log('💾 [MockTestPage] Saving test data:', testData);
 
       await saveTestResult(user.uid, testData);
 
-      // Check if should issue certificate (only if doesn't already have one)
       const shouldIssueCert = isAdmin(user.email) || results.percentage >= 55;
 
       if (shouldIssueCert) {
         const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
         
-        // Only issue if no certificate exists OR user is admin
         if (!certCheck.hasCertificate || isAdmin(user.email)) {
           const certificateData = {
-            userName: userDetails?.fullName || user.displayName || user.email,
-            userAge: userDetails?.age || 'N/A',
-            userAddress: userDetails?.address || 'N/A',
-            userEmail: userDetails?.email || user.email,
+            userName: results.studentInfo?.fullName || userDetails?.fullName || user.displayName || user.email,
+            userAge: results.studentInfo?.age || userDetails?.age || 'N/A',
+            userAddress: results.studentInfo?.address || userDetails?.address || 'N/A',
+            userEmail: user.email,
             testName: selectedPlan.name,
             level: selectedPlan.level,
             score: results.percentage,
@@ -427,7 +443,11 @@ function MockTestPage() {
             founderName: 'Faizan Tariq'
           };
 
+          console.log('📋 Certificate Data:', certificateData);
+
           const certResult = await issueCertificate(user.uid, certificateData);
+          
+          console.log('📋 Certificate Result:', certResult);
           
           if (certResult.success) {
             window.showToast?.(
@@ -437,6 +457,9 @@ function MockTestPage() {
               'success'
             );
             setUserCertificates(prev => [...prev, certResult.certificate]);
+          } else {
+            console.error('❌ Certificate issue failed:', certResult);
+            window.showToast?.(`❌ ${certResult.error || 'Certificate issue failed'}`, 'error');
           }
         } else {
           window.showToast?.('ℹ️ You already have a certificate for this level', 'info');
@@ -445,11 +468,10 @@ function MockTestPage() {
         window.showToast?.('💪 Score 55% to get certificate!', 'info');
       }
 
-      // Show results
+      console.log('✅ [MockTestPage] Setting test results and switching to results step');
       setTestResults(results);
       setCurrentStep('results');
       
-      // Reload data to update status
       await loadUserData();
 
     } catch (error) {
@@ -460,30 +482,23 @@ function MockTestPage() {
     }
   };
 
-  // ==========================================
-  // 🚫 Exit Test Handler
-  // ==========================================
   const handleExitTest = () => {
     if (window.confirm('⚠️ Are you sure? Your progress will be lost!')) {
+      console.log('🔙 [MockTestPage] Exiting test, returning to plans');
       setCurrentStep('plans');
       setTestQuestions([]);
       setSelectedPlan(null);
     }
   };
 
-  // ==========================================
-  // 🏠 Back to Plans
-  // ==========================================
   const backToPlans = () => {
+    console.log('🔙 [MockTestPage] Back to plans clicked');
     setCurrentStep('plans');
     setSelectedPlan(null);
     setTestQuestions([]);
     setTestResults(null);
   };
 
-  // ==========================================
-  // 🎯 Select Plan Handler
-  // ==========================================
   const handleSelectPlan = async (plan) => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -492,7 +507,6 @@ function MockTestPage() {
 
     setSelectedPlan(plan);
 
-    // 🔓 ADMIN BYPASS
     if (isAdmin(user.email)) {
       window.showToast?.('🔓 Admin access - Free test!', 'success');
       
@@ -506,21 +520,17 @@ function MockTestPage() {
     }
 
     const status = testStatus[plan.level];
-    const payment = paymentDetails[plan.level];
 
-    // If locked, show message
     if (status?.status === 'locked') {
       window.showToast?.(status.message, 'warning');
       return;
     }
 
-    // If not paid or lock expired, need to pay
-    if (!payment?.hasPaid || status?.status === 'available') {
+    if (!paymentDetails[plan.level]?.hasPaid || status?.status === 'available') {
       handlePayment(plan);
       return;
     }
 
-    // If in grace period or in progress, check user details and start
     if (!userDetails) {
       setCurrentStep('form');
       return;
@@ -529,9 +539,6 @@ function MockTestPage() {
     await startTest(plan);
   };
 
-  // ==========================================
-  // 📜 View Certificate
-  // ==========================================
   const viewCertificate = async (level) => {
     const result = await getCertificate(user.uid, level);
     if (result.success) {
@@ -541,11 +548,62 @@ function MockTestPage() {
     }
   };
 
-  // ==========================================
-  // 🎨 RENDER COMPONENTS
-  // ==========================================
+  const handleDeleteClick = (test) => {
+    setTestToDelete(test);
+    setShowDeleteDialog(true);
+  };
 
-  // Loading State
+  const handleConfirmDelete = async () => {
+    if (!testToDelete) return;
+    
+    try {
+      const result = await deleteTestResult(user.uid, testToDelete.id);
+      if (result.success) {
+        window.showToast?.('✅ Test result deleted successfully!', 'success');
+        setShowDeleteDialog(false);
+        setTestToDelete(null);
+        await loadUserData();
+      } else {
+        window.showToast?.('❌ Failed to delete result', 'error');
+      }
+    } catch (error) {
+      console.error('❌ Error deleting result:', error);
+      window.showToast?.('❌ Error occurred while deleting', 'error');
+    }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteDialog(false);
+    setTestToDelete(null);
+  };
+
+  const handleDeleteCertificate = (cert) => {
+    setCertToDelete(cert);
+    setShowDeleteCertDialog(true);
+  };
+
+  const handleConfirmCertDelete = async () => {
+    if (!certToDelete) return;
+    
+    try {
+      const certRef = doc(db, 'users', user.uid, 'certificates', certToDelete.id);
+      await deleteDoc(certRef);
+      
+      window.showToast?.('✅ Certificate deleted successfully!', 'success');
+      setShowDeleteCertDialog(false);
+      setCertToDelete(null);
+      await loadUserData();
+    } catch (error) {
+      console.error('❌ Error deleting certificate:', error);
+      window.showToast?.('❌ Failed to delete certificate', 'error');
+    }
+  };
+
+  const handleCancelCertDelete = () => {
+    setShowDeleteCertDialog(false);
+    setCertToDelete(null);
+  };
+
   if (loading && currentStep === 'plans') {
     return (
       <div style={{
@@ -566,8 +624,8 @@ function MockTestPage() {
     );
   }
 
-  // Test Interface
   if (currentStep === 'test' && testQuestions.length > 0) {
+    console.log('🎯 [MockTestPage] Rendering MockTestInterface');
     return (
       <MockTestInterface
         questions={testQuestions}
@@ -576,11 +634,11 @@ function MockTestPage() {
         testTitle={selectedPlan?.name}
         timeLimit={selectedPlan?.timeLimit}
         userEmail={user?.email}
+        testLevel={selectedPlan?.level}
       />
     );
   }
 
-  // User Details Form
   if (currentStep === 'form') {
     return (
       <UserDetailsForm
@@ -590,275 +648,20 @@ function MockTestPage() {
     );
   }
 
-  // Test Results
   if (currentStep === 'results' && testResults) {
+    console.log('📊 [MockTestPage] Rendering Resultsdisplay with:', testResults);
     return (
-      <div style={{
-        minHeight: '100vh',
-        background: isDark
-          ? 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)'
-          : 'linear-gradient(135deg, #f0f4ff 0%, #fdf2f8 100%)',
-        paddingTop: '100px',
-        paddingBottom: '3rem',
-        padding: '100px 1rem 3rem'
-      }}>
-        <div style={{
-          maxWidth: '800px',
-          margin: '0 auto'
-        }}>
-          {/* Results Card */}
-          <div style={{
-            background: isDark ? '#1e293b' : '#fff',
-            borderRadius: '24px',
-            padding: 'clamp(1.5rem, 5vw, 3rem)',
-            textAlign: 'center',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
-            marginBottom: '2rem'
-          }}>
-            {/* Pass/Fail Icon */}
-            <div style={{
-              width: 'clamp(80px, 20vw, 120px)',
-              height: 'clamp(80px, 20vw, 120px)',
-              margin: '0 auto 1.5rem',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: testResults.percentage >= 55
-                ? 'linear-gradient(135deg, #10b981, #059669)'
-                : 'linear-gradient(135deg, #ef4444, #dc2626)',
-              boxShadow: testResults.percentage >= 55
-                ? '0 8px 24px rgba(16,185,129,0.4)'
-                : '0 8px 24px rgba(239,68,68,0.4)'
-            }}>
-              {testResults.percentage >= 55 ? (
-                <CheckCircle size={window.innerWidth < 768 ? 40 : 60} color="#fff" />
-              ) : (
-                <XCircle size={window.innerWidth < 768 ? 40 : 60} color="#fff" />
-              )}
-            </div>
-
-            {/* Title */}
-            <h1 style={{
-              fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',
-              fontWeight: '900',
-              marginBottom: '0.5rem',
-              color: testResults.percentage >= 55 ? '#10b981' : '#ef4444'
-            }}>
-              {testResults.percentage >= 55 ? '🎉 Congratulations!' : '💪 Keep Trying!'}
-            </h1>
-
-            <p style={{
-              fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
-              color: isDark ? '#94a3b8' : '#64748b',
-              marginBottom: '2rem'
-            }}>
-              {testResults.percentage >= 55
-                ? 'You passed the test!'
-                : 'You need 55% to pass'}
-            </p>
-
-            {/* Score */}
-            <div style={{
-              display: 'inline-block',
-              padding: 'clamp(1rem, 3vw, 1.5rem) clamp(2rem, 5vw, 3rem)',
-              background: testResults.percentage >= 55
-                ? 'rgba(16,185,129,0.1)'
-                : 'rgba(239,68,68,0.1)',
-              borderRadius: '16px',
-              marginBottom: '2rem'
-            }}>
-              <div style={{
-                fontSize: 'clamp(2.5rem, 8vw, 4rem)',
-                fontWeight: '900',
-                color: testResults.percentage >= 55 ? '#10b981' : '#ef4444'
-              }}>
-                {testResults.percentage}%
-              </div>
-              <div style={{
-                fontSize: 'clamp(0.75rem, 2vw, 0.9rem)',
-                color: isDark ? '#94a3b8' : '#64748b',
-                fontWeight: '600'
-              }}>
-                Your Score
-              </div>
-            </div>
-
-            {/* Stats */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
-              gap: 'clamp(0.75rem, 2vw, 1.5rem)',
-              marginBottom: '2rem'
-            }}>
-              <div style={{
-                padding: 'clamp(1rem, 3vw, 1.5rem)',
-                background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.05)',
-                borderRadius: '16px'
-              }}>
-                <div style={{
-                  fontSize: 'clamp(1.5rem, 4vw, 2rem)',
-                  fontWeight: '900',
-                  color: '#6366f1',
-                  marginBottom: '0.5rem'
-                }}>
-                  {testResults.correct}
-                </div>
-                <div style={{
-                  fontSize: 'clamp(0.7rem, 2vw, 0.85rem)',
-                  color: isDark ? '#94a3b8' : '#64748b',
-                  fontWeight: '600'
-                }}>
-                  Correct
-                </div>
-              </div>
-
-              <div style={{
-                padding: 'clamp(1rem, 3vw, 1.5rem)',
-                background: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)',
-                borderRadius: '16px'
-              }}>
-                <div style={{
-                  fontSize: 'clamp(1.5rem, 4vw, 2rem)',
-                  fontWeight: '900',
-                  color: '#ef4444',
-                  marginBottom: '0.5rem'
-                }}>
-                  {testResults.wrong}
-                </div>
-                <div style={{
-                  fontSize: 'clamp(0.7rem, 2vw, 0.85rem)',
-                  color: isDark ? '#94a3b8' : '#64748b',
-                  fontWeight: '600'
-                }}>
-                  Wrong
-                </div>
-              </div>
-
-              <div style={{
-                padding: 'clamp(1rem, 3vw, 1.5rem)',
-                background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.05)',
-                borderRadius: '16px'
-              }}>
-                <div style={{
-                  fontSize: 'clamp(1.5rem, 4vw, 2rem)',
-                  fontWeight: '900',
-                  color: '#10b981',
-                  marginBottom: '0.5rem'
-                }}>
-                  {testResults.total}
-                </div>
-                <div style={{
-                  fontSize: 'clamp(0.7rem, 2vw, 0.85rem)',
-                  color: isDark ? '#94a3b8' : '#64748b',
-                  fontWeight: '600'
-                }}>
-                  Total
-                </div>
-              </div>
-            </div>
-
-            {/* Lock Info */}
-            <div style={{
-              padding: '1.5rem',
-              background: 'linear-gradient(135deg, rgba(239,68,68,0.1), rgba(220,38,38,0.1))',
-              border: `2px solid ${isDark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`,
-              borderRadius: '16px',
-              marginBottom: '2rem'
-            }}>
-              <Clock size={32} color="#ef4444" style={{ marginBottom: '0.75rem' }} />
-              <p style={{
-                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
-                color: isDark ? '#e2e8f0' : '#1e293b',
-                fontWeight: '600',
-                margin: 0
-              }}>
-                🔒 Test locked for 7 days. You can take it again after the lock period.
-              </p>
-            </div>
-
-            {/* Certificate Info */}
-            {testResults.percentage >= 55 && (
-              <div style={{
-                padding: '1.5rem',
-                background: 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(236,72,153,0.1))',
-                border: `2px solid ${isDark ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.2)'}`,
-                borderRadius: '16px',
-                marginBottom: '2rem'
-              }}>
-                <Award size={32} color="#6366f1" style={{ marginBottom: '0.75rem' }} />
-                <p style={{
-                  fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
-                  color: isDark ? '#e2e8f0' : '#1e293b',
-                  fontWeight: '600',
-                  margin: 0
-                }}>
-                  {userCertificates.find(c => c.level === selectedPlan.level)
-                    ? '✅ Certificate already issued for this level (One per level)'
-                    : '🎓 Certificate issued! Check below to download.'}
-                </p>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div style={{ 
-              display: 'flex', 
-              gap: '1rem', 
-              justifyContent: 'center',
-              flexWrap: 'wrap'
-            }}>
-              <button
-                onClick={backToPlans}
-                style={{
-                  padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2rem)',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                  color: '#fff',
-                  fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
-                  minWidth: '150px'
-                }}
-              >
-                Back to Tests
-              </button>
-
-              {testResults.percentage >= 55 && userCertificates.find(c => c.level === selectedPlan.level) && (
-                <button
-                  onClick={() => viewCertificate(selectedPlan.level)}
-                  style={{
-                    padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2rem)',
-                    borderRadius: '12px',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #10b981, #059669)',
-                    color: '#fff',
-                    fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
-                    fontWeight: '700',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    minWidth: '150px',
-                    justifyContent: 'center'
-                  }}
-                >
-                  <Download size={20} />
-                  View Certificate
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      <Resultsdisplay
+        testResults={testResults}
+        selectedPlan={selectedPlan}
+        userCertificates={userCertificates}
+        isDark={isDark}
+        onBackToPlans={backToPlans}
+        onViewCertificate={viewCertificate}
+      />
     );
   }
 
-  // ==========================================
-  // 🏠 MAIN PAGE - PLANS VIEW
-  // ==========================================
   return (
     <div style={{
       minHeight: '100vh',
@@ -873,7 +676,6 @@ function MockTestPage() {
         maxWidth: '1200px',
         margin: '0 auto'
       }}>
-        {/* Header */}
         <div style={{
           textAlign: 'center',
           marginBottom: '3rem',
@@ -899,7 +701,7 @@ function MockTestPage() {
           </p>
         </div>
 
-        {/* 🖥️ PERMANENT DESKTOP WARNING BANNER */}
+        {/* Guidelines Section */}
         <div style={{
           background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))',
           border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`,
@@ -944,7 +746,6 @@ function MockTestPage() {
             gap: '1rem',
             marginBottom: '1rem'
           }}>
-            {/* Desktop Mode */}
             <div style={{
               padding: 'clamp(0.75rem, 2vw, 1rem)',
               background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
@@ -973,7 +774,6 @@ function MockTestPage() {
               </p>
             </div>
 
-            {/* Grace Period */}
             <div style={{
               padding: 'clamp(0.75rem, 2vw, 1rem)',
               background: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.1)',
@@ -1002,7 +802,6 @@ function MockTestPage() {
               </p>
             </div>
 
-            {/* 7-Day Lock */}
             <div style={{
               padding: 'clamp(0.75rem, 2vw, 1rem)',
               background: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)',
@@ -1031,7 +830,6 @@ function MockTestPage() {
               </p>
             </div>
 
-            {/* Pass Mark */}
             <div style={{
               padding: 'clamp(0.75rem, 2vw, 1rem)',
               background: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.1)',
@@ -1061,7 +859,6 @@ function MockTestPage() {
             </div>
           </div>
 
-          {/* Mobile Desktop Mode Instructions */}
           <div style={{
             padding: 'clamp(0.75rem, 2vw, 1rem)',
             background: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)',
@@ -1092,131 +889,7 @@ function MockTestPage() {
           </div>
         </div>
 
-        {/* My Certificates Section */}
-        {userCertificates.length > 0 && (
-          <div style={{
-            background: isDark ? '#1e293b' : '#fff',
-            borderRadius: '24px',
-            padding: 'clamp(1.5rem, 4vw, 2rem)',
-            marginBottom: '3rem',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
-          }}>
-            <h2 style={{
-              fontSize: 'clamp(1.2rem, 3vw, 1.5rem)',
-              fontWeight: '900',
-              color: isDark ? '#e2e8f0' : '#1e293b',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              flexWrap: 'wrap'
-            }}>
-              <Award size={28} color="#6366f1" />
-              My Certificates
-            </h2>
-
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))',
-              gap: '1.5rem'
-            }}>
-              {userCertificates.map((cert, i) => (
-                <div
-                  key={i}
-                  style={{
-                    background: isDark
-                      ? 'linear-gradient(135deg, rgba(99,102,241,0.1), rgba(236,72,153,0.1))'
-                      : 'linear-gradient(135deg, rgba(99,102,241,0.05), rgba(236,72,153,0.05))',
-                    border: `2px solid ${isDark ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.2)'}`,
-                    borderRadius: '16px',
-                    padding: '1.5rem',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease'
-                  }}
-                  onClick={() => setSelectedCertificate(cert)}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)';
-                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(99,102,241,0.3)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    marginBottom: '1rem',
-                    flexWrap: 'wrap',
-                    gap: '0.5rem'
-                  }}>
-                    <div style={{
-                      padding: '0.5rem 1rem',
-                      background: cert.level === 'basic'
-                        ? 'rgba(16,185,129,0.2)'
-                        : cert.level === 'advanced'
-                        ? 'rgba(99,102,241,0.2)'
-                        : 'rgba(245,158,11,0.2)',
-                      borderRadius: '20px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700',
-                      textTransform: 'uppercase',
-                      color: cert.level === 'basic'
-                        ? '#10b981'
-                        : cert.level === 'advanced'
-                        ? '#6366f1'
-                        : '#f59e0b'
-                    }}>
-                      {cert.level}
-                    </div>
-                    <Award size={24} color="#6366f1" />
-                  </div>
-
-                  <h3 style={{
-                    fontSize: 'clamp(0.95rem, 2.5vw, 1.1rem)',
-                    fontWeight: '800',
-                    color: isDark ? '#e2e8f0' : '#1e293b',
-                    marginBottom: '0.5rem'
-                  }}>
-                    {cert.testName}
-                  </h3>
-
-                  <div style={{
-                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                    color: isDark ? '#94a3b8' : '#64748b',
-                    marginBottom: '1rem'
-                  }}>
-                    Score: <strong style={{ color: '#10b981' }}>{cert.score}%</strong> • {cert.date}
-                  </div>
-
-                  <button
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      borderRadius: '8px',
-                      border: 'none',
-                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                      color: '#fff',
-                      fontSize: 'clamp(0.8rem, 2vw, 0.9rem)',
-                      fontWeight: '700',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '0.5rem'
-                    }}
-                  >
-                    <Download size={18} />
-                    View & Download
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Test Plans */}
+        {/* Test Plans Grid */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
@@ -1225,11 +898,9 @@ function MockTestPage() {
         }}>
           {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
             const status = testStatus[plan.level] || {};
-            // const payment = paymentDetails[plan.level] || {};
             const hasCert = userCertificates.find(c => c.level === plan.level);
             const userIsAdmin = isAdmin(user?.email);
 
-            // Calculate remaining time for grace period or lock
             let timeRemainingDisplay = '';
             if (status.timeRemaining) {
               timeRemainingDisplay = formatTimeRemaining(status.timeRemaining);
@@ -1249,7 +920,6 @@ function MockTestPage() {
                   border: plan.badge ? '3px solid #fbbf24' : userIsAdmin ? '3px solid #10b981' : 'none'
                 }}
               >
-                {/* 🔓 Admin Badge */}
                 {userIsAdmin && (
                   <div style={{
                     position: 'absolute',
@@ -1267,7 +937,6 @@ function MockTestPage() {
                   </div>
                 )}
 
-                {/* Badge */}
                 {plan.badge && !userIsAdmin && (
                   <div style={{
                     position: 'absolute',
@@ -1285,7 +954,6 @@ function MockTestPage() {
                   </div>
                 )}
 
-                {/* Plan Header */}
                 <div style={{ textAlign: 'center', marginBottom: '1.5rem', marginTop: userIsAdmin || plan.badge ? '2.5rem' : '0' }}>
                   <div style={{
                     width: 'clamp(60px, 15vw, 80px)',
@@ -1325,7 +993,6 @@ function MockTestPage() {
                     {plan.description}
                   </p>
 
-                  {/* Price */}
                   <div style={{
                     fontSize: 'clamp(2rem, 6vw, 2.5rem)',
                     fontWeight: '900',
@@ -1345,7 +1012,6 @@ function MockTestPage() {
                   )}
                 </div>
 
-                {/* Features */}
                 <div style={{
                   background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)',
                   borderRadius: '16px',
@@ -1370,7 +1036,6 @@ function MockTestPage() {
                   ))}
                 </div>
 
-                {/* Status Indicators */}
                 {userIsAdmin && (
                   <div style={{
                     padding: '0.75rem',
@@ -1466,7 +1131,6 @@ function MockTestPage() {
                   </div>
                 )}
 
-                {/* Action Button */}
                 <button
                   onClick={() => handleSelectPlan(plan)}
                   disabled={!userIsAdmin && status.status === 'locked'}
@@ -1550,106 +1214,15 @@ function MockTestPage() {
           })}
         </div>
 
-        {/* Test History */}
-        {testHistory.length > 0 && (
-          <div style={{
-            background: isDark ? '#1e293b' : '#fff',
-            borderRadius: '24px',
-            padding: 'clamp(1.5rem, 4vw, 2rem)',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-            marginBottom: '3rem'
-          }}>
-            <h2 style={{
-              fontSize: 'clamp(1.2rem, 3vw, 1.5rem)',
-              fontWeight: '900',
-              color: isDark ? '#e2e8f0' : '#1e293b',
-              marginBottom: '1.5rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.75rem',
-              flexWrap: 'wrap'
-            }}>
-              <History size={28} color="#6366f1" />
-              Test History
-            </h2>
-
-            <div style={{
-              display: 'grid',
-              gap: '1rem'
-            }}>
-              {testHistory.slice(0, 10).map((test, i) => (
-                <div
-                  key={i}
-                  style={{
-                    padding: 'clamp(1rem, 3vw, 1.5rem)',
-                    background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)',
-                    borderRadius: '12px',
-                    border: `1px solid ${isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)'}`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    flexWrap: 'wrap',
-                    gap: '1rem'
-                  }}
-                >
-                  <div>
-                    <div style={{
-                      fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
-                      fontWeight: '700',
-                      color: isDark ? '#e2e8f0' : '#1e293b',
-                      marginBottom: '0.25rem'
-                    }}>
-                      {test.planName}
-                    </div>
-                    <div style={{
-                      fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                      color: isDark ? '#94a3b8' : '#64748b'
-                    }}>
-                      {test.date} • {test.timeTaken}
-                    </div>
-                  </div>
-
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '1rem',
-                    flexWrap: 'wrap'
-                  }}>
-                    <div style={{
-                      padding: '0.5rem 1rem',
-                      background: test.score >= 55
-                        ? 'rgba(16,185,129,0.2)'
-                        : 'rgba(239,68,68,0.2)',
-                      borderRadius: '20px',
-                      fontSize: 'clamp(0.8rem, 2vw, 0.9rem)',
-                      fontWeight: '700',
-                      color: test.score >= 55 ? '#10b981' : '#ef4444'
-                    }}>
-                      {test.score}%
-                    </div>
-
-                    {test.passed && (
-                      <div style={{
-                        padding: '0.5rem 1rem',
-                        background: 'rgba(99,102,241,0.2)',
-                        borderRadius: '20px',
-                        fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                        fontWeight: '700',
-                        color: '#6366f1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                      }}>
-                        <Trophy size={16} />
-                        PASSED
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* Certificate and Test History Section */}
+        <Certificatesection
+          userCertificates={userCertificates}
+          testHistory={testHistory}
+          isDark={isDark}
+          onViewCertificate={setSelectedCertificate}
+          onDeleteCertificate={handleDeleteCertificate}
+          onDeleteTest={handleDeleteClick}
+        />
 
         {/* Certificate Viewer Modal */}
         {selectedCertificate && (
@@ -1657,6 +1230,349 @@ function MockTestPage() {
             certificate={selectedCertificate}
             onClose={() => setSelectedCertificate(null)}
           />
+        )}
+
+        {/* Delete Test Result Dialog */}
+        {showDeleteDialog && testToDelete && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            backdropFilter: 'blur(8px)',
+            animation: 'fadeIn 0.3s ease',
+            padding: '1rem'
+          }}>
+            <div style={{
+              background: isDark ? '#1e293b' : '#fff',
+              padding: 'clamp(2rem, 5vw, 3rem)',
+              borderRadius: '24px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+              animation: 'scaleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+              border: `3px solid ${isDark ? '#ef4444' : '#fecaca'}`
+            }}>
+              <div style={{
+                width: 'clamp(70px, 15vw, 90px)',
+                height: 'clamp(70px, 15vw, 90px)',
+                margin: '0 auto 1.5rem',
+                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 10px 30px rgba(239,68,68,0.4)',
+                animation: 'pulse 2s infinite'
+              }}>
+                <XCircle size={window.innerWidth < 768 ? 40 : 50} color="#fff" strokeWidth={2.5} />
+              </div>
+
+              <h2 style={{
+                fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
+                fontWeight: '900',
+                color: isDark ? '#e2e8f0' : '#1e293b',
+                marginBottom: '1rem',
+                textAlign: 'center',
+                lineHeight: 1.3
+              }}>
+                Delete Test Result?
+              </h2>
+
+              <div style={{
+                background: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(254,202,202,0.3)',
+                border: `2px solid ${isDark ? 'rgba(239,68,68,0.3)' : '#fecaca'}`,
+                borderRadius: '16px',
+                padding: '1.25rem',
+                marginBottom: '1.5rem'
+              }}>
+                <div style={{
+                  fontSize: 'clamp(0.85rem, 2.5vw, 0.95rem)',
+                  fontWeight: '700',
+                  color: isDark ? '#fca5a5' : '#991b1b',
+                  marginBottom: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <AlertTriangle size={18} />
+                  Test Details
+                </div>
+                <div style={{
+                  fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
+                  color: isDark ? '#cbd5e1' : '#475569',
+                  lineHeight: 1.6
+                }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>Test:</strong> {testToDelete.planName}
+                  </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>Score:</strong> {testToDelete.score}%
+                  </div>
+                  <div>
+                    <strong>Date:</strong> {testToDelete.testDate || testToDelete.date}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{
+                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
+                color: isDark ? '#94a3b8' : '#64748b',
+                textAlign: 'center',
+                marginBottom: '2rem',
+                lineHeight: 1.6
+              }}>
+                ⚠️ This action <strong>cannot be undone</strong>. All test data including scores, questions analysis, and completion details will be permanently deleted.
+              </p>
+
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                flexWrap: 'wrap'
+              }}>
+                <button
+                  onClick={handleCancelDelete}
+                  style={{
+                    flex: 1,
+                    minWidth: '140px',
+                    padding: 'clamp(0.9rem, 2.5vw, 1.1rem)',
+                    background: isDark ? '#334155' : '#f1f5f9',
+                    border: `3px solid ${isDark ? '#475569' : '#e2e8f0'}`,
+                    borderRadius: '14px',
+                    color: isDark ? '#e2e8f0' : '#475569',
+                    fontSize: 'clamp(0.9rem, 2.5vw, 1rem)',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <XCircle size={18} />
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleConfirmDelete}
+                  style={{
+                    flex: 1,
+                    minWidth: '140px',
+                    padding: 'clamp(0.9rem, 2.5vw, 1.1rem)',
+                    background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    border: '3px solid #dc2626',
+                    borderRadius: '14px',
+                    color: '#fff',
+                    fontSize: 'clamp(0.9rem, 2.5vw, 1rem)',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 6px 20px rgba(239,68,68,0.4)',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(239,68,68,0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(239,68,68,0.4)';
+                  }}
+                >
+                  <CheckCircle size={18} />
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Certificate Dialog */}
+        {showDeleteCertDialog && certToDelete && (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.75)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999,
+            backdropFilter: 'blur(8px)',
+            animation: 'fadeIn 0.3s ease',
+            padding: '1rem'
+          }}>
+            <div style={{
+              background: isDark ? '#1e293b' : '#fff',
+              padding: 'clamp(2rem, 5vw, 3rem)',
+              borderRadius: '24px',
+              maxWidth: '500px',
+              width: '100%',
+              boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+              animation: 'scaleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)',
+              border: `3px solid ${isDark ? '#f59e0b' : '#fbbf24'}`
+            }}>
+              <div style={{
+                width: 'clamp(70px, 15vw, 90px)',
+                height: 'clamp(70px, 15vw, 90px)',
+                margin: '0 auto 1.5rem',
+                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 10px 30px rgba(245,158,11,0.4)',
+                animation: 'pulse 2s infinite'
+              }}>
+                <Award size={window.innerWidth < 768 ? 40 : 50} color="#fff" strokeWidth={2.5} />
+              </div>
+
+              <h2 style={{
+                fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
+                fontWeight: '900',
+                color: isDark ? '#e2e8f0' : '#1e293b',
+                marginBottom: '1rem',
+                textAlign: 'center',
+                lineHeight: 1.3
+              }}>
+                Delete Certificate?
+              </h2>
+
+              <div style={{
+                background: isDark ? 'rgba(245,158,11,0.1)' : 'rgba(251,191,36,0.2)',
+                border: `2px solid ${isDark ? 'rgba(245,158,11,0.3)' : '#fbbf24'}`,
+                borderRadius: '16px',
+                padding: '1.25rem',
+                marginBottom: '1.5rem'
+              }}>
+                <div style={{
+                  fontSize: 'clamp(0.85rem, 2.5vw, 0.95rem)',
+                  fontWeight: '700',
+                  color: isDark ? '#fbbf24' : '#92400e',
+                  marginBottom: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  <AlertTriangle size={18} />
+                  Certificate Details
+                </div>
+                <div style={{
+                  fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
+                  color: isDark ? '#cbd5e1' : '#475569',
+                  lineHeight: 1.6
+                }}>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>Test:</strong> {certToDelete.testName}
+                  </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>Level:</strong> {certToDelete.level}
+                  </div>
+                  <div style={{ marginBottom: '0.5rem' }}>
+                    <strong>Score:</strong> {certToDelete.score}%
+                  </div>
+                  <div>
+                    <strong>ID:</strong> {certToDelete.certificateId}
+                  </div>
+                </div>
+              </div>
+
+              <p style={{
+                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
+                color: isDark ? '#94a3b8' : '#64748b',
+                textAlign: 'center',
+                marginBottom: '2rem',
+                lineHeight: 1.6
+              }}>
+                ⚠️ This will permanently delete your certificate. You can earn a new one by retaking and passing the test (after 30-day cooldown).
+              </p>
+
+              <div style={{
+                display: 'flex',
+                gap: '1rem',
+                flexWrap: 'wrap'
+              }}>
+                <button
+                  onClick={handleCancelCertDelete}
+                  style={{
+                    flex: 1,
+                    minWidth: '140px',
+                    padding: 'clamp(0.9rem, 2.5vw, 1.1rem)',
+                    background: isDark ? '#334155' : '#f1f5f9',
+                    border: `3px solid ${isDark ? '#475569' : '#e2e8f0'}`,
+                    borderRadius: '14px',
+                    color: isDark ? '#e2e8f0' : '#475569',
+                    fontSize: 'clamp(0.9rem, 2.5vw, 1rem)',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <XCircle size={18} />
+                  Cancel
+                </button>
+
+                <button
+                  onClick={handleConfirmCertDelete}
+                  style={{
+                    flex: 1,
+                    minWidth: '140px',
+                    padding: 'clamp(0.9rem, 2.5vw, 1.1rem)',
+                    background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                    border: '3px solid #d97706',
+                    borderRadius: '14px',
+                    color: '#fff',
+                    fontSize: 'clamp(0.9rem, 2.5vw, 1rem)',
+                    fontWeight: '800',
+                    cursor: 'pointer',
+                    boxShadow: '0 6px 20px rgba(245,158,11,0.4)',
+                    transition: 'all 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '0.5rem'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 24px rgba(245,158,11,0.5)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 6px 20px rgba(245,158,11,0.4)';
+                  }}
+                >
+                  <CheckCircle size={18} />
+                  Yes, Delete
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -1692,6 +1608,26 @@ function MockTestPage() {
           }
         }
 
+        @keyframes scaleIn {
+          0% {
+            opacity: 0;
+            transform: scale(0.8);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        @keyframes pulse {
+          0%, 100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.05);
+          }
+        }
+
         .spin {
           animation: spin 1s linear infinite;
         }
@@ -1700,7 +1636,6 @@ function MockTestPage() {
           to { transform: rotate(360deg); }
         }
 
-        /* Mobile Optimizations */
         @media (max-width: 768px) {
           body {
             font-size: 14px;

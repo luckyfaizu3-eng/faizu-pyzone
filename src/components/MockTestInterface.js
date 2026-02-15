@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, Award, XCircle, BookOpen } from 'lucide-react';
+import { Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, BookOpen } from 'lucide-react';
 import UserDetailsForm from './UserDetailsForm';
 
 // ==========================================
@@ -13,6 +13,7 @@ const APP_CONFIG = {
   CRITICAL_WARNING_TIMEOUT: 5000,
   AUTO_SUBMIT_DELAY: 3000,
   CRITICAL_TIME_MINUTES: 5,
+  CERTIFICATE_COOLDOWN_DAYS: 30,
 };
 
 // ==========================================
@@ -83,7 +84,6 @@ class TestUtils {
 
     let percentage = Math.round((correct / questions.length) * 100);
     
-    // Apply penalty for tab switches
     const penalized = !isAdmin && tabSwitches >= APP_CONFIG.MAX_TAB_SWITCHES;
     if (penalized) {
       percentage = Math.max(0, percentage - 20);
@@ -165,7 +165,7 @@ class AudioManager {
 }
 
 // ==========================================
-// 🖥️ FULLSCREEN MANAGER - BRAND NEW
+// 🖥️ ENHANCED FULLSCREEN MANAGER
 // ==========================================
 class FullscreenManager {
   static async enter() {
@@ -177,20 +177,50 @@ class FullscreenManager {
         await elem.webkitRequestFullscreen();
       } else if (elem.msRequestFullscreen) {
         await elem.msRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        await elem.mozRequestFullScreen();
       }
+      
+      this.hideBrowserUI();
+      this.lockOrientation();
       return true;
     } catch (err) {
-      // Only log in production, ignore in dev mode
-      if (process.env.NODE_ENV === 'production') {
-        console.error('Fullscreen error:', err);
-      }
+      console.error('Fullscreen error:', err);
       return false;
+    }
+  }
+
+  static hideBrowserUI() {
+    const meta = document.createElement('meta');
+    meta.name = 'viewport';
+    meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui';
+    document.head.appendChild(meta);
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    
+    // Wake lock to prevent screen sleep
+    if ('wakeLock' in navigator) {
+      navigator.wakeLock.request('screen').catch(() => {});
+    }
+    
+    // Prevent pull-to-refresh
+    document.body.style.overscrollBehavior = 'none';
+  }
+
+  static lockOrientation() {
+    // Lock screen orientation if supported
+    try {
+      if (window.screen && window.screen.orientation && window.screen.orientation.lock) {
+        window.screen.orientation.lock('portrait').catch(() => {});
+      }
+    } catch (err) {
+      // Orientation lock not supported, ignore
     }
   }
 
   static async exit() {
     try {
-      // Only try to exit if actually in fullscreen
       if (!FullscreenManager.isActive()) {
         return;
       }
@@ -201,125 +231,202 @@ class FullscreenManager {
         await document.webkitExitFullscreen();
       } else if (document.msExitFullscreen) {
         await document.msExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        await document.mozCancelFullScreen();
       }
+      
+      this.restoreBrowserUI();
     } catch (err) {
-      // Silently ignore errors in development mode
-      if (process.env.NODE_ENV === 'development') {
-        console.log('Fullscreen exit (expected in dev mode):', err.message);
-      }
+      console.log('Fullscreen exit:', err.message);
     }
+  }
+
+  static restoreBrowserUI() {
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+    document.body.style.overscrollBehavior = '';
   }
 
   static isActive() {
     return !!(
       document.fullscreenElement ||
       document.webkitFullscreenElement ||
-      document.msFullscreenElement
+      document.msFullscreenElement ||
+      document.mozFullScreenElement
     );
   }
 
   static onChange(callback) {
-    const events = ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange'];
+    const events = ['fullscreenchange', 'webkitfullscreenchange', 'msfullscreenchange', 'mozfullscreenchange'];
     events.forEach(event => document.addEventListener(event, callback));
     return () => events.forEach(event => document.removeEventListener(event, callback));
   }
 }
 
 // ==========================================
-// 🔒 SECURITY MANAGER
+// 🔒 ENHANCED SECURITY MANAGER
 // ==========================================
 class SecurityManager {
-  constructor(onWarning) {
+  constructor(onWarning, onAutoSubmit) {
     this.onWarning = onWarning;
+    this.onAutoSubmit = onAutoSubmit;
+    this.violationCount = 0;
+    this.maxViolations = 5;
+    
     this.handlers = {
-      copy: (e) => { e.preventDefault(); this.onWarning('⚠️ Copying disabled!'); },
-      cut: (e) => { e.preventDefault(); this.onWarning('⚠️ Cutting disabled!'); },
-      paste: (e) => { e.preventDefault(); },
-      contextMenu: (e) => { e.preventDefault(); this.onWarning('⚠️ Right-click disabled!'); },
+      // Prevent copy/cut/paste
+      copy: (e) => { 
+        e.preventDefault(); 
+        e.stopPropagation();
+        this.recordViolation('⚠️ Copying disabled!'); 
+      },
+      cut: (e) => { 
+        e.preventDefault(); 
+        e.stopPropagation();
+        this.recordViolation('⚠️ Cutting disabled!'); 
+      },
+      paste: (e) => { 
+        e.preventDefault(); 
+        e.stopPropagation();
+      },
+      
+      // Prevent right-click
+      contextMenu: (e) => { 
+        e.preventDefault(); 
+        e.stopPropagation();
+        this.recordViolation('⚠️ Right-click disabled!'); 
+      },
+      
+      // Prevent keyboard shortcuts
       keydown: (e) => {
-        const isCopyPaste = e.ctrlKey && ['c', 'v', 'x', 'a', 'u'].includes(e.key.toLowerCase());
-        const isDevTools = e.key === 'F12' || (e.ctrlKey && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase()));
+        // Block copy/paste shortcuts
+        const isCopyPaste = (e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'a', 's'].includes(e.key.toLowerCase());
         
-        if (isCopyPaste || isDevTools) {
+        // Block developer tools
+        const isDevTools = e.key === 'F12' || 
+                          ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) ||
+                          ((e.ctrlKey || e.metaKey) && ['u', 'i'].includes(e.key.toLowerCase()));
+        
+        // Block refresh
+        const isRefresh = e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key === 'r');
+        
+        // Block print
+        const isPrint = (e.ctrlKey || e.metaKey) && e.key === 'p';
+        
+        // Block screenshot shortcuts (Windows: Win+Shift+S, Mac: Cmd+Shift+4)
+        const isScreenshot = (e.shiftKey && ['s', '4', '3'].includes(e.key.toLowerCase()) && (e.metaKey || e.key === 'Meta'));
+        
+        if (isCopyPaste || isDevTools || isRefresh || isPrint || isScreenshot) {
           e.preventDefault();
-          this.onWarning('⚠️ Shortcut disabled!');
+          e.stopPropagation();
+          this.recordViolation('⚠️ Keyboard shortcut blocked!');
+        }
+      },
+      
+      // Prevent drag and drop
+      dragstart: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      
+      drop: (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      
+      // Block text selection via mouse
+      selectstart: (e) => {
+        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+        }
+      },
+      
+      // Detect print attempt
+      beforeprint: (e) => {
+        e.preventDefault();
+        this.recordViolation('⚠️ Printing disabled!');
+      },
+      
+      // Detect blur (window losing focus)
+      blur: (e) => {
+        if (document.activeElement === document.body) {
+          this.onWarning('⚠️ Focus on test window!');
         }
       }
     };
   }
 
+  recordViolation(message) {
+    this.violationCount++;
+    this.onWarning(message);
+    
+    if (this.violationCount >= this.maxViolations) {
+      this.onWarning('🚨 Too many violations! Auto-submitting...', true);
+      setTimeout(() => {
+        if (this.onAutoSubmit) {
+          this.onAutoSubmit(true);
+        }
+      }, 2000);
+    }
+  }
+
   enable() {
     Object.entries(this.handlers).forEach(([event, handler]) => {
-      document.addEventListener(event, handler);
+      if (event === 'blur') {
+        window.addEventListener(event, handler, true);
+      } else {
+        document.addEventListener(event, handler, true);
+      }
     });
+    
+    // Disable text selection via CSS
+    document.body.style.userSelect = 'none';
+    document.body.style.webkitUserSelect = 'none';
+    document.body.style.msUserSelect = 'none';
+    document.body.style.mozUserSelect = 'none';
+    
+    // Monitor for developer tools
+    this.startDevToolsDetection();
   }
 
   disable() {
     Object.entries(this.handlers).forEach(([event, handler]) => {
-      document.removeEventListener(event, handler);
+      if (event === 'blur') {
+        window.removeEventListener(event, handler, true);
+      } else {
+        document.removeEventListener(event, handler, true);
+      }
     });
+    
+    // Restore text selection
+    document.body.style.userSelect = '';
+    document.body.style.webkitUserSelect = '';
+    document.body.style.msUserSelect = '';
+    document.body.style.mozUserSelect = '';
+    
+    // Stop developer tools detection
+    this.stopDevToolsDetection();
   }
-}
 
-// ==========================================
-// 🎨 CONFIRMATION DIALOG
-// ==========================================
-function ConfirmDialog({ message, onConfirm, onCancel }) {
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 99999999, backdropFilter: 'blur(12px)',
-      animation: 'fadeIn 0.3s ease'
-    }}>
-      <div style={{
-        background: 'linear-gradient(135deg, #fff 0%, #f8fafc 100%)',
-        padding: '2.5rem', borderRadius: '28px', maxWidth: '480px', width: '90%',
-        border: '4px solid #e2e8f0',
-        boxShadow: '0 30px 80px rgba(0,0,0,0.3)',
-        textAlign: 'center', animation: 'scaleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)'
-      }}>
-        <div style={{
-          width: '80px', height: '80px', margin: '0 auto 1.5rem',
-          background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
-          borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 10px 30px rgba(251,191,36,0.4)'
-        }}>
-          <AlertTriangle size={42} color="#fff" strokeWidth={2.5} />
-        </div>
-        
-        <div style={{
-          fontSize: '1.5rem', fontWeight: '800', color: '#1e293b',
-          marginBottom: '2rem', lineHeight: 1.4
-        }}>
-          {message}
-        </div>
-        
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button onClick={onCancel} style={{
-            flex: 1, padding: '1rem 1.5rem',
-            background: '#fff', border: '3px solid #e2e8f0',
-            borderRadius: '14px', color: '#64748b',
-            fontSize: '1.05rem', fontWeight: '700', cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}>
-            ✕ Cancel
-          </button>
-          
-          <button onClick={onConfirm} style={{
-            flex: 1, padding: '1rem 1.5rem',
-            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-            border: '3px solid #dc2626', borderRadius: '14px',
-            color: '#fff', fontSize: '1.05rem', fontWeight: '800', cursor: 'pointer',
-            boxShadow: '0 8px 24px rgba(239,68,68,0.4)',
-            transition: 'all 0.2s'
-          }}>
-            ✓ Yes, Exit
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  startDevToolsDetection() {
+    // Detect DevTools by checking window size changes
+    this.devToolsInterval = setInterval(() => {
+      const threshold = 160;
+      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+      
+      if (widthThreshold || heightThreshold) {
+        this.recordViolation('⚠️ Developer tools detected!');
+      }
+    }, 1000);
+  }
+
+  stopDevToolsDetection() {
+    if (this.devToolsInterval) {
+      clearInterval(this.devToolsInterval);
+      this.devToolsInterval = null;
+    }
+  }
 }
 
 // ==========================================
@@ -327,6 +434,46 @@ function ConfirmDialog({ message, onConfirm, onCancel }) {
 // ==========================================
 function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
   const [accepted, setAccepted] = useState(false);
+
+  useEffect(() => {
+    const elementsToHide = [
+      'nav', 'header', 'footer', 
+      '.navbar', '.header', '.footer',
+      '.telegram-button', '#telegram-button',
+      '.TelegramButton', '[class*="telegram"]',
+      '.background', '.Background', '[class*="background"]',
+      '.toast-container', '.ToastContainer',
+      '[class*="razorpay"]', '[id*="razorpay"]'
+    ];
+    
+    const hiddenElements = [];
+    
+    elementsToHide.forEach(selector => {
+      try {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => {
+          if (el) {
+            hiddenElements.push({ 
+              element: el, 
+              display: el.style.display,
+              visibility: el.style.visibility 
+            });
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+          }
+        });
+      } catch (e) {}
+    });
+
+    return () => {
+      hiddenElements.forEach(({ element, display, visibility }) => {
+        if (element) {
+          element.style.display = display || '';
+          element.style.visibility = visibility || '';
+        }
+      });
+    };
+  }, []);
 
   const instructions = [
     { text: `Test duration is ${timeLimit} minutes. Timer starts immediately after you begin.` },
@@ -336,7 +483,7 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
     { text: 'You can navigate between questions freely before submitting.' },
     { text: 'ALL questions must be answered (A to Z completion required).' },
     { text: 'Score 55% or above to PASS and receive your Certificate of Achievement.' },
-    { text: 'This test must be taken honestly. Malpractice leads to disqualification.' },
+    { text: 'Any cheating attempt will result in automatic test submission with penalty.' },
   ];
 
   return (
@@ -346,7 +493,6 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
       padding: '1rem', overflowY: 'auto'
     }}>
       <div style={{ width: '100%', maxWidth: '680px', padding: '1rem 0' }}>
-        {/* Header */}
         <div style={{
           background: '#fff', border: '3px solid #e2e8f0',
           borderRadius: '20px', padding: '1.5rem', marginBottom: '1rem',
@@ -380,7 +526,6 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
           </div>
         </div>
 
-        {/* Instructions */}
         <div style={{
           background: '#fff', border: '3px solid #e2e8f0',
           borderRadius: '20px', padding: '1.5rem', marginBottom: '1rem',
@@ -462,24 +607,21 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
 // ==========================================
 // 🎮 MAIN TEST INTERFACE
 // ==========================================
-function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, userEmail, studentInfo }) {
-  // State
+function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail, studentInfo }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState({});
   const [timeLeft, setTimeLeft] = useState(timeLimit * 60);
   const [tabSwitches, setTabSwitches] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
   const [warningMsg, setWarningMsg] = useState('');
-  const [showExitDialog, setShowExitDialog] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
-  // Refs
   const startTimeRef = useRef(Date.now());
   const audioManagerRef = useRef(new AudioManager());
   const securityManagerRef = useRef(null);
   const warningTimerRef = useRef(null);
+  const hasSubmittedRef = useRef(false);
 
-  // Computed
   const isAdmin = TestUtils.isAdmin(userEmail);
   const answeredCount = Object.keys(answers).length;
   const allAnswered = answeredCount === questions.length;
@@ -487,57 +629,192 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
   const timerTheme = TestUtils.getTimerTheme(timeLeft, timeLimit * 60);
   const isCriticalTime = timeLeft < APP_CONFIG.CRITICAL_TIME_MINUTES * 60;
 
-  // ==========================================
-  // ✅ AUTO-SCROLL TO TOP ON QUESTION CHANGE
-  // ==========================================
+  const showWarningMessage = useCallback((message, critical = false) => {
+    setWarningMsg(message);
+    setShowWarning(true);
+
+    if (warningTimerRef.current) {
+      clearTimeout(warningTimerRef.current);
+    }
+
+    const timeout = critical ? APP_CONFIG.CRITICAL_WARNING_TIMEOUT : APP_CONFIG.WARNING_TIMEOUT;
+    warningTimerRef.current = setTimeout(() => {
+      setShowWarning(false);
+    }, timeout);
+  }, []);
+
+  const handleAnswer = useCallback((qIndex, optionIndex) => {
+    setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
+  }, []);
+
+  const handleSubmit = useCallback((penalized = false) => {
+    // Prevent double submission
+    if (hasSubmittedRef.current) {
+      console.log('⚠️ Already submitted, ignoring duplicate submission');
+      return;
+    }
+
+    if (!isAdmin && !allAnswered) {
+      showWarningMessage(`⚠️ Answer ALL questions! (${answeredCount}/${questions.length} done)`, true);
+      return;
+    }
+
+    hasSubmittedRef.current = true;
+
+    const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
+    const score = TestUtils.calculateScore(answers, questions, tabSwitches, isAdmin);
+
+    const results = {
+      ...score,
+      timeTaken: `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`,
+      tabSwitches,
+      penalized,
+      studentInfo
+    };
+
+    console.log('✅ [TestInterface] Submitting results:', results);
+    onComplete(results);
+  }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
+
+  const handleNavigation = useCallback((direction) => {
+    if (direction === 'next' && currentQuestion < questions.length - 1) {
+      setCurrentQuestion(prev => prev + 1);
+    } else if (direction === 'prev' && currentQuestion > 0) {
+      setCurrentQuestion(prev => prev - 1);
+    }
+  }, [currentQuestion, questions.length]);
+
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [currentQuestion]);
 
-  // ==========================================
-  // 🎬 INITIALIZATION
-  // ==========================================
   useEffect(() => {
-    // Hide navbar/header
-    const navbar = document.querySelector('nav');
-    const header = document.querySelector('header');
-    if (navbar) navbar.style.display = 'none';
-    if (header) header.style.display = 'none';
+    const elementsToHide = [
+      'nav', 'header', 'footer', 
+      '.navbar', '.header', '.footer',
+      '.menu', '.toolbar', '#toolbar', '.app-bar',
+      '#navbar', '#header', '#footer',
+      '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]',
+      '.top-bar', '.bottom-bar', '.side-nav', '.navigation',
+      '.telegram-button', '#telegram-button',
+      '.TelegramButton', '[class*="telegram"]', '[id*="telegram"]',
+      '.background', '.Background', '[class*="background"]',
+      '.toast-container', '.ToastContainer', '[class*="toast"]',
+      '[class*="razorpay"]', '[id*="razorpay"]',
+      'aside', '.sidebar', '#sidebar', '[class*="sidebar"]',
+      '[class*="menu"]', '[class*="nav"]', '[class*="header"]', '[class*="footer"]',
+      '.fixed', '.sticky', '[style*="fixed"]', '[style*="sticky"]'
+    ];
+    
+    const hiddenElements = [];
+    
+    elementsToHide.forEach(selector => {
+      try {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => {
+          if (el && !el.closest('[data-test-interface]')) {
+            hiddenElements.push({ 
+              element: el, 
+              display: el.style.display,
+              visibility: el.style.visibility,
+              position: el.style.position
+            });
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+          }
+        });
+      } catch (e) {}
+    });
+    
+    const bodyChildren = Array.from(document.body.children);
+    bodyChildren.forEach(child => {
+      if (child && 
+          !child.hasAttribute('data-test-interface') && 
+          child.id !== 'root' &&
+          !child.querySelector('[data-test-interface]')) {
+        hiddenElements.push({ 
+          element: child, 
+          display: child.style.display,
+          visibility: child.style.visibility 
+        });
+        child.style.display = 'none';
+        child.style.visibility = 'hidden';
+      }
+    });
+    
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const originalBodyPosition = document.body.style.position;
+    const originalBodyMargin = document.body.style.margin;
+    const originalBodyPadding = document.body.style.padding;
+    const originalBodyWidth = document.body.style.width;
+    const originalBodyHeight = document.body.style.height;
+    
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    document.body.style.top = '0';
+    document.body.style.left = '0';
+    
+    const currentAudioManager = audioManagerRef.current;
+    const currentSecurityManager = securityManagerRef.current;
 
-    // Setup audio
     if (!isAdmin) {
-      audioManagerRef.current.init();
-    }
-
-    // Setup security
-    if (!isAdmin) {
-      securityManagerRef.current = new SecurityManager(showWarningMessage);
+      currentAudioManager.init();
+      securityManagerRef.current = new SecurityManager(showWarningMessage, handleSubmit);
       securityManagerRef.current.enable();
     }
 
-    // Cleanup
-    return () => {
-      if (navbar) navbar.style.display = '';
-      if (header) header.style.display = '';
-      const audioManager = audioManagerRef.current;
-      if (audioManager) audioManager.destroy();
-      if (securityManagerRef.current) {
-        securityManagerRef.current.disable();
+    window.onbeforeunload = (e) => {
+      if (!hasSubmittedRef.current) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
       }
     };
-  }, [isAdmin, showWarningMessage]);
 
-  // ==========================================
-  // 🖥️ FULLSCREEN MANAGEMENT
-  // ==========================================
+    return () => {
+      window.onbeforeunload = null;
+      
+      hiddenElements.forEach(({ element, display, visibility, position }) => {
+        if (element) {
+          element.style.display = display || '';
+          element.style.visibility = visibility || '';
+          if (position) element.style.position = position;
+        }
+      });
+      
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      document.body.style.position = originalBodyPosition;
+      document.body.style.margin = originalBodyMargin;
+      document.body.style.padding = originalBodyPadding;
+      document.body.style.width = originalBodyWidth;
+      document.body.style.height = originalBodyHeight;
+      document.body.style.top = '';
+      document.body.style.left = '';
+      
+      if (currentAudioManager) {
+        currentAudioManager.destroy();
+      }
+      
+      if (currentSecurityManager) {
+        currentSecurityManager.disable();
+      }
+    };
+  }, [isAdmin, showWarningMessage, handleSubmit]);
+
   useEffect(() => {
     if (isAdmin) return;
 
     const handleFullscreenChange = () => {
       const isFullscreen = FullscreenManager.isActive();
       
-      // If user exits fullscreen, show warning and re-enter
-      if (!isFullscreen) {
+      if (!isFullscreen && !hasSubmittedRef.current) {
         showWarningMessage('⚠️ Stay in fullscreen mode!');
         setTimeout(() => {
           FullscreenManager.enter();
@@ -545,26 +822,23 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
       }
     };
 
-    // Listen for fullscreen changes
     const cleanup = FullscreenManager.onChange(handleFullscreenChange);
 
     return () => {
       cleanup();
-      // Only exit if actually in fullscreen
       if (FullscreenManager.isActive()) {
         FullscreenManager.exit();
       }
     };
   }, [isAdmin, showWarningMessage]);
 
-  // ==========================================
-  // ⏱️ TIMER
-  // ==========================================
   useEffect(() => {
-    if (timeLeft <= 0) {
-      audioManagerRef.current.playAlarm();
-      showWarningMessage('⏰ TIME UP! Auto-submitting...', true);
-      setTimeout(() => handleSubmit(false), APP_CONFIG.AUTO_SUBMIT_DELAY);
+    if (timeLeft <= 0 || hasSubmittedRef.current) {
+      if (timeLeft <= 0 && !hasSubmittedRef.current) {
+        audioManagerRef.current.playAlarm();
+        showWarningMessage('⏰ TIME UP! Auto-submitting...', true);
+        setTimeout(() => handleSubmit(false), APP_CONFIG.AUTO_SUBMIT_DELAY);
+      }
       return;
     }
 
@@ -575,11 +849,8 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     return () => clearInterval(timer);
   }, [timeLeft, showWarningMessage, handleSubmit]);
 
-  // ==========================================
-  // 🔊 TICK SOUND
-  // ==========================================
   useEffect(() => {
-    if (isAdmin || timeLeft <= 0) return;
+    if (isAdmin || timeLeft <= 0 || hasSubmittedRef.current) return;
 
     const tickTimer = setInterval(() => {
       audioManagerRef.current.playTick(timeLeft % 2 === 0);
@@ -588,14 +859,11 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     return () => clearInterval(tickTimer);
   }, [timeLeft, isAdmin]);
 
-  // ==========================================
-  // 🚫 TAB SWITCH DETECTION
-  // ==========================================
   useEffect(() => {
     if (isAdmin) return;
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
+      if (document.hidden && !hasSubmittedRef.current) {
         const newCount = tabSwitches + 1;
         setTabSwitches(newCount);
 
@@ -612,78 +880,29 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, [tabSwitches, isAdmin, showWarningMessage, handleSubmit]);
 
-  // ==========================================
-  // 📱 MOBILE DETECTION
-  // ==========================================
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-
-
-  // ==========================================
-  // 🛠️ HANDLERS (moved above useEffects to fix no-use-before-define)
-  // ==========================================
-  const showWarningMessage = useCallback((message, critical = false) => {
-    setWarningMsg(message);
-    setShowWarning(true);
-
-    if (warningTimerRef.current) {
-      clearTimeout(warningTimerRef.current);
-    }
-
-    const timeout = critical ? APP_CONFIG.CRITICAL_WARNING_TIMEOUT : APP_CONFIG.WARNING_TIMEOUT;
-    warningTimerRef.current = setTimeout(() => {
-      setShowWarning(false);
-    }, timeout);
-  }, []);
-
-  const handleSubmit = useCallback((penalized = false) => {
-    if (!isAdmin && !allAnswered) {
-      showWarningMessage(`⚠️ Answer ALL questions! (${answeredCount}/${questions.length} done)`, true);
-      return;
-    }
-
-    const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const score = TestUtils.calculateScore(answers, questions, tabSwitches, isAdmin);
-
-    const results = {
-      ...score,
-      timeTaken: `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`,
-      tabSwitches,
-      penalized,
-      studentInfo
-    };
-
-    onComplete(results);
-  }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
-
-  const handleAnswer = useCallback((qIndex, optionIndex) => {
-    setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
-  }, []);
-
-  const handleNavigation = useCallback((direction) => {
-    if (direction === 'next' && currentQuestion < questions.length - 1) {
-      setCurrentQuestion(prev => prev + 1);
-    } else if (direction === 'prev' && currentQuestion > 0) {
-      setCurrentQuestion(prev => prev - 1);
-    }
-  }, [currentQuestion, questions.length]);
-
   const currentQ = questions[currentQuestion];
 
-  // ==========================================
-  // 🎨 RENDER
-  // ==========================================
   return (
-    <div style={{
-      position: 'fixed', inset: 0, background: '#f8fafc',
-      zIndex: 999999, overflowY: 'auto',
-      userSelect: isAdmin ? 'auto' : 'none'
-    }}>
-      {/* Admin Badge */}
+    <div 
+      data-test-interface="true"
+      style={{
+        position: 'fixed', 
+        inset: 0, 
+        background: '#f8fafc',
+        zIndex: 999999, 
+        overflowY: 'auto',
+        userSelect: isAdmin ? 'auto' : 'none',
+        width: '100vw',
+        height: '100vh',
+        top: 0,
+        left: 0
+      }}>
       {isAdmin && (
         <div style={{
           position: 'fixed', top: '10px', left: '10px',
@@ -692,11 +911,10 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
           fontSize: '0.8rem', fontWeight: '900', zIndex: 10000000,
           boxShadow: '0 6px 20px rgba(16,185,129,0.5)', border: '2px solid #047857'
         }}>
-          👑 ADMIN MODE
+          👑 ADMIN MODE - Security Disabled
         </div>
       )}
 
-      {/* Warning Modal */}
       {showWarning && !isAdmin && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
@@ -728,16 +946,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
         </div>
       )}
 
-      {/* Exit Dialog */}
-      {showExitDialog && (
-        <ConfirmDialog
-          message="Are you sure you want to exit and submit the test?"
-          onConfirm={() => { handleSubmit(false); onExit(); }}
-          onCancel={() => setShowExitDialog(false)}
-        />
-      )}
-
-      {/* Header */}
       <div style={{
         position: 'sticky', top: 0, background: '#fff',
         borderBottom: '3px solid #e2e8f0',
@@ -782,7 +990,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
             </div>
           </div>
 
-          {/* Timer */}
           <div style={{
             display: 'flex', alignItems: 'center', gap: '0.5rem',
             padding: isMobile ? '0.5rem 1rem' : '0.65rem 1.25rem',
@@ -800,28 +1007,13 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
               {timeData.display}
             </div>
           </div>
-
-          {/* Exit Button */}
-          <button onClick={() => setShowExitDialog(true)} style={{
-            background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
-            border: '3px solid #ef4444', borderRadius: '12px',
-            width: isMobile ? '42px' : '52px',
-            height: isMobile ? '42px' : '52px',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', flexShrink: 0,
-            boxShadow: '0 4px 12px rgba(239,68,68,0.3)'
-          }}>
-            <X size={isMobile ? 22 : 28} color="#ef4444" strokeWidth={3} />
-          </button>
         </div>
       </div>
 
-      {/* Main Content */}
       <div style={{
         padding: isMobile ? '1.5rem 1rem' : '2rem 1.5rem',
         maxWidth: '1400px', margin: '0 auto', paddingBottom: '6rem'
       }}>
-        {/* Question Box - NO CHANGES */}
         <div key={currentQuestion} style={{
           background: '#fff', padding: isMobile ? '1.5rem' : '2.5rem',
           borderRadius: '20px', marginBottom: '2rem',
@@ -853,7 +1045,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
           )}
         </div>
 
-        {/* Options */}
         <div key={`options-${currentQuestion}`} style={{
           display: 'grid', gap: isMobile ? '1rem' : '1.5rem', marginBottom: '2.5rem'
         }}>
@@ -891,7 +1082,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
           })}
         </div>
 
-        {/* Navigation */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '2.5rem' }}>
           <button onClick={() => handleNavigation('prev')} disabled={currentQuestion === 0} style={{
             padding: isMobile ? '1rem 1.5rem' : '1.25rem 2rem',
@@ -937,7 +1127,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
           )}
         </div>
 
-        {/* Progress Grid */}
         <div style={{
           background: '#fff', padding: isMobile ? '1.25rem' : '1.75rem',
           borderRadius: '20px', border: '3px solid #e2e8f0',
@@ -978,7 +1167,6 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
         </div>
       </div>
 
-      {/* Animations */}
       <style>{`
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes scaleIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
@@ -993,273 +1181,65 @@ function TestInterface({ questions, onComplete, onExit, testTitle, timeLimit, us
 }
 
 // ==========================================
-// 📊 RESULT SCREEN
+// 🎯 MAIN APP - SINGLE CLEAN INTERFACE
 // ==========================================
-function ResultScreen({ results, onGoToMainPage }) {
-  const { correct, wrong, total, percentage, passed, timeTaken, tabSwitches, correctQuestions, wrongQuestions, studentInfo } = results;
-  const isMobile = window.innerWidth <= 768;
-
-  const today = new Date();
-  const dateStr = today.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
-  const certId = `CERT-${Date.now().toString().slice(-8)}`;
-
-  useEffect(() => {
-    FullscreenManager.exit();
-  }, []);
-
-  return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc', overflowY: 'auto', padding: isMobile ? '1rem' : '2rem' }}>
-      <div style={{ maxWidth: '720px', margin: '0 auto', paddingBottom: '3rem' }}>
-        {/* Result Header */}
-        <div style={{
-          background: passed ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #ef4444, #dc2626)',
-          borderRadius: '24px', padding: isMobile ? '2rem 1.5rem' : '2.5rem',
-          textAlign: 'center', marginBottom: '1.25rem',
-          boxShadow: passed ? '0 12px 40px rgba(16,185,129,0.4)' : '0 12px 40px rgba(239,68,68,0.4)'
-        }}>
-          <div style={{ fontSize: isMobile ? '3.5rem' : '5rem', marginBottom: '0.5rem' }}>
-            {passed ? '🎉' : '😔'}
-          </div>
-          <div style={{ fontSize: 'clamp(2rem,8vw,3.5rem)', fontWeight: '900', color: '#fff', lineHeight: 1, marginBottom: '0.5rem' }}>
-            {percentage}%
-          </div>
-          <div style={{ fontSize: 'clamp(1.2rem,4vw,1.8rem)', fontWeight: '800', color: 'rgba(255,255,255,0.9)', marginBottom: '0.5rem' }}>
-            {passed ? 'PASS ✅' : 'FAIL ❌'}
-          </div>
-          <div style={{ color: 'rgba(255,255,255,0.8)', fontWeight: '600', fontSize: '0.95rem' }}>
-            {passed ? 'Congratulations! Certificate Generated Below 🏆' : 'Minimum 55% required to pass. Try Again! 💪'}
-          </div>
-        </div>
-
-        {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.85rem', marginBottom: '1.25rem' }}>
-          {[
-            { icon: '✅', label: 'Correct', value: correct, bg: '#f0fdf4', border: '#10b981', color: '#10b981' },
-            { icon: '❌', label: 'Wrong', value: wrong, bg: '#fff5f5', border: '#ef4444', color: '#ef4444' },
-            { icon: '⏱️', label: 'Time Taken', value: timeTaken, bg: '#eff6ff', border: '#3b82f6', color: '#3b82f6' },
-            { icon: '📝', label: 'Total', value: `${correct}/${total}`, bg: '#f8fafc', border: '#94a3b8', color: '#475569' },
-          ].map((s, i) => (
-            <div key={i} style={{
-              background: s.bg, border: `2.5px solid ${s.border}`,
-              borderRadius: '18px', padding: isMobile ? '1.1rem' : '1.4rem',
-              textAlign: 'center', boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
-            }}>
-              <div style={{ fontSize: '1.6rem', marginBottom: '0.25rem' }}>{s.icon}</div>
-              <div style={{ color: s.color, fontWeight: '900', fontSize: isMobile ? '1.5rem' : '2rem', lineHeight: 1 }}>{s.value}</div>
-              <div style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: '700', marginTop: '0.2rem' }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Analysis */}
-        <div style={{
-          background: '#fff', border: '3px solid #e2e8f0',
-          borderRadius: '20px', padding: isMobile ? '1.25rem' : '1.75rem',
-          marginBottom: '1.25rem', boxShadow: '0 4px 16px rgba(0,0,0,0.06)'
-        }}>
-          <h3 style={{ color: '#1e293b', fontWeight: '800', fontSize: '1rem', margin: '0 0 1.25rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            📋 Question-wise Analysis
-          </h3>
-
-          <div style={{ marginBottom: '1.25rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.7rem' }}>
-              <CheckCircle size={18} color="#10b981" />
-              <span style={{ color: '#065f46', fontWeight: '800', fontSize: '0.9rem' }}>
-                Correct Questions ({correctQuestions.length})
-              </span>
-            </div>
-            {correctQuestions.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {correctQuestions.map(qNum => (
-                  <span key={qNum} style={{
-                    background: '#dcfce7', border: '2px solid #10b981',
-                    color: '#065f46', borderRadius: '8px',
-                    padding: '0.3rem 0.75rem', fontSize: '0.88rem', fontWeight: '800'
-                  }}>Q{qNum}</span>
-                ))}
-              </div>
-            ) : (
-              <span style={{ color: '#94a3b8', fontSize: '0.88rem', fontWeight: '600' }}>None answered correctly</span>
-            )}
-          </div>
-
-          <div style={{ height: '1px', background: '#f1f5f9', margin: '0 0 1.25rem' }} />
-
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.7rem' }}>
-              <XCircle size={18} color="#ef4444" />
-              <span style={{ color: '#991b1b', fontWeight: '800', fontSize: '0.9rem' }}>
-                Wrong / Unattempted ({wrongQuestions.length})
-              </span>
-            </div>
-            {wrongQuestions.length > 0 ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {wrongQuestions.map(qNum => (
-                  <span key={qNum} style={{
-                    background: '#fee2e2', border: '2px solid #ef4444',
-                    color: '#991b1b', borderRadius: '8px',
-                    padding: '0.3rem 0.75rem', fontSize: '0.88rem', fontWeight: '800'
-                  }}>Q{qNum}</span>
-                ))}
-              </div>
-            ) : (
-              <span style={{ color: '#10b981', fontSize: '0.88rem', fontWeight: '700' }}>All correct! Perfect score! 🎉</span>
-            )}
-          </div>
-
-          {tabSwitches > 0 && (
-            <div style={{
-              marginTop: '1.25rem', padding: '0.85rem 1rem',
-              background: '#fef3c7', border: '2px solid #f59e0b',
-              borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '0.5rem'
-            }}>
-              <AlertTriangle size={18} color="#d97706" />
-              <span style={{ color: '#92400e', fontSize: '0.85rem', fontWeight: '800' }}>
-                Tab switches recorded: {tabSwitches}/3
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Certificate */}
-        {passed && studentInfo && (
-          <div style={{
-            background: 'linear-gradient(135deg, #fffbeb 0%, #fef9c3 50%, #fffbeb 100%)',
-            border: '5px solid #f59e0b', borderRadius: '24px',
-            padding: isMobile ? '1.75rem 1.25rem' : '3rem',
-            position: 'relative', overflow: 'hidden',
-            boxShadow: '0 20px 60px rgba(245,158,11,0.25)',
-            marginBottom: '1.25rem'
-          }}>
-            {[
-              { top: '10px', left: '10px', borderTop: '3px solid #d97706', borderLeft: '3px solid #d97706' },
-              { top: '10px', right: '10px', borderTop: '3px solid #d97706', borderRight: '3px solid #d97706' },
-              { bottom: '10px', left: '10px', borderBottom: '3px solid #d97706', borderLeft: '3px solid #d97706' },
-              { bottom: '10px', right: '10px', borderBottom: '3px solid #d97706', borderRight: '3px solid #d97706' },
-            ].map((style, i) => (
-              <div key={i} style={{ position: 'absolute', width: '32px', height: '32px', ...style }} />
-            ))}
-
-            <div style={{ textAlign: 'center', position: 'relative', zIndex: 1 }}>
-              <div style={{
-                width: isMobile ? '72px' : '90px', height: isMobile ? '72px' : '90px',
-                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                borderRadius: '50%', margin: '0 auto 1.25rem',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 8px 24px rgba(245,158,11,0.5)', border: '4px solid #92400e'
-              }}>
-                <Award size={isMobile ? 32 : 42} color="#fff" strokeWidth={1.8} />
-              </div>
-
-              <div style={{ color: '#92400e', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>
-                Certificate of Achievement
-              </div>
-
-              <div style={{ color: '#78350f', fontSize: isMobile ? '0.82rem' : '0.95rem', fontWeight: '600', marginBottom: '0.5rem' }}>
-                This is to certify that
-              </div>
-
-              <div style={{
-                fontSize: isMobile ? '1.8rem' : '2.4rem', fontWeight: '900',
-                color: '#1a0a00', fontFamily: 'Georgia, serif',
-                borderBottom: '2.5px solid #d97706', paddingBottom: '0.5rem',
-                marginBottom: '0.75rem', display: 'inline-block', minWidth: '60%'
-              }}>
-                {studentInfo.fullName}
-              </div>
-
-              <div style={{ color: '#78350f', fontSize: isMobile ? '0.85rem' : '0.95rem', fontWeight: '600', marginBottom: '0.25rem' }}>
-                has successfully completed
-              </div>
-
-              <div style={{ fontSize: isMobile ? '1rem' : '1.3rem', fontWeight: '900', color: '#92400e', marginBottom: '0.75rem' }}>
-                Mock Test Examination
-              </div>
-
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-                background: '#10b981', borderRadius: '50px',
-                padding: isMobile ? '0.4rem 1.25rem' : '0.5rem 1.75rem',
-                marginBottom: '1.5rem', boxShadow: '0 4px 14px rgba(16,185,129,0.35)'
-              }}>
-                <span style={{ color: '#fff', fontWeight: '900', fontSize: isMobile ? '1rem' : '1.25rem' }}>
-                  Score: {percentage}% — PASS
-                </span>
-              </div>
-
-              <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '0.5rem', paddingTop: '1rem', borderTop: '1.5px dashed #d97706'
-              }}>
-                {[
-                  { label: 'Candidate', value: studentInfo.fullName?.split(' ')[0] || '' },
-                  { label: 'Date', value: dateStr },
-                  { label: 'Cert ID', value: certId },
-                ].map((info, i) => (
-                  <div key={i} style={{ textAlign: i === 0 ? 'left' : i === 2 ? 'right' : 'center' }}>
-                    <div style={{ color: '#78350f', fontSize: '0.65rem', fontWeight: '800', textTransform: 'uppercase' }}>
-                      {info.label}
-                    </div>
-                    <div style={{ color: '#1a0a00', fontWeight: '700', fontSize: i === 2 ? '0.65rem' : '0.8rem', fontFamily: i === 2 ? 'monospace' : 'inherit' }}>
-                      {info.value}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {studentInfo.address && (
-                <div style={{ marginTop: '0.75rem', textAlign: 'center' }}>
-                  <span style={{ color: '#78350f', fontSize: '0.65rem', fontWeight: '800' }}>Address: </span>
-                  <span style={{ color: '#1a0a00', fontSize: '0.75rem', fontWeight: '700' }}>{studentInfo.address}</span>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <button onClick={onGoToMainPage} style={{
-            flex: 1, padding: '1rem',
-            background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-            border: '3px solid #2563eb', borderRadius: '14px', color: '#fff',
-            fontSize: '1rem', fontWeight: '800', cursor: 'pointer',
-            boxShadow: '0 6px 20px rgba(59,130,246,0.35)', transition: 'all 0.2s'
-          }}>
-            🏠 Back to Tests
-          </button>
-          
-          {passed && (
-            <button onClick={() => window.print()} style={{
-              flex: 1, padding: '1rem',
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-              border: '3px solid #d97706', borderRadius: '14px',
-              color: '#fff', fontSize: '1rem', fontWeight: '800', cursor: 'pointer',
-              boxShadow: '0 6px 20px rgba(245,158,11,0.35)', transition: 'all 0.2s'
-            }}>
-              🖨️ Print Certificate
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ==========================================
-// 🎯 MAIN APP
-// ==========================================
-export default function MockTestApp({ questions, testTitle, timeLimit, userEmail }) {
+export default function MockTestInterface({ 
+  questions, 
+  testTitle, 
+  timeLimit, 
+  userEmail, 
+  testLevel, 
+  onExit,
+  onComplete
+}) {
   const [stage, setStage] = useState('instructions');
   const [studentInfo, setStudentInfo] = useState(null);
-  const [results, setResults] = useState(null);
 
-  const handleInstructionsAccept = () => {
-    // Request fullscreen immediately on user button click
+  useEffect(() => {
     if (userEmail !== APP_CONFIG.ADMIN_EMAIL) {
       FullscreenManager.enter();
     }
+    
+    window.onbeforeunload = null;
+    
+    return () => {
+      FullscreenManager.exit();
+      window.onbeforeunload = null;
+    };
+  }, [userEmail]);
+
+  const handleInstructionsAccept = () => {
     setStage('form');
   };
+
+  const handleTestComplete = useCallback((testResults) => {
+    console.log('✅ [MockTestInterface] Test completed, passing to parent');
+    
+    // ✅ Clear beforeunload
+    window.onbeforeunload = null;
+    
+    // ✅ Exit fullscreen
+    FullscreenManager.exit();
+    
+    // ✅ Prepare complete test data
+    const completeTestData = {
+      ...testResults,
+      studentInfo: studentInfo,
+      testTitle: testTitle,
+      testLevel: testLevel,
+      userEmail: userEmail,
+      completedAt: Date.now(),
+      timestamp: new Date().toISOString()
+    };
+    
+    console.log('📊 [MockTestInterface] Passing data to parent:', completeTestData);
+    
+    // ✅ Pass results to parent component
+    if (onComplete && typeof onComplete === 'function') {
+      onComplete(completeTestData);
+    }
+    
+  }, [studentInfo, testTitle, testLevel, userEmail, onComplete]);
 
   return (
     <>
@@ -1273,7 +1253,10 @@ export default function MockTestApp({ questions, testTitle, timeLimit, userEmail
       )}
       {stage === 'form' && (
         <UserDetailsForm
-          onSubmit={(info) => { setStudentInfo(info); setStage('test'); }}
+          onSubmit={(info) => { 
+            setStudentInfo(info); 
+            setStage('test'); 
+          }}
           onCancel={() => setStage('instructions')}
         />
       )}
@@ -1284,14 +1267,7 @@ export default function MockTestApp({ questions, testTitle, timeLimit, userEmail
           timeLimit={timeLimit}
           userEmail={userEmail}
           studentInfo={studentInfo}
-          onComplete={(res) => { setResults(res); setStage('results'); }}
-          onExit={() => setStage('instructions')}
-        />
-      )}
-      {stage === 'results' && (
-        <ResultScreen
-          results={results}
-          onGoToMainPage={() => window.location.reload()}
+          onComplete={handleTestComplete}
         />
       )}
     </>

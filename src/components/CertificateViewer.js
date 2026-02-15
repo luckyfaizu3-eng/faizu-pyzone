@@ -149,7 +149,7 @@ function CertificateViewer({ certificate, onClose }) {
       pdf.text(certificate.date, rightCol, detailsY + 5);
       pdf.text(certificate.userAddress, rightCol, detailsY + lineHeight + 5);
 
-      // ========== SIGNATURE SECTION - MORE SPACE ==========
+      // ========== SIGNATURE SECTION ==========
       const sigY = 157;
       pdf.setDrawColor(232, 234, 237);
       pdf.setLineWidth(0.3);
@@ -178,8 +178,8 @@ function CertificateViewer({ certificate, onClose }) {
       pdf.setTextColor(128, 134, 139);
       pdf.text('@code_with_06', sigX + 25, sigY + 25, { align: 'center' });
 
-      // ========== DISCLAIMER BOX - BELOW SIGNATURE ==========
-      const disclaimerY = sigY + 33; // Signature ke neeche
+      // ========== DISCLAIMER BOX ==========
+      const disclaimerY = sigY + 33;
       const disclaimerHeight = 11;
       
       pdf.setFillColor(248, 249, 250);
@@ -275,7 +275,7 @@ function CertificateViewer({ certificate, onClose }) {
         background: isDark ? '#1e293b' : '#fff',
         borderRadius: '20px',
         padding: isMobile ? '40px 30px' : '60px 80px',
-        maxWidth: '500px',
+        maxWidth: '600px',
         width: '100%',
         textAlign: 'center',
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
@@ -353,12 +353,12 @@ function CertificateViewer({ certificate, onClose }) {
           Congratulations <strong>{certificate.userName}</strong>! Your verified certificate is ready.
         </p>
 
-        {/* Stats */}
+        {/* Stats Grid */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
           gap: '16px',
-          marginBottom: '32px',
+          marginBottom: '24px',
           padding: '20px',
           background: isDark ? '#0f172a' : '#f8f9fa',
           borderRadius: '12px'
@@ -403,6 +403,47 @@ function CertificateViewer({ certificate, onClose }) {
               {certificate.level}
             </div>
           </div>
+
+          <div>
+            <div style={{
+              fontSize: '12px',
+              color: isDark ? '#94a3b8' : '#80868b',
+              marginBottom: '4px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              fontWeight: '500'
+            }}>
+              Certificate ID
+            </div>
+            <div style={{
+              fontSize: isMobile ? '11px' : '13px',
+              fontWeight: '600',
+              color: isDark ? '#fff' : '#202124',
+              fontFamily: 'monospace'
+            }}>
+              {certificate.certificateId}
+            </div>
+          </div>
+
+          <div>
+            <div style={{
+              fontSize: '12px',
+              color: isDark ? '#94a3b8' : '#80868b',
+              marginBottom: '4px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              fontWeight: '500'
+            }}>
+              Issue Date
+            </div>
+            <div style={{
+              fontSize: '14px',
+              fontWeight: '600',
+              color: isDark ? '#fff' : '#202124'
+            }}>
+              {certificate.date}
+            </div>
+          </div>
         </div>
 
         {/* Download Button */}
@@ -442,7 +483,7 @@ function CertificateViewer({ certificate, onClose }) {
           marginTop: '20px',
           lineHeight: 1.5
         }}>
-          Professional verified certificate • Same on all devices
+          Professional verified certificate • Pass mark: 55%+ • Monthly renewable
         </p>
       </div>
     </div>

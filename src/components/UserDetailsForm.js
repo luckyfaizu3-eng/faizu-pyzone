@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../App';
 import { User, Mail, MapPin, Calendar, Award } from 'lucide-react';
 
@@ -11,6 +11,49 @@ function UserDetailsForm({ onSubmit, onCancel }) {
     email: ''
   });
   const [errors, setErrors] = useState({});
+
+  // ✅ Ensure UI stays hidden and fullscreen active when form loads
+  useEffect(() => {
+    // Clear any beforeunload handlers
+    window.onbeforeunload = null;
+    
+    // Keep UI elements hidden
+    const elementsToHide = [
+      'nav', 'header', 'footer', 
+      '.navbar', '.header', '.footer',
+      '.telegram-button', '#telegram-button',
+      '.TelegramButton', '[class*="telegram"]',
+      '.background', '.Background', '[class*="background"]',
+      '.toast-container', '.ToastContainer',
+      '[class*="razorpay"]', '[id*="razorpay"]'
+    ];
+    
+    const hiddenElements = [];
+    
+    elementsToHide.forEach(selector => {
+      try {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => {
+          if (el) {
+            hiddenElements.push({ 
+              element: el, 
+              display: el.style.display,
+              visibility: el.style.visibility 
+            });
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+          }
+        });
+      } catch (e) {
+        // Ignore invalid selectors
+      }
+    });
+
+    return () => {
+      // Keep elements hidden even when form unmounts (test will start)
+      // Don't restore them here
+    };
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -66,13 +109,13 @@ function UserDetailsForm({ onSubmit, onCancel }) {
       left: 0,
       right: 0,
       bottom: 0,
-      background: 'rgba(0,0,0,0.7)',
-      backdropFilter: 'blur(8px)',
-      zIndex: 10000,
+      background: isDark ? '#0f172a' : '#f8fafc',
+      zIndex: 999999,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       padding: '1rem',
+      overflowY: 'auto',
       animation: 'fadeIn 0.3s ease'
     }}>
       <div style={{
@@ -81,7 +124,10 @@ function UserDetailsForm({ onSubmit, onCancel }) {
         padding: '2rem',
         maxWidth: '500px',
         width: '100%',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+        boxShadow: isDark 
+          ? '0 20px 60px rgba(0,0,0,0.5)' 
+          : '0 20px 60px rgba(0,0,0,0.2)',
+        border: isDark ? '2px solid #334155' : '2px solid #e2e8f0',
         animation: 'slideUp 0.4s ease'
       }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
@@ -113,7 +159,7 @@ function UserDetailsForm({ onSubmit, onCancel }) {
             color: isDark ? '#94a3b8' : '#64748b',
             lineHeight: 1.6
           }}>
-            Complete your details to receive an official certificate upon passing (70%+)
+            Complete your details to receive an official certificate upon passing (55%+)
           </p>
         </div>
 
@@ -146,7 +192,18 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 borderRadius: '12px',
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
-                outline: 'none'
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+              onFocus={(e) => {
+                if (!errors.fullName) {
+                  e.target.style.borderColor = '#6366f1';
+                }
+              }}
+              onBlur={(e) => {
+                if (!errors.fullName) {
+                  e.target.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0';
+                }
               }}
             />
             {errors.fullName && (
@@ -186,7 +243,18 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 borderRadius: '12px',
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
-                outline: 'none'
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+              onFocus={(e) => {
+                if (!errors.age) {
+                  e.target.style.borderColor = '#6366f1';
+                }
+              }}
+              onBlur={(e) => {
+                if (!errors.age) {
+                  e.target.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0';
+                }
               }}
             />
             {errors.age && (
@@ -224,7 +292,18 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 borderRadius: '12px',
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
-                outline: 'none'
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+              onFocus={(e) => {
+                if (!errors.address) {
+                  e.target.style.borderColor = '#6366f1';
+                }
+              }}
+              onBlur={(e) => {
+                if (!errors.address) {
+                  e.target.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0';
+                }
               }}
             />
             {errors.address && (
@@ -262,7 +341,18 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 borderRadius: '12px',
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
-                outline: 'none'
+                outline: 'none',
+                transition: 'border-color 0.2s'
+              }}
+              onFocus={(e) => {
+                if (!errors.email) {
+                  e.target.style.borderColor = '#6366f1';
+                }
+              }}
+              onBlur={(e) => {
+                if (!errors.email) {
+                  e.target.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0';
+                }
               }}
             />
             {errors.email && (
@@ -280,14 +370,15 @@ function UserDetailsForm({ onSubmit, onCancel }) {
             padding: '1rem',
             marginBottom: '2rem',
             fontSize: '0.85rem',
-            color: isDark ? '#cbd5e1' : '#475569'
+            color: isDark ? '#cbd5e1' : '#475569',
+            lineHeight: 1.6
           }}>
             <strong style={{ color: '#6366f1', display: 'block', marginBottom: '0.5rem' }}>
               📋 Important:
             </strong>
             • Used on your certificate<br/>
-            • Certificate only for 70%+ scores<br/>
-            • One certificate per account
+            • Certificate only for 55%+ scores<br/>
+            • One certificate per month per level
           </div>
 
           {/* Buttons */}
@@ -300,11 +391,20 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 padding: '1rem',
                 borderRadius: '12px',
                 border: `2px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-                background: 'transparent',
+                background: isDark ? 'rgba(51,65,85,0.5)' : 'transparent',
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
                 fontWeight: '700',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.borderColor = '#6366f1';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.borderColor = isDark ? '#334155' : '#e2e8f0';
               }}
             >
               Cancel
@@ -321,7 +421,16 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 fontSize: '1rem',
                 fontWeight: '700',
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(99,102,241,0.3)'
+                boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(99,102,241,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(99,102,241,0.3)';
               }}
             >
               Continue

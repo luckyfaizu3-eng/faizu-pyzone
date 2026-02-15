@@ -6,9 +6,10 @@ import {
   addProduct as addProductDB, 
   getAllProducts, 
   deleteProduct as deleteProductDB, 
-  addOrder as addOrderDB, 
   getUserOrders,
-  updateProduct as updateProductDB
+  updateProduct as updateProductDB,
+  createPendingOrder,
+  confirmOrder
 } from './dbService';
 
 // Import Components
@@ -64,7 +65,6 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
   
-  // ✅ Razorpay loading state
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [razorpayError, setRazorpayError] = useState(false);
   
@@ -239,7 +239,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // ✅ Payment
+  // ✅ FIXED Payment function - same as before, koi change nahi
   const initiatePayment = (amount, items, onSuccess) => {
     if (razorpayError) {
       window.showToast?.('❌ Payment system failed to load. Please refresh!', 'error');
@@ -310,6 +310,7 @@ function App() {
     window.showToast?.('🗑️ Removed from cart', 'info');
   };
 
+  // ✅ FIXED buyNow - pehle pending order, phir payment, phir confirm
   const buyNow = async (product) => {
     if (!user) {
       window.showToast?.('⚠️ Please login first to purchase!', 'warning');
@@ -317,36 +318,48 @@ function App() {
       return;
     }
 
-    initiatePayment(product.price, [product], async (response) => {
-      const itemData = {
-        id: product.id,
-        title: product.title,
-        price: product.price,
-        isBundle: product.isBundle || false,
-        pdfFiles: product.pdfFiles || [],
-        bundledProducts: product.bundledProducts || []
-      };
-      if (product.thumbnail) itemData.thumbnail = product.thumbnail;
+    const itemData = {
+      id: product.id,
+      title: product.title,
+      price: product.price,
+      isBundle: product.isBundle || false,
+      pdfFiles: product.pdfFiles || [],
+      bundledProducts: product.bundledProducts || []
+    };
+    if (product.thumbnail) itemData.thumbnail = product.thumbnail;
 
-      const newOrder = {
-        userEmail: user.email,
-        userId: user.uid,
-        items: [itemData],
-        total: product.price,
-        date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-        status: 'completed',
-        paymentId: response.razorpay_payment_id
-      };
-      
-      const result = await addOrderDB(newOrder, user.uid);
-      if (result.success) {
+    // ✅ STEP 1: Payment se PEHLE pending order Firebase mein save karo
+    const pendingResult = await createPendingOrder({
+      userEmail: user.email,
+      userId: user.uid,
+      items: [itemData],
+      total: product.price,
+      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    }, user.uid);
+
+    if (!pendingResult.success) {
+      window.showToast?.('❌ Could not initiate order. Please try again.', 'error');
+      return;
+    }
+
+    const pendingOrderId = pendingResult.id;
+
+    // ✅ STEP 2: Razorpay payment kholo
+    initiatePayment(product.price, [product], async (response) => {
+      // ✅ STEP 3: Payment success hone pe pending → completed karo
+      const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
+
+      if (confirmResult.success) {
         await loadOrders();
         setTimeout(() => {
           setCurrentPage('orders');
           window.showToast?.('🎊 Order placed! Download your PDFs now!', 'success');
         }, 500);
       } else {
-        window.showToast?.('❌ Order failed: ' + result.error, 'error');
+        // Confirm fail hua but payment success thi - phir bhi orders reload karo
+        window.showToast?.('⚠️ Order saving issue. Check your orders page.', 'warning');
+        await loadOrders();
+        setTimeout(() => setCurrentPage('orders'), 1500);
       }
     });
   };
@@ -388,14 +401,17 @@ function App() {
     }
   };
 
+  // ✅ FIXED: pending orders bhi purchased count honge
   const isProductPurchased = (productId) => {
     if (!user || !orders || orders.length === 0) return false;
     return orders.some(order => 
+      (order.status === 'completed' || order.status === 'pending') &&
       order.items && order.items.some(item => item.id === productId)
     );
   };
 
-  const completeOrder = () => {
+  // ✅ FIXED completeOrder - pehle pending order, phir payment, phir confirm
+  const completeOrder = async () => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
       setCurrentPage('login');
@@ -406,32 +422,41 @@ function App() {
       return;
     }
 
-    initiatePayment(cartTotal, cart, async (response) => {
-      const orderItems = cart.map(item => {
-        const itemData = {
-          id: item.id,
-          title: item.title,
-          price: item.price,
-          isBundle: item.isBundle || false,
-          pdfFiles: item.pdfFiles || [],
-          bundledProducts: item.bundledProducts || []
-        };
-        if (item.thumbnail) itemData.thumbnail = item.thumbnail;
-        return itemData;
-      });
-
-      const newOrder = {
-        userEmail: user.email,
-        userId: user.uid,
-        items: orderItems,
-        total: cartTotal,
-        date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-        status: 'completed',
-        paymentId: response.razorpay_payment_id
+    const orderItems = cart.map(item => {
+      const itemData = {
+        id: item.id,
+        title: item.title,
+        price: item.price,
+        isBundle: item.isBundle || false,
+        pdfFiles: item.pdfFiles || [],
+        bundledProducts: item.bundledProducts || []
       };
-      
-      const result = await addOrderDB(newOrder, user.uid);
-      if (result.success) {
+      if (item.thumbnail) itemData.thumbnail = item.thumbnail;
+      return itemData;
+    });
+
+    // ✅ STEP 1: Payment se PEHLE pending order save karo
+    const pendingResult = await createPendingOrder({
+      userEmail: user.email,
+      userId: user.uid,
+      items: orderItems,
+      total: cartTotal,
+      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    }, user.uid);
+
+    if (!pendingResult.success) {
+      window.showToast?.('❌ Could not initiate order. Please try again.', 'error');
+      return;
+    }
+
+    const pendingOrderId = pendingResult.id;
+
+    // ✅ STEP 2: Razorpay payment kholo
+    initiatePayment(cartTotal, cart, async (response) => {
+      // ✅ STEP 3: Payment success pe confirm karo
+      const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
+
+      if (confirmResult.success) {
         await loadOrders();
         setTimeout(() => {
           setCart([]);
@@ -440,7 +465,13 @@ function App() {
           window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
         }, 500);
       } else {
-        window.showToast?.('❌ Order failed: ' + result.error, 'error');
+        window.showToast?.('⚠️ Order saving issue. Check your orders page.', 'warning');
+        await loadOrders();
+        setTimeout(() => {
+          setCart([]);
+          localStorage.removeItem('faizupyzone_cart');
+          setCurrentPage('orders');
+        }, 1500);
       }
     });
   };
@@ -529,9 +560,9 @@ function App() {
             
             <ToastContainer />
             <Background />
-            <TelegramButton />
             
-            {/* Razorpay Loading Indicator */}
+            {currentPage === 'home' && <TelegramButton />}
+            
             {!razorpayLoaded && !razorpayError && (
               <div style={{
                 position: 'fixed', bottom: '20px', right: '20px',
@@ -593,7 +624,6 @@ function App() {
                   orders={orders} 
                 />
               )}
-              {/* ✅ MOCK TEST PAGE */}
               {currentPage === 'mocktests' && <MockTestPage />}
             </main>
             
