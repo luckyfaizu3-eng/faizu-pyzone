@@ -264,7 +264,7 @@ class FullscreenManager {
 }
 
 // ==========================================
-// 🔒 ENHANCED SECURITY MANAGER
+// 🔒 ENHANCED SECURITY MANAGER (FIXED BLUR)
 // ==========================================
 class SecurityManager {
   constructor(onWarning, onAutoSubmit) {
@@ -272,6 +272,8 @@ class SecurityManager {
     this.onAutoSubmit = onAutoSubmit;
     this.violationCount = 0;
     this.maxViolations = 5;
+    this.lastBlurTime = 0;
+    this.blurCheckDelay = 500; // 500ms delay to prevent false positives
     
     this.handlers = {
       // Prevent copy/cut/paste
@@ -345,13 +347,6 @@ class SecurityManager {
       beforeprint: (e) => {
         e.preventDefault();
         this.recordViolation('⚠️ Printing disabled!');
-      },
-      
-      // Detect blur (window losing focus)
-      blur: (e) => {
-        if (document.activeElement === document.body) {
-          this.onWarning('⚠️ Focus on test window!');
-        }
       }
     };
   }
@@ -372,11 +367,7 @@ class SecurityManager {
 
   enable() {
     Object.entries(this.handlers).forEach(([event, handler]) => {
-      if (event === 'blur') {
-        window.addEventListener(event, handler, true);
-      } else {
-        document.addEventListener(event, handler, true);
-      }
+      document.addEventListener(event, handler, true);
     });
     
     // Disable text selection via CSS
@@ -391,11 +382,7 @@ class SecurityManager {
 
   disable() {
     Object.entries(this.handlers).forEach(([event, handler]) => {
-      if (event === 'blur') {
-        window.removeEventListener(event, handler, true);
-      } else {
-        document.removeEventListener(event, handler, true);
-      }
+      document.removeEventListener(event, handler, true);
     });
     
     // Restore text selection
@@ -430,7 +417,7 @@ class SecurityManager {
 }
 
 // ==========================================
-// 📋 INSTRUCTION SCREEN
+// 📋 INSTRUCTION SCREEN (MOBILE OPTIMIZED)
 // ==========================================
 function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
   const [accepted, setAccepted] = useState(false);
@@ -488,9 +475,18 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
 
   return (
     <div style={{
-      minHeight: '100vh', background: '#f8fafc',
-      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-      padding: '1rem', overflowY: 'auto'
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: '#f8fafc',
+      display: 'flex',
+      alignItems: 'flex-start',
+      justifyContent: 'center',
+      padding: '1rem',
+      overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch'
     }}>
       <div style={{ width: '100%', maxWidth: '680px', padding: '1rem 0' }}>
         <div style={{
@@ -605,7 +601,7 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions }) {
 }
 
 // ==========================================
-// 🎮 MAIN TEST INTERFACE
+// 🎮 MAIN TEST INTERFACE (MOBILE OPTIMIZED)
 // ==========================================
 function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail, studentInfo }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
@@ -897,6 +893,7 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
         background: '#f8fafc',
         zIndex: 999999, 
         overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
         userSelect: isAdmin ? 'auto' : 'none',
         width: '100vw',
         height: '100vh',

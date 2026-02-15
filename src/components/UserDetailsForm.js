@@ -112,10 +112,14 @@ function UserDetailsForm({ onSubmit, onCancel }) {
       background: isDark ? '#0f172a' : '#f8fafc',
       zIndex: 999999,
       display: 'flex',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'center',
       padding: '1rem',
+      paddingTop: '2rem',
+      paddingBottom: '2rem',
       overflowY: 'auto',
+      overflowX: 'hidden',
+      WebkitOverflowScrolling: 'touch',
       animation: 'fadeIn 0.3s ease'
     }}>
       <div style={{
@@ -124,6 +128,7 @@ function UserDetailsForm({ onSubmit, onCancel }) {
         padding: '2rem',
         maxWidth: '500px',
         width: '100%',
+        margin: 'auto',
         boxShadow: isDark 
           ? '0 20px 60px rgba(0,0,0,0.5)' 
           : '0 20px 60px rgba(0,0,0,0.2)',
@@ -193,7 +198,8 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
                 outline: 'none',
-                transition: 'border-color 0.2s'
+                transition: 'border-color 0.2s',
+                boxSizing: 'border-box'
               }}
               onFocus={(e) => {
                 if (!errors.fullName) {
@@ -244,7 +250,8 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
                 outline: 'none',
-                transition: 'border-color 0.2s'
+                transition: 'border-color 0.2s',
+                boxSizing: 'border-box'
               }}
               onFocus={(e) => {
                 if (!errors.age) {
@@ -293,7 +300,8 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
                 outline: 'none',
-                transition: 'border-color 0.2s'
+                transition: 'border-color 0.2s',
+                boxSizing: 'border-box'
               }}
               onFocus={(e) => {
                 if (!errors.address) {
@@ -342,7 +350,8 @@ function UserDetailsForm({ onSubmit, onCancel }) {
                 color: isDark ? '#e2e8f0' : '#1e293b',
                 fontSize: '1rem',
                 outline: 'none',
-                transition: 'border-color 0.2s'
+                transition: 'border-color 0.2s',
+                boxSizing: 'border-box'
               }}
               onFocus={(e) => {
                 if (!errors.email) {

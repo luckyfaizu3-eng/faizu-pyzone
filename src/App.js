@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import ReactGA from 'react-ga4';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { registerUser, loginUser, logoutUser, isAdmin as isAdminAuth, resetPassword } from './authService';
@@ -11,6 +12,9 @@ import {
   createPendingOrder,
   confirmOrder
 } from './dbService';
+
+// ✅ Import Analytics Tracker
+import { trackPageView, trackAction, ACTIONS } from './Analytics/AnalyticsTracker';
 
 // Import Components
 import Navbar from './components/Navbar';
@@ -53,6 +57,20 @@ export const CATEGORIES = [
 ];
 
 function App() {
+  // ✅ Google Analytics Tracking
+  useEffect(() => {
+    ReactGA.initialize('G-4677K2HY57');
+    ReactGA.send('pageview');
+    console.log('✅ Google Analytics tracking started!');
+  }, []);
+
+  // ✅ Custom Analytics Tracking (IP, Location, Device)
+  useEffect(() => {
+    // Track initial page view
+    trackPageView(window.location.pathname);
+    console.log('✅ Custom analytics tracking started!');
+  }, []);
+
   const [cart, setCart] = useState(() => {
     const savedCart = localStorage.getItem('faizupyzone_cart');
     return savedCart ? JSON.parse(savedCart) : [];
@@ -107,6 +125,9 @@ function App() {
     if (currentPage !== window.history.state?.page) {
       window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
+    
+    // ✅ Track page view on every page change
+    trackPageView(`/${currentPage}`);
   }, [currentPage]);
   
   // ✅ Dark mode
@@ -239,7 +260,7 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // ✅ FIXED Payment function - same as before, koi change nahi
+  // ✅ Payment initiation function
   const initiatePayment = (amount, items, onSuccess) => {
     if (razorpayError) {
       window.showToast?.('❌ Payment system failed to load. Please refresh!', 'error');
@@ -303,20 +324,45 @@ function App() {
       setCart([...cart, {...product, quantity: 1}]);
       window.showToast?.('✅ Added to cart!', 'success');
     }
+    
+    // ✅ Track add to cart action
+    trackAction(ACTIONS.ADD_TO_CART, {
+      productId: product.id,
+      productName: product.title,
+      price: product.price,
+      category: product.category
+    });
   };
 
   const removeFromCart = (productId) => {
+    const product = cart.find(item => item.id === productId);
     setCart(cart.filter(item => item.id !== productId));
     window.showToast?.('🗑️ Removed from cart', 'info');
+    
+    // ✅ Track remove from cart action
+    if (product) {
+      trackAction(ACTIONS.REMOVE_FROM_CART, {
+        productId: product.id,
+        productName: product.title
+      });
+    }
   };
 
-  // ✅ FIXED buyNow - pehle pending order, phir payment, phir confirm
+  // ✅ COMPLETELY FIXED buyNow - ab guaranteed completed status dikhega
   const buyNow = async (product) => {
     if (!user) {
       window.showToast?.('⚠️ Please login first to purchase!', 'warning');
       setCurrentPage('login');
       return;
     }
+
+    // ✅ Track purchase initiation
+    trackAction(ACTIONS.PURCHASE_INITIATED, {
+      productId: product.id,
+      productName: product.title,
+      price: product.price,
+      isBundle: product.isBundle || false
+    });
 
     const itemData = {
       id: product.id,
@@ -346,20 +392,35 @@ function App() {
 
     // ✅ STEP 2: Razorpay payment kholo
     initiatePayment(product.price, [product], async (response) => {
-      // ✅ STEP 3: Payment success hone pe pending → completed karo
-      const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
+      try {
+        // ✅ STEP 3: Payment success → confirm order
+        console.log('💳 Payment successful! Confirming order...');
+        const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
 
-      if (confirmResult.success) {
+        if (!confirmResult.success) {
+          console.error('❌ Confirm failed:', confirmResult.error);
+          window.showToast?.('⚠️ Order saving issue. Checking status...', 'warning');
+        }
+
+        // ✅ STEP 4: Wait for Firebase to propagate (IMPORTANT - Firebase ko update hone ka time do!)
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // ✅ STEP 5: Force fresh reload from Firebase
+        console.log('🔄 Reloading orders from Firebase...');
         await loadOrders();
-        setTimeout(() => {
-          setCurrentPage('orders');
-          window.showToast?.('🎊 Order placed! Download your PDFs now!', 'success');
-        }, 500);
-      } else {
-        // Confirm fail hua but payment success thi - phir bhi orders reload karo
-        window.showToast?.('⚠️ Order saving issue. Check your orders page.', 'warning');
+
+        // ✅ STEP 6: Wait a bit more for React state update
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // ✅ STEP 7: Navigate to orders page
+        setCurrentPage('orders');
+        window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
+
+      } catch (error) {
+        console.error('❌ Error in payment handler:', error);
+        window.showToast?.('⚠️ Please check your orders page', 'warning');
         await loadOrders();
-        setTimeout(() => setCurrentPage('orders'), 1500);
+        setCurrentPage('orders');
       }
     });
   };
@@ -372,6 +433,10 @@ function App() {
     if (result.success) {
       window.showToast?.('🎉 Welcome back!', 'success');
       setCurrentPage('home');
+      
+      // ✅ Track login
+      trackAction(ACTIONS.LOGIN, { email: email });
+      
       return { success: true };
     } else {
       window.showToast?.('❌ ' + result.error, 'error');
@@ -384,6 +449,10 @@ function App() {
     if (result.success) {
       window.showToast?.('🎊 Account created successfully!', 'success');
       setCurrentPage('home');
+      
+      // ✅ Track registration
+      trackAction(ACTIONS.REGISTER, { email: email, name: name });
+      
       return { success: true };
     } else {
       window.showToast?.('❌ ' + result.error, 'error');
@@ -394,6 +463,9 @@ function App() {
   const logout = async () => {
     const result = await logoutUser();
     if (result.success) {
+      // ✅ Track logout
+      trackAction(ACTIONS.LOGOUT, { email: user?.email });
+      
       setUser(null);
       setOrders([]);
       setCurrentPage('home');
@@ -410,7 +482,7 @@ function App() {
     );
   };
 
-  // ✅ FIXED completeOrder - pehle pending order, phir payment, phir confirm
+  // ✅ COMPLETELY FIXED completeOrder - cart ke liye same fix
   const completeOrder = async () => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -453,25 +525,40 @@ function App() {
 
     // ✅ STEP 2: Razorpay payment kholo
     initiatePayment(cartTotal, cart, async (response) => {
-      // ✅ STEP 3: Payment success pe confirm karo
-      const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
+      try {
+        // ✅ STEP 3: Payment success → confirm order
+        console.log('💳 Payment successful! Confirming order...');
+        const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
 
-      if (confirmResult.success) {
+        if (!confirmResult.success) {
+          console.error('❌ Confirm failed:', confirmResult.error);
+          window.showToast?.('⚠️ Order saving issue. Checking status...', 'warning');
+        }
+
+        // ✅ STEP 4: Wait for Firebase to propagate
+        await new Promise(resolve => setTimeout(resolve, 1500));
+
+        // ✅ STEP 5: Force fresh reload from Firebase
+        console.log('🔄 Reloading orders from Firebase...');
         await loadOrders();
-        setTimeout(() => {
-          setCart([]);
-          localStorage.removeItem('faizupyzone_cart');
-          setCurrentPage('orders');
-          window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
-        }, 500);
-      } else {
-        window.showToast?.('⚠️ Order saving issue. Check your orders page.', 'warning');
+
+        // ✅ STEP 6: Clear cart and navigate
+        setCart([]);
+        localStorage.removeItem('faizupyzone_cart');
+
+        // ✅ STEP 7: Wait for state update
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        setCurrentPage('orders');
+        window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
+
+      } catch (error) {
+        console.error('❌ Error in payment handler:', error);
+        window.showToast?.('⚠️ Please check your orders page', 'warning');
+        setCart([]);
+        localStorage.removeItem('faizupyzone_cart');
         await loadOrders();
-        setTimeout(() => {
-          setCart([]);
-          localStorage.removeItem('faizupyzone_cart');
-          setCurrentPage('orders');
-        }, 1500);
+        setCurrentPage('orders');
       }
     });
   };

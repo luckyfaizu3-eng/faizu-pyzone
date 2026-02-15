@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader, Edit, Save, Zap, Search, Brain } from 'lucide-react';
+import { Upload, Trash2, X, Plus, Package, BarChart, FileText, Image as ImageIcon, Loader, Edit, Save, Zap, Search, Brain, TrendingUp } from 'lucide-react';
 import { uploadPDF, uploadImage } from '../supabaseUpload';
 import { auth } from '../firebase';
 import { db } from '../firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import ConfirmModal from '../components/ConfirmModal';
 import AdminQuestions from './AdminQuestions';
+import AdminOrdersManager from './AdminOrdersManager';
+import AdminAnalytics from './AdminAnalytics';
 
 function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -16,6 +18,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const [isBundle, setIsBundle] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
+  
+  // ✅ Mobile Detection
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   
   // ✅ Tab State
   const [activeTab, setActiveTab] = useState('products');
@@ -50,7 +55,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
     discount: '',
     itemsIncluded: '',
     previewPageCount: '3',
-    discountPercent: '' // ✅ Individual product discount
+    discountPercent: ''
   });
 
   useEffect(() => {
@@ -58,6 +63,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       setCurrentUser(user);
       console.log('👤 Current user:', user?.email);
     });
+    
+    // ✅ Mobile resize listener
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    window.addEventListener('resize', handleResize);
     
     // ✅ Load PDF.js library for preview generation
     if (!window.pdfjsLib) {
@@ -71,7 +83,10 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       document.head.appendChild(script);
     }
     
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   // ✅ Start Editing Product
@@ -620,20 +635,21 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
   const tabs = [
     { id: 'products', label: 'Products', icon: Package, count: products.length },
     { id: 'questions', label: 'Questions', icon: Brain },
+    { id: 'analytics', label: 'Analytics', icon: TrendingUp },
     { id: 'orders', label: 'Orders', icon: BarChart, count: orders.length },
   ];
 
   return (
     <div style={{
-      paddingTop: '100px',
+      paddingTop: isMobile ? '80px' : '100px',
       minHeight: '100vh',
-      padding: '100px 1.5rem 5rem'
+      padding: isMobile ? '80px 1rem 3rem' : '100px 1.5rem 5rem'
     }}>
       <h1 style={{
-        fontSize: 'clamp(2.5rem, 6vw, 4rem)',
+        fontSize: isMobile ? 'clamp(2rem, 8vw, 3rem)' : 'clamp(2.5rem, 6vw, 4rem)',
         fontWeight: '900',
         textAlign: 'center',
-        marginBottom: '3rem',
+        marginBottom: isMobile ? '2rem' : '3rem',
         background: 'linear-gradient(135deg, #6366f1, #ec4899)',
         WebkitBackgroundClip: 'text',
         WebkitTextFillColor: 'transparent'
@@ -650,7 +666,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
           border: '1px solid rgba(99,102,241,0.3)',
           borderRadius: '12px',
           textAlign: 'center',
-          fontSize: '1rem',
+          fontSize: isMobile ? '0.9rem' : '1rem',
           color: '#6366f1',
           fontWeight: '600'
         }}>
@@ -661,10 +677,10 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       {/* Stats Dashboard */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-        gap: '2rem',
+        gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: isMobile ? '1rem' : '2rem',
         maxWidth: '1400px',
-        margin: '0 auto 3rem'
+        margin: isMobile ? '0 auto 2rem' : '0 auto 3rem'
       }}>
         {[
           { icon: FileText, label: 'Total Products', value: products.length, color: '#6366f1' },
@@ -676,25 +692,27 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
             background: '#ffffff',
             border: '1px solid #e2e8f0',
             borderRadius: '20px',
-            padding: '2rem',
+            padding: isMobile ? '1.25rem' : '2rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '1.5rem',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
+            gap: isMobile ? '1rem' : '1.5rem',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
+            flexDirection: isMobile ? 'column' : 'row',
+            textAlign: isMobile ? 'center' : 'left'
           }}>
             <div style={{
               background: `${stat.color}15`,
               borderRadius: '14px',
-              padding: '1rem',
+              padding: isMobile ? '0.75rem' : '1rem',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              <stat.icon size={32} color={stat.color} />
+              <stat.icon size={isMobile ? 24 : 32} color={stat.color} />
             </div>
             <div>
               <div style={{
-                fontSize: '0.95rem',
+                fontSize: isMobile ? '0.85rem' : '0.95rem',
                 color: '#64748b',
                 marginBottom: '0.25rem',
                 fontWeight: '600'
@@ -702,7 +720,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 {stat.label}
               </div>
               <div style={{
-                fontSize: '2rem',
+                fontSize: isMobile ? '1.5rem' : '2rem',
                 fontWeight: '900',
                 color: '#1e293b'
               }}>
@@ -716,13 +734,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       {/* ✅ Tab Navigation */}
       <div style={{
         maxWidth: '1400px',
-        margin: '0 auto 3rem',
+        margin: isMobile ? '0 auto 2rem' : '0 auto 3rem',
         display: 'flex',
         gap: '0.75rem',
         background: '#f1f5f9',
         padding: '0.5rem',
         borderRadius: '16px',
-        width: 'fit-content'
+        width: 'fit-content',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch'
       }}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
@@ -736,8 +756,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   : 'transparent',
                 border: 'none',
                 color: isActive ? '#ffffff' : '#94a3b8',
-                padding: '0.85rem 1.75rem',
-                fontSize: '1rem',
+                padding: isMobile ? '0.7rem 1.25rem' : '0.85rem 1.75rem',
+                fontSize: isMobile ? '0.85rem' : '1rem',
                 borderRadius: '12px',
                 cursor: 'pointer',
                 fontWeight: '700',
@@ -761,7 +781,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 }
               }}
             >
-              <tab.icon size={20} />
+              <tab.icon size={isMobile ? 18 : 20} />
               {tab.label}
               {tab.count !== undefined && (
                 <span style={{
@@ -788,7 +808,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
           {/* Action Button */}
           <div style={{
             maxWidth: '1400px',
-            margin: '0 auto 3rem',
+            margin: isMobile ? '0 auto 2rem' : '0 auto 3rem',
             display: 'flex',
             justifyContent: 'center'
           }}>
@@ -808,8 +828,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 background: 'linear-gradient(135deg, #6366f1, #ec4899)',
                 border: 'none',
                 color: 'white',
-                padding: '1.25rem 3rem',
-                fontSize: '1.25rem',
+                padding: isMobile ? '1rem 2rem' : '1.25rem 3rem',
+                fontSize: isMobile ? '1rem' : '1.25rem',
                 borderRadius: '16px',
                 cursor: 'pointer',
                 fontWeight: '700',
@@ -839,14 +859,14 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               background: '#ffffff',
               border: '1px solid #e2e8f0',
               borderRadius: '24px',
-              padding: '3rem',
+              padding: isMobile ? '2rem' : '3rem',
               maxWidth: '800px',
-              margin: '0 auto 3rem',
+              margin: isMobile ? '0 auto 2rem' : '0 auto 3rem',
               boxShadow: '0 10px 40px rgba(0,0,0,0.08)',
               animation: 'slideDown 0.4s ease'
             }}>
               <h2 style={{
-                fontSize: '2rem',
+                fontSize: isMobile ? '1.5rem' : '2rem',
                 fontWeight: '900',
                 marginBottom: '2rem',
                 color: '#1e293b',
@@ -856,12 +876,12 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               }}>
                 {editMode ? (
                   <>
-                    <Edit size={32} color="#6366f1" />
+                    <Edit size={isMobile ? 24 : 32} color="#6366f1" />
                     Edit Product
                   </>
                 ) : (
                   <>
-                    <Plus size={32} color="#6366f1" />
+                    <Plus size={isMobile ? 24 : 32} color="#6366f1" />
                     Upload Product
                   </>
                 )}
@@ -872,19 +892,21 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 background: 'rgba(99,102,241,0.05)',
                 border: '1px solid rgba(99,102,241,0.2)',
                 borderRadius: '12px',
-                padding: '1.5rem',
+                padding: isMobile ? '1rem' : '1.5rem',
                 marginBottom: '2rem',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'space-between'
+                justifyContent: 'space-between',
+                flexWrap: isMobile ? 'wrap' : 'nowrap',
+                gap: isMobile ? '1rem' : '0'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: isMobile ? '1 1 100%' : 'auto' }}>
                   <Package size={24} color="#6366f1" />
                   <div>
-                    <div style={{ fontWeight: '700', color: '#1e293b', fontSize: '1.1rem' }}>
+                    <div style={{ fontWeight: '700', color: '#1e293b', fontSize: isMobile ? '1rem' : '1.1rem' }}>
                       Create Bundle Package
                     </div>
-                    <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                    <div style={{ fontSize: isMobile ? '0.85rem' : '0.9rem', color: '#64748b' }}>
                       Select multiple products to bundle together
                     </div>
                   </div>
@@ -929,7 +951,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               <form onSubmit={editMode ? handleUpdateProduct : handleSubmit} style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '1.5rem'
+                gap: isMobile ? '1rem' : '1.5rem'
               }}>
                 <input
                   type="text"
@@ -941,7 +963,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     padding: '1rem',
                     border: '2px solid #e2e8f0',
                     borderRadius: '12px',
-                    fontSize: '1.05rem',
+                    fontSize: isMobile ? '0.95rem' : '1.05rem',
                     outline: 'none',
                     transition: 'border-color 0.3s'
                   }}
@@ -950,7 +972,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 />
 
                 {/* ✅ Category Selection */}
-                <div style={{ display: 'grid', gridTemplateColumns: formData.category === 'custom' ? '1fr 1fr' : '1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: formData.category === 'custom' && !isMobile ? '1fr 1fr' : '1fr', gap: '1rem' }}>
                   <select
                     value={formData.category}
                     onChange={(e) => setFormData({...formData, category: e.target.value})}
@@ -959,7 +981,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       padding: '1rem',
                       border: '2px solid #e2e8f0',
                       borderRadius: '12px',
-                      fontSize: '1.05rem',
+                      fontSize: isMobile ? '0.95rem' : '1.05rem',
                       outline: 'none'
                     }}
                   >
@@ -986,7 +1008,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         padding: '1rem',
                         border: '2px solid #e2e8f0',
                         borderRadius: '12px',
-                        fontSize: '1.05rem'
+                        fontSize: isMobile ? '0.95rem' : '1.05rem'
                       }}
                     />
                   )}
@@ -998,16 +1020,18 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     background: 'rgba(16,185,129,0.05)',
                     border: '2px solid rgba(16,185,129,0.2)',
                     borderRadius: '12px',
-                    padding: '1.5rem'
+                    padding: isMobile ? '1rem' : '1.5rem'
                   }}>
                     <div style={{
-                      fontSize: '1.1rem',
+                      fontSize: isMobile ? '1rem' : '1.1rem',
                       fontWeight: '700',
                       color: '#10b981',
                       marginBottom: '1rem',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between'
+                      justifyContent: 'space-between',
+                      flexWrap: 'wrap',
+                      gap: '0.5rem'
                     }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Package size={20} /> Bundle Configuration
@@ -1022,7 +1046,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           padding: '0.5rem 1rem',
                           borderRadius: '8px',
                           cursor: 'pointer',
-                          fontSize: '0.9rem',
+                          fontSize: isMobile ? '0.85rem' : '0.9rem',
                           fontWeight: '600'
                         }}
                       >
@@ -1038,7 +1062,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         background: '#ffffff',
                         borderRadius: '8px'
                       }}>
-                        <div style={{ fontSize: '0.9rem', fontWeight: '600', color: '#64748b', marginBottom: '0.5rem' }}>
+                        <div style={{ fontSize: isMobile ? '0.85rem' : '0.9rem', fontWeight: '600', color: '#64748b', marginBottom: '0.5rem' }}>
                           Selected Products ({selectedProducts.length})
                         </div>
                         {selectedProducts.map(product => (
@@ -1049,7 +1073,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                             padding: '0.5rem',
                             borderBottom: '1px solid #e2e8f0'
                           }}>
-                            <span style={{ fontSize: '0.9rem' }}>{product.title}</span>
+                            <span style={{ fontSize: isMobile ? '0.85rem' : '0.9rem' }}>{product.title}</span>
                             <span style={{ fontWeight: '700', color: '#10b981' }}>₹{product.price}</span>
                           </div>
                         ))}
@@ -1060,7 +1084,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           borderRadius: '6px',
                           display: 'flex',
                           justifyContent: 'space-between',
-                          fontWeight: '700'
+                          fontWeight: '700',
+                          fontSize: isMobile ? '0.9rem' : '1rem'
                         }}>
                           <span>Total Original Price:</span>
                           <span style={{ color: '#10b981' }}>
@@ -1100,16 +1125,16 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                               style={{ marginRight: '1rem' }}
                             />
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: '600', fontSize: '0.9rem' }}>{product.title}</div>
-                              <div style={{ fontSize: '0.8rem', color: '#64748b' }}>{product.category}</div>
+                              <div style={{ fontWeight: '600', fontSize: isMobile ? '0.85rem' : '0.9rem' }}>{product.title}</div>
+                              <div style={{ fontSize: isMobile ? '0.75rem' : '0.8rem', color: '#64748b' }}>{product.category}</div>
                             </div>
-                            <div style={{ fontWeight: '700', color: '#6366f1' }}>₹{product.price}</div>
+                            <div style={{ fontWeight: '700', color: '#6366f1', fontSize: isMobile ? '0.9rem' : '1rem' }}>₹{product.price}</div>
                           </label>
                         ))}
                       </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                       <input
                         type="number"
                         placeholder="Discount % *"
@@ -1122,7 +1147,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           padding: '1rem',
                           border: '2px solid #e2e8f0',
                           borderRadius: '12px',
-                          fontSize: '1.05rem'
+                          fontSize: isMobile ? '0.95rem' : '1.05rem'
                         }}
                       />
                       <div style={{
@@ -1134,7 +1159,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontWeight: '900',
-                        fontSize: '1.2rem',
+                        fontSize: isMobile ? '1rem' : '1.2rem',
                         color: '#10b981'
                       }}>
                         ₹{calculateBundlePrice() || '0'}
@@ -1152,7 +1177,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         padding: '1rem',
                         border: '2px solid #e2e8f0',
                         borderRadius: '12px',
-                        fontSize: '1.05rem',
+                        fontSize: isMobile ? '0.95rem' : '1.05rem',
                         marginTop: '1rem',
                         resize: 'vertical',
                         boxSizing: 'border-box'
@@ -1166,9 +1191,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       background: 'rgba(99,102,241,0.05)',
                       border: '1px solid rgba(99,102,241,0.2)',
                       borderRadius: '12px',
-                      padding: '1.5rem'
+                      padding: isMobile ? '1rem' : '1.5rem'
                     }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                         <input
                           type="number"
                           placeholder="Price (₹) *"
@@ -1179,7 +1204,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                             padding: '1rem',
                             border: '2px solid #e2e8f0',
                             borderRadius: '12px',
-                            fontSize: '1.05rem'
+                            fontSize: isMobile ? '0.95rem' : '1.05rem'
                           }}
                         />
                         <input
@@ -1193,7 +1218,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                             padding: '1rem',
                             border: '2px solid #e2e8f0',
                             borderRadius: '12px',
-                            fontSize: '1.05rem'
+                            fontSize: isMobile ? '0.95rem' : '1.05rem'
                           }}
                         />
                       </div>
@@ -1205,16 +1230,18 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           borderRadius: '8px',
                           display: 'flex',
                           justifyContent: 'space-between',
-                          alignItems: 'center'
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '0.5rem'
                         }}>
-                          <span style={{ color: '#64748b', textDecoration: 'line-through' }}>₹{formData.price}</span>
+                          <span style={{ color: '#64748b', textDecoration: 'line-through', fontSize: isMobile ? '0.9rem' : '1rem' }}>₹{formData.price}</span>
                           <span style={{
-                            fontSize: '1.5rem',
+                            fontSize: isMobile ? '1.2rem' : '1.5rem',
                             fontWeight: '900',
                             color: '#10b981'
                           }}>
                             ₹{calculateDiscountedPrice()}
-                            <span style={{ fontSize: '0.9rem', marginLeft: '0.5rem', color: '#6366f1' }}>
+                            <span style={{ fontSize: isMobile ? '0.8rem' : '0.9rem', marginLeft: '0.5rem', color: '#6366f1' }}>
                               ({formData.discountPercent}% OFF)
                             </span>
                           </span>
@@ -1234,12 +1261,12 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     padding: '1rem',
                     border: '2px solid #e2e8f0',
                     borderRadius: '12px',
-                    fontSize: '1.05rem',
+                    fontSize: isMobile ? '0.95rem' : '1.05rem',
                     resize: 'vertical'
                   }}
                 />
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem' }}>
                   <input
                     type="number"
                     placeholder="Pages"
@@ -1249,7 +1276,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       padding: '1rem',
                       border: '2px solid #e2e8f0',
                       borderRadius: '12px',
-                      fontSize: '1.05rem'
+                      fontSize: isMobile ? '0.95rem' : '1.05rem'
                     }}
                   />
                   <input
@@ -1261,7 +1288,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       padding: '1rem',
                       border: '2px solid #e2e8f0',
                       borderRadius: '12px',
-                      fontSize: '1.05rem'
+                      fontSize: isMobile ? '0.95rem' : '1.05rem'
                     }}
                   />
                 </div>
@@ -1272,7 +1299,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     <label style={{
                       display: 'block',
                       marginBottom: '0.75rem',
-                      fontSize: '1.05rem',
+                      fontSize: isMobile ? '0.95rem' : '1.05rem',
                       fontWeight: '700',
                       color: '#1e293b'
                     }}>
@@ -1294,14 +1321,14 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           border: '1px solid rgba(99,102,241,0.2)',
                           borderRadius: '8px'
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <FileText size={20} color="#6366f1" />
-                            <div>
-                              <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+                            <FileText size={20} color="#6366f1" style={{ flexShrink: 0 }} />
+                            <div style={{ minWidth: 0 }}>
+                              <div style={{ fontWeight: '600', color: '#1e293b', fontSize: isMobile ? '0.85rem' : '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {pdf.fileName}
                               </div>
                               {pdf.size && (
-                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                <div style={{ fontSize: isMobile ? '0.75rem' : '0.8rem', color: '#64748b' }}>
                                   {pdf.size}
                                 </div>
                               )}
@@ -1317,7 +1344,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                               padding: '0.5rem',
                               cursor: 'pointer',
                               display: 'flex',
-                              alignItems: 'center'
+                              alignItems: 'center',
+                              flexShrink: 0
                             }}
                           >
                             <X size={16} color="#ef4444" />
@@ -1334,7 +1362,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     <label style={{
                       display: 'block',
                       marginBottom: '0.75rem',
-                      fontSize: '1.05rem',
+                      fontSize: isMobile ? '0.95rem' : '1.05rem',
                       fontWeight: '700',
                       color: '#1e293b'
                     }}>
@@ -1359,13 +1387,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                             border: '1px solid rgba(16,185,129,0.2)',
                             borderRadius: '8px'
                           }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <FileText size={20} color="#10b981" />
-                              <div>
-                                <div style={{ fontWeight: '600', color: '#1e293b', fontSize: '0.9rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: 0 }}>
+                              <FileText size={20} color="#10b981" style={{ flexShrink: 0 }} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontWeight: '600', color: '#1e293b', fontSize: isMobile ? '0.85rem' : '0.9rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                   {file.name}
                                 </div>
-                                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                                <div style={{ fontSize: isMobile ? '0.75rem' : '0.8rem', color: '#64748b' }}>
                                   {(file.size / 1024 / 1024).toFixed(2)} MB
                                 </div>
                               </div>
@@ -1380,7 +1408,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                                 padding: '0.5rem',
                                 cursor: 'pointer',
                                 display: 'flex',
-                                alignItems: 'center'
+                                alignItems: 'center',
+                                flexShrink: 0
                               }}
                             >
                               <X size={16} color="#ef4444" />
@@ -1394,7 +1423,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '1rem',
-                      padding: '1.5rem',
+                      padding: isMobile ? '1rem' : '1.5rem',
                       border: '2px dashed #cbd5e1',
                       borderRadius: '12px',
                       cursor: 'pointer',
@@ -1404,12 +1433,12 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
                     onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
                     >
-                      <Upload size={24} color={pdfFiles.length > 0 ? '#10b981' : '#64748b'} />
+                      <Upload size={24} color={pdfFiles.length > 0 ? '#10b981' : '#64748b'} style={{ flexShrink: 0 }} />
                       <div>
-                        <div style={{ fontWeight: '600', color: '#1e293b' }}>
+                        <div style={{ fontWeight: '600', color: '#1e293b', fontSize: isMobile ? '0.9rem' : '1rem' }}>
                           {pdfFiles.length > 0 ? `✅ ${pdfFiles.length} PDF(s) selected` : 'Click to upload PDFs'}
                         </div>
-                        <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                        <div style={{ fontSize: isMobile ? '0.85rem' : '0.9rem', color: '#64748b' }}>
                           You can select multiple PDF files
                         </div>
                       </div>
@@ -1429,7 +1458,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                   <label style={{
                     display: 'block',
                     marginBottom: '0.75rem',
-                    fontSize: '1.05rem',
+                    fontSize: isMobile ? '0.95rem' : '1.05rem',
                     fontWeight: '700',
                     color: '#1e293b'
                   }}>
@@ -1439,22 +1468,23 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '1rem',
-                    padding: '1.5rem',
+                    padding: isMobile ? '1rem' : '1.5rem',
                     border: '2px dashed #cbd5e1',
                     borderRadius: '12px',
                     cursor: 'pointer',
                     transition: 'all 0.3s ease',
-                    background: thumbnailPreview ? 'rgba(16,185,129,0.05)' : 'transparent'
+                    background: thumbnailPreview ? 'rgba(16,185,129,0.05)' : 'transparent',
+                    flexWrap: isMobile ? 'wrap' : 'nowrap'
                   }}
                   onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6366f1'}
                   onMouseLeave={(e) => e.currentTarget.style.borderColor = '#cbd5e1'}
                   >
-                    <ImageIcon size={24} color={thumbnailPreview ? '#10b981' : '#64748b'} />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: '600', color: '#1e293b' }}>
+                    <ImageIcon size={24} color={thumbnailPreview ? '#10b981' : '#64748b'} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: '600', color: '#1e293b', fontSize: isMobile ? '0.9rem' : '1rem' }}>
                         {thumbnailFile ? `✅ ${thumbnailFile.name}` : (thumbnailPreview ? '✅ Current thumbnail' : 'Click to upload thumbnail')}
                       </div>
-                      <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
+                      <div style={{ fontSize: isMobile ? '0.85rem' : '0.9rem', color: '#64748b' }}>
                         PNG, JPG (recommended: 400x300px)
                       </div>
                     </div>
@@ -1466,7 +1496,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           width: '80px',
                           height: '60px',
                           objectFit: 'cover',
-                          borderRadius: '8px'
+                          borderRadius: '8px',
+                          flexShrink: 0
                         }}
                       />
                     )}
@@ -1485,13 +1516,13 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     background: 'rgba(139,92,246,0.05)',
                     border: '2px solid rgba(139,92,246,0.2)',
                     borderRadius: '16px',
-                    padding: '2rem'
+                    padding: isMobile ? '1.5rem' : '2rem'
                   }}>
                     <div style={{
                       marginBottom: '1.5rem'
                     }}>
                       <h3 style={{
-                        fontSize: '1.2rem',
+                        fontSize: isMobile ? '1rem' : '1.2rem',
                         fontWeight: '700',
                         color: '#8b5cf6',
                         marginBottom: '0.5rem',
@@ -1499,11 +1530,11 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         alignItems: 'center',
                         gap: '0.5rem'
                       }}>
-                        <FileText size={24} />
+                        <FileText size={isMobile ? 20 : 24} />
                         Preview Pages Setup
                       </h3>
                       <p style={{
-                        fontSize: '0.9rem',
+                        fontSize: isMobile ? '0.85rem' : '0.9rem',
                         color: '#64748b',
                         margin: 0
                       }}>
@@ -1526,10 +1557,12 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
-                          marginBottom: '1rem'
+                          marginBottom: '1rem',
+                          flexWrap: 'wrap',
+                          gap: '0.5rem'
                         }}>
                           <span style={{
-                            fontSize: '0.95rem',
+                            fontSize: isMobile ? '0.85rem' : '0.95rem',
                             fontWeight: '600',
                             color: '#10b981'
                           }}>
@@ -1551,7 +1584,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                               color: '#ef4444',
                               padding: '0.4rem 0.75rem',
                               borderRadius: '6px',
-                              fontSize: '0.8rem',
+                              fontSize: isMobile ? '0.75rem' : '0.8rem',
                               fontWeight: '600',
                               cursor: 'pointer'
                             }}
@@ -1561,7 +1594,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         </div>
                         <div style={{
                           display: 'grid',
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
+                          gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(80px, 1fr))' : 'repeat(auto-fill, minmax(100px, 1fr))',
                           gap: '0.75rem',
                           maxHeight: '200px',
                           overflowY: 'auto'
@@ -1590,7 +1623,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                                 background: 'rgba(16,185,129,0.9)',
                                 color: '#fff',
                                 padding: '0.25rem',
-                                fontSize: '0.7rem',
+                                fontSize: isMobile ? '0.65rem' : '0.7rem',
                                 fontWeight: '600',
                                 textAlign: 'center'
                               }}>
@@ -1609,15 +1642,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     }}>
                       <div style={{
                         display: 'grid',
-                        gridTemplateColumns: '1fr auto',
+                        gridTemplateColumns: isMobile ? '1fr' : '1fr auto',
                         gap: '1rem',
-                        alignItems: 'center'
+                        alignItems: isMobile ? 'stretch' : 'center'
                       }}>
                         <div>
                           <label style={{
                             display: 'block',
                             marginBottom: '0.5rem',
-                            fontSize: '0.95rem',
+                            fontSize: isMobile ? '0.85rem' : '0.95rem',
                             fontWeight: '600',
                             color: '#1e293b'
                           }}>
@@ -1631,7 +1664,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                               padding: '0.75rem',
                               border: '2px solid #e2e8f0',
                               borderRadius: '8px',
-                              fontSize: '1rem',
+                              fontSize: isMobile ? '0.9rem' : '1rem',
                               outline: 'none'
                             }}
                           >
@@ -1662,7 +1695,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                               : 'linear-gradient(135deg, #8b5cf6, #7c3aed)',
                             border: 'none',
                             color: 'white',
-                            padding: '0.75rem 1.5rem',
+                            padding: isMobile ? '0.75rem 1rem' : '0.75rem 1.5rem',
                             borderRadius: '8px',
                             cursor: generatingPreview ? 'not-allowed' : 'pointer',
                             fontWeight: '600',
@@ -1672,8 +1705,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                             gap: '0.5rem',
                             transition: 'all 0.3s ease',
                             whiteSpace: 'nowrap',
-                            minWidth: '180px',
-                            alignSelf: 'end'
+                            minWidth: isMobile ? 'auto' : '180px',
+                            alignSelf: isMobile ? 'stretch' : 'end',
+                            fontSize: isMobile ? '0.85rem' : '1rem'
                           }}
                         >
                           {generatingPreview ? (
@@ -1696,17 +1730,19 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                             display: 'flex',
                             justifyContent: 'space-between',
                             alignItems: 'center',
-                            marginBottom: '1rem'
+                            marginBottom: '1rem',
+                            flexWrap: 'wrap',
+                            gap: '0.5rem'
                           }}>
                             <label style={{
-                              fontSize: '0.95rem',
+                              fontSize: isMobile ? '0.85rem' : '0.95rem',
                               fontWeight: '600',
                               color: '#1e293b'
                             }}>
                               New Preview Pages ({previewPages.length})
                             </label>
                             <span style={{
-                              fontSize: '0.85rem',
+                              fontSize: isMobile ? '0.75rem' : '0.85rem',
                               color: '#10b981',
                               fontWeight: '600',
                               background: 'rgba(16,185,129,0.1)',
@@ -1718,7 +1754,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           </div>
                           <div style={{
                             display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                            gridTemplateColumns: isMobile ? 'repeat(auto-fill, minmax(100px, 1fr))' : 'repeat(auto-fill, minmax(150px, 1fr))',
                             gap: '1rem',
                             maxHeight: '400px',
                             overflowY: 'auto',
@@ -1757,7 +1793,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                                   color: '#fff',
                                   padding: '0.25rem 0.5rem',
                                   borderRadius: '4px',
-                                  fontSize: '0.75rem',
+                                  fontSize: isMobile ? '0.7rem' : '0.75rem',
                                   fontWeight: '700'
                                 }}>
                                   Page {page.pageNumber}
@@ -1794,7 +1830,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           background: 'rgba(99,102,241,0.05)',
                           border: '1px solid rgba(99,102,241,0.2)',
                           borderRadius: '8px',
-                          fontSize: '0.9rem',
+                          fontSize: isMobile ? '0.85rem' : '0.9rem',
                           color: '#6366f1'
                         }}>
                           💡 <strong>Tip:</strong> {editMode 
@@ -1819,8 +1855,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         : 'linear-gradient(135deg, #10b981, #059669)',
                     border: 'none',
                     color: 'white',
-                    padding: '1.25rem',
-                    fontSize: '1.25rem',
+                    padding: isMobile ? '1rem' : '1.25rem',
+                    fontSize: isMobile ? '1rem' : '1.25rem',
                     borderRadius: '14px',
                     cursor: uploading ? 'not-allowed' : 'pointer',
                     fontWeight: '700',
@@ -1863,7 +1899,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               flexWrap: 'wrap'
             }}>
               <h2 style={{
-                fontSize: '2rem',
+                fontSize: isMobile ? '1.5rem' : '2rem',
                 fontWeight: '900',
                 color: '#1e293b',
                 margin: 0
@@ -1874,9 +1910,9 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
               {/* Search Bar */}
               <div style={{
                 position: 'relative',
-                flex: '1',
-                maxWidth: '400px',
-                minWidth: '250px'
+                flex: isMobile ? '1 1 100%' : '1',
+                maxWidth: isMobile ? '100%' : '400px',
+                minWidth: isMobile ? 'auto' : '250px'
               }}>
                 <Search size={20} color="#64748b" style={{
                   position: 'absolute',
@@ -1894,7 +1930,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     padding: '0.75rem 1rem 0.75rem 3rem',
                     border: '2px solid #e2e8f0',
                     borderRadius: '12px',
-                    fontSize: '1rem',
+                    fontSize: isMobile ? '0.9rem' : '1rem',
                     outline: 'none',
                     transition: 'border-color 0.3s'
                   }}
@@ -1915,13 +1951,14 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     background: '#ffffff',
                     border: '1px solid #e2e8f0',
                     borderRadius: '20px',
-                    padding: '2rem',
+                    padding: isMobile ? '1.5rem' : '2rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '2rem',
+                    gap: isMobile ? '1rem' : '2rem',
                     flexWrap: 'wrap',
                     boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-                    animation: `fadeInUp 0.4s ease ${index * 0.05}s backwards`
+                    animation: `fadeInUp 0.4s ease ${index * 0.05}s backwards`,
+                    flexDirection: isMobile ? 'column' : 'row'
                   }}
                 >
                   {/* Thumbnail */}
@@ -1931,19 +1968,19 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       : 'linear-gradient(135deg, #6366f1, #ec4899)',
                     backgroundSize: 'cover',
                     backgroundPosition: 'center',
-                    width: '100px',
-                    height: '100px',
+                    width: isMobile ? '80px' : '100px',
+                    height: isMobile ? '80px' : '100px',
                     borderRadius: '14px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
-                    fontSize: product.thumbnail ? '0' : '3rem'
+                    fontSize: product.thumbnail ? '0' : (isMobile ? '2.5rem' : '3rem')
                   }}>
                     {!product.thumbnail && (product.image || '📚')}
                   </div>
 
-                  <div style={{ flex: 1, minWidth: '250px' }}>
+                  <div style={{ flex: 1, minWidth: isMobile ? '100%' : '250px' }}>
                     <div style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1952,7 +1989,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                       flexWrap: 'wrap'
                     }}>
                       <h3 style={{
-                        fontSize: '1.5rem',
+                        fontSize: isMobile ? '1.2rem' : '1.5rem',
                         fontWeight: '800',
                         color: '#1e293b'
                       }}>
@@ -1964,7 +2001,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           color: '#fff',
                           padding: '0.3rem 0.75rem',
                           borderRadius: '20px',
-                          fontSize: '0.75rem',
+                          fontSize: isMobile ? '0.7rem' : '0.75rem',
                           fontWeight: '700',
                           display: 'flex',
                           alignItems: 'center',
@@ -1979,7 +2016,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           color: '#ef4444',
                           padding: '0.3rem 0.75rem',
                           borderRadius: '20px',
-                          fontSize: '0.75rem',
+                          fontSize: isMobile ? '0.7rem' : '0.75rem',
                           fontWeight: '700'
                         }}>
                           {product.discountPercent}% OFF
@@ -1991,7 +2028,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           color: '#10b981',
                           padding: '0.2rem 0.6rem',
                           borderRadius: '20px',
-                          fontSize: '0.75rem',
+                          fontSize: isMobile ? '0.7rem' : '0.75rem',
                           fontWeight: '600'
                         }}>
                           ✅ {product.pdfFiles.length} PDF{product.pdfFiles.length > 1 ? 's' : ''}
@@ -2002,7 +2039,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           color: '#6366f1',
                           padding: '0.2rem 0.6rem',
                           borderRadius: '20px',
-                          fontSize: '0.75rem',
+                          fontSize: isMobile ? '0.7rem' : '0.75rem',
                           fontWeight: '600'
                         }}>
                           📦 {product.bundledProducts?.length || 0} Items
@@ -2013,7 +2050,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           color: '#ef4444',
                           padding: '0.2rem 0.6rem',
                           borderRadius: '20px',
-                          fontSize: '0.75rem',
+                          fontSize: isMobile ? '0.7rem' : '0.75rem',
                           fontWeight: '600'
                         }}>
                           ❌ No PDF
@@ -2025,7 +2062,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                           color: '#6366f1',
                           padding: '0.2rem 0.6rem',
                           borderRadius: '20px',
-                          fontSize: '0.75rem',
+                          fontSize: isMobile ? '0.7rem' : '0.75rem',
                           fontWeight: '600'
                         }}>
                           👤 Your Product
@@ -2035,15 +2072,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     <p style={{
                       color: '#64748b',
                       marginBottom: '0.5rem',
-                      fontSize: '1rem'
+                      fontSize: isMobile ? '0.9rem' : '1rem'
                     }}>
                       {product.description}
                     </p>
                     <div style={{
                       display: 'flex',
-                      gap: '1rem',
+                      gap: isMobile ? '0.5rem' : '1rem',
                       flexWrap: 'wrap',
-                      fontSize: '0.9rem',
+                      fontSize: isMobile ? '0.85rem' : '0.9rem',
                       color: '#64748b'
                     }}>
                       <span>Category: {product.customCategory || product.category}</span>
@@ -2062,7 +2099,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         padding: '0.75rem',
                         background: 'rgba(16,185,129,0.05)',
                         borderRadius: '8px',
-                        fontSize: '0.9rem',
+                        fontSize: isMobile ? '0.85rem' : '0.9rem',
                         color: '#10b981',
                         fontWeight: '600'
                       }}>
@@ -2075,14 +2112,16 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: '1rem',
-                    flexDirection: 'column'
+                    flexDirection: isMobile ? 'row' : 'column',
+                    width: isMobile ? '100%' : 'auto',
+                    justifyContent: isMobile ? 'space-between' : 'center'
                   }}>
                     <div style={{
                       textAlign: 'center'
                     }}>
                       {product.originalPrice && (
                         <div style={{
-                          fontSize: '1rem',
+                          fontSize: isMobile ? '0.9rem' : '1rem',
                           color: '#94a3b8',
                           textDecoration: 'line-through',
                           marginBottom: '0.25rem'
@@ -2091,7 +2130,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                         </div>
                       )}
                       <div style={{
-                        fontSize: '2.5rem',
+                        fontSize: isMobile ? '2rem' : '2.5rem',
                         fontWeight: '900',
                         background: 'linear-gradient(135deg, #6366f1, #ec4899)',
                         WebkitBackgroundClip: 'text',
@@ -2163,150 +2202,17 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         </div>
       )}
 
-      {/* ✅ ORDERS TAB */}
+      {/* ✅ ANALYTICS TAB */}
+      {activeTab === 'analytics' && (
+        <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
+          <AdminAnalytics />
+        </div>
+      )}
+
+      {/* ✅ ORDERS TAB - INTEGRATED WITH AdminOrdersManager */}
       {activeTab === 'orders' && (
         <div style={{ maxWidth: '1400px', margin: '0 auto' }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '2rem',
-            flexWrap: 'wrap',
-            gap: '1rem'
-          }}>
-            <h2 style={{
-              fontSize: '2rem',
-              fontWeight: '900',
-              color: '#1e293b',
-              margin: 0
-            }}>
-              All Orders ({orders.length})
-            </h2>
-            <div style={{
-              padding: '0.6rem 1.25rem',
-              background: 'rgba(16,185,129,0.1)',
-              border: '1px solid rgba(16,185,129,0.3)',
-              borderRadius: '12px',
-              fontSize: '1rem',
-              fontWeight: '700',
-              color: '#10b981'
-            }}>
-              Total Revenue: ₹{totalRevenue}
-            </div>
-          </div>
-
-          {orders.length === 0 ? (
-            <div style={{
-              background: '#ffffff',
-              border: '1px solid #e2e8f0',
-              borderRadius: '20px',
-              padding: '4rem',
-              textAlign: 'center',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.05)'
-            }}>
-              <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>📦</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1e293b', marginBottom: '0.5rem' }}>
-                No orders yet
-              </div>
-              <div style={{ color: '#64748b', fontSize: '1rem' }}>
-                Orders will appear here once customers make purchases.
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gap: '1.5rem' }}>
-              {orders.map((order, index) => (
-                <div
-                  key={order.id}
-                  style={{
-                    background: '#ffffff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '20px',
-                    padding: '2rem',
-                    boxShadow: '0 4px 20px rgba(0,0,0,0.05)',
-                    animation: `fadeInUp 0.4s ease ${index * 0.05}s backwards`
-                  }}
-                >
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    flexWrap: 'wrap',
-                    gap: '1rem',
-                    marginBottom: '1rem'
-                  }}>
-                    <div>
-                      <div style={{
-                        fontSize: '1.1rem',
-                        fontWeight: '800',
-                        color: '#1e293b',
-                        marginBottom: '0.25rem'
-                      }}>
-                        Order #{order.id?.slice(-8)?.toUpperCase() || index + 1}
-                      </div>
-                      <div style={{ fontSize: '0.9rem', color: '#64748b' }}>
-                        {order.userEmail || 'No email'}
-                      </div>
-                      {order.createdAt && (
-                        <div style={{ fontSize: '0.85rem', color: '#94a3b8', marginTop: '0.25rem' }}>
-                          {new Date(order.createdAt?.seconds ? order.createdAt.seconds * 1000 : order.createdAt).toLocaleString()}
-                        </div>
-                      )}
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{
-                        fontSize: '2rem',
-                        fontWeight: '900',
-                        background: 'linear-gradient(135deg, #6366f1, #ec4899)',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent'
-                      }}>
-                        ₹{order.total}
-                      </div>
-                      <span style={{
-                        display: 'inline-block',
-                        marginTop: '0.25rem',
-                        padding: '0.25rem 0.75rem',
-                        background: order.status === 'completed'
-                          ? 'rgba(16,185,129,0.1)'
-                          : 'rgba(245,158,11,0.1)',
-                        color: order.status === 'completed' ? '#10b981' : '#f59e0b',
-                        borderRadius: '20px',
-                        fontSize: '0.8rem',
-                        fontWeight: '700',
-                        textTransform: 'capitalize'
-                      }}>
-                        {order.status || 'pending'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {order.items && order.items.length > 0 && (
-                    <div style={{
-                      borderTop: '1px solid #f1f5f9',
-                      paddingTop: '1rem',
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '0.5rem'
-                    }}>
-                      {order.items.map((item, i) => (
-                        <span key={i} style={{
-                          background: 'rgba(99,102,241,0.07)',
-                          border: '1px solid rgba(99,102,241,0.15)',
-                          color: '#6366f1',
-                          padding: '0.35rem 0.85rem',
-                          borderRadius: '20px',
-                          fontSize: '0.85rem',
-                          fontWeight: '600'
-                        }}>
-                          {item.title || item.name || `Item ${i + 1}`}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
+          <AdminOrdersManager />
         </div>
       )}
 

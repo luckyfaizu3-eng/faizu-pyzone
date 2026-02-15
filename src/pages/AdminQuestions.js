@@ -46,6 +46,7 @@ function AdminQuestions() {
   const [selectAll, setSelectAll] = useState(false);
   const [deletingIds, setDeletingIds] = useState([]);
   const [editingId, setEditingId] = useState(null);
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   // ✅ Price Management States
   const [showPriceSettings, setShowPriceSettings] = useState(false);
@@ -68,6 +69,12 @@ function AdminQuestions() {
     setSelectedIds([]);
     setSelectAll(false);
   }, [level]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // ✅ Fetch prices from Firebase
   const fetchPrices = async () => {
@@ -302,19 +309,35 @@ function AdminQuestions() {
   const testTimeLimit = TIME_LIMITS[level];
 
   return (
-    <div style={{ maxWidth: '900px', margin: '0 auto', fontFamily: 'system-ui' }}>
+    <div style={{ 
+      maxWidth: '900px', 
+      margin: '0 auto', 
+      fontFamily: 'system-ui',
+      padding: isMobile ? '0.5rem' : '1rem'
+    }}>
 
       {/* Header */}
       <div style={{
         background: '#fff',
         border: '1px solid #e2e8f0',
-        borderRadius: '16px',
-        padding: '2rem',
-        marginBottom: '1.5rem',
+        borderRadius: isMobile ? '12px' : '16px',
+        padding: isMobile ? '1rem' : '2rem',
+        marginBottom: '1rem',
         boxShadow: '0 2px 12px rgba(0,0,0,0.06)'
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '1rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.6rem', fontWeight: '800' }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '1rem', 
+          flexWrap: 'wrap', 
+          gap: isMobile ? '0.75rem' : '1rem' 
+        }}>
+          <h2 style={{ 
+            margin: 0, 
+            fontSize: isMobile ? '1.3rem' : '1.6rem', 
+            fontWeight: '800' 
+          }}>
             📝 Question Manager
           </h2>
           
@@ -322,7 +345,7 @@ function AdminQuestions() {
           <button
             onClick={() => setShowPriceSettings(!showPriceSettings)}
             style={{
-              padding: '0.65rem 1.25rem',
+              padding: isMobile ? '0.5rem 1rem' : '0.65rem 1.25rem',
               borderRadius: '10px',
               border: '2px solid rgba(16,185,129,0.3)',
               background: showPriceSettings ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)',
@@ -332,11 +355,11 @@ function AdminQuestions() {
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem',
-              fontSize: '0.9rem'
+              fontSize: isMobile ? '0.8rem' : '0.9rem'
             }}
           >
-            <IndianRupee size={18} />
-            {showPriceSettings ? 'Hide Prices' : 'Manage Prices'}
+            <IndianRupee size={isMobile ? 16 : 18} />
+            {isMobile ? 'Prices' : (showPriceSettings ? 'Hide Prices' : 'Manage Prices')}
           </button>
         </div>
 
@@ -346,26 +369,26 @@ function AdminQuestions() {
             background: 'linear-gradient(135deg, rgba(16,185,129,0.05), rgba(5,150,105,0.05))',
             border: '2px solid rgba(16,185,129,0.2)',
             borderRadius: '12px',
-            padding: '1.5rem',
+            padding: isMobile ? '1rem' : '1.5rem',
             marginBottom: '1.5rem'
           }}>
             <h3 style={{
               margin: '0 0 1rem',
-              fontSize: '1.2rem',
+              fontSize: isMobile ? '1rem' : '1.2rem',
               fontWeight: '800',
               color: '#10b981',
               display: 'flex',
               alignItems: 'center',
               gap: '0.5rem'
             }}>
-              <IndianRupee size={20} />
-              Test Prices Configuration
+              <IndianRupee size={isMobile ? 18 : 20} />
+              Test Prices
             </h3>
 
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: '1rem',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: isMobile ? '0.75rem' : '1rem',
               marginBottom: '1rem'
             }}>
               {/* Basic Price */}
@@ -373,7 +396,7 @@ function AdminQuestions() {
                 <label style={{
                   display: 'block',
                   marginBottom: '0.5rem',
-                  fontSize: '0.85rem',
+                  fontSize: isMobile ? '0.8rem' : '0.85rem',
                   fontWeight: '700',
                   color: LEVEL_COLORS.basic.text
                 }}>
@@ -387,7 +410,7 @@ function AdminQuestions() {
                     transform: 'translateY(-50%)',
                     color: '#64748b',
                     fontWeight: '700',
-                    fontSize: '1rem'
+                    fontSize: isMobile ? '0.9rem' : '1rem'
                   }}>₹</span>
                   <input
                     type="number"
@@ -397,10 +420,10 @@ function AdminQuestions() {
                     onChange={(e) => setPrices({ ...prices, basic: parseInt(e.target.value) || 0 })}
                     style={{
                       width: '100%',
-                      padding: '0.75rem 0.75rem 0.75rem 2rem',
+                      padding: isMobile ? '0.6rem 0.6rem 0.6rem 1.8rem' : '0.75rem 0.75rem 0.75rem 2rem',
                       border: `2px solid ${LEVEL_COLORS.basic.border}`,
                       borderRadius: '8px',
-                      fontSize: '1rem',
+                      fontSize: isMobile ? '0.9rem' : '1rem',
                       fontWeight: '700',
                       outline: 'none',
                       boxSizing: 'border-box',
@@ -415,7 +438,7 @@ function AdminQuestions() {
                 <label style={{
                   display: 'block',
                   marginBottom: '0.5rem',
-                  fontSize: '0.85rem',
+                  fontSize: isMobile ? '0.8rem' : '0.85rem',
                   fontWeight: '700',
                   color: LEVEL_COLORS.advanced.text
                 }}>
@@ -429,7 +452,7 @@ function AdminQuestions() {
                     transform: 'translateY(-50%)',
                     color: '#64748b',
                     fontWeight: '700',
-                    fontSize: '1rem'
+                    fontSize: isMobile ? '0.9rem' : '1rem'
                   }}>₹</span>
                   <input
                     type="number"
@@ -439,10 +462,10 @@ function AdminQuestions() {
                     onChange={(e) => setPrices({ ...prices, advanced: parseInt(e.target.value) || 0 })}
                     style={{
                       width: '100%',
-                      padding: '0.75rem 0.75rem 0.75rem 2rem',
+                      padding: isMobile ? '0.6rem 0.6rem 0.6rem 1.8rem' : '0.75rem 0.75rem 0.75rem 2rem',
                       border: `2px solid ${LEVEL_COLORS.advanced.border}`,
                       borderRadius: '8px',
-                      fontSize: '1rem',
+                      fontSize: isMobile ? '0.9rem' : '1rem',
                       fontWeight: '700',
                       outline: 'none',
                       boxSizing: 'border-box',
@@ -457,7 +480,7 @@ function AdminQuestions() {
                 <label style={{
                   display: 'block',
                   marginBottom: '0.5rem',
-                  fontSize: '0.85rem',
+                  fontSize: isMobile ? '0.8rem' : '0.85rem',
                   fontWeight: '700',
                   color: LEVEL_COLORS.pro.text
                 }}>
@@ -471,7 +494,7 @@ function AdminQuestions() {
                     transform: 'translateY(-50%)',
                     color: '#64748b',
                     fontWeight: '700',
-                    fontSize: '1rem'
+                    fontSize: isMobile ? '0.9rem' : '1rem'
                   }}>₹</span>
                   <input
                     type="number"
@@ -481,10 +504,10 @@ function AdminQuestions() {
                     onChange={(e) => setPrices({ ...prices, pro: parseInt(e.target.value) || 0 })}
                     style={{
                       width: '100%',
-                      padding: '0.75rem 0.75rem 0.75rem 2rem',
+                      padding: isMobile ? '0.6rem 0.6rem 0.6rem 1.8rem' : '0.75rem 0.75rem 0.75rem 2rem',
                       border: `2px solid ${LEVEL_COLORS.pro.border}`,
                       borderRadius: '8px',
-                      fontSize: '1rem',
+                      fontSize: isMobile ? '0.9rem' : '1rem',
                       fontWeight: '700',
                       outline: 'none',
                       boxSizing: 'border-box',
@@ -501,12 +524,12 @@ function AdminQuestions() {
               disabled={savingPrices}
               style={{
                 width: '100%',
-                padding: '0.85rem',
+                padding: isMobile ? '0.7rem' : '0.85rem',
                 borderRadius: '10px',
                 border: 'none',
                 background: savingPrices ? '#e2e8f0' : 'linear-gradient(135deg, #10b981, #059669)',
                 color: savingPrices ? '#94a3b8' : '#fff',
-                fontSize: '1rem',
+                fontSize: isMobile ? '0.9rem' : '1rem',
                 fontWeight: '700',
                 cursor: savingPrices ? 'not-allowed' : 'pointer',
                 display: 'flex',
@@ -515,8 +538,8 @@ function AdminQuestions() {
                 gap: '0.5rem'
               }}
             >
-              <Save size={18} />
-              {savingPrices ? 'Saving Prices...' : 'Save Prices'}
+              <Save size={isMobile ? 16 : 18} />
+              {savingPrices ? 'Saving...' : 'Save Prices'}
             </button>
 
             {/* Current Prices Display */}
@@ -529,7 +552,7 @@ function AdminQuestions() {
               justifyContent: 'space-around',
               flexWrap: 'wrap',
               gap: '0.5rem',
-              fontSize: '0.85rem',
+              fontSize: isMobile ? '0.75rem' : '0.85rem',
               fontWeight: '600',
               color: '#64748b'
             }}>
@@ -543,13 +566,18 @@ function AdminQuestions() {
         )}
 
         {/* Level Tabs */}
-        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: isMobile ? '0.4rem' : '0.5rem', 
+          marginBottom: '1rem', 
+          flexWrap: 'wrap' 
+        }}>
           {['basic', 'advanced', 'pro'].map(lvl => (
             <button 
               key={lvl} 
               onClick={() => setLevel(lvl)} 
               style={{
-                padding: '0.6rem 1.2rem',
+                padding: isMobile ? '0.5rem 0.9rem' : '0.6rem 1.2rem',
                 borderRadius: '8px',
                 border: level === lvl ? `2px solid ${LEVEL_COLORS[lvl].border}` : '2px solid #e2e8f0',
                 background: level === lvl ? LEVEL_COLORS[lvl].bg : '#fff',
@@ -557,32 +585,39 @@ function AdminQuestions() {
                 fontWeight: '700',
                 cursor: 'pointer',
                 textTransform: 'uppercase',
-                fontSize: '0.85rem',
+                fontSize: isMobile ? '0.75rem' : '0.85rem',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: '0.25rem'
+                gap: '0.25rem',
+                flex: isMobile ? '1' : 'auto',
+                minWidth: isMobile ? '0' : 'auto'
               }}
             >
               <span>{lvl}</span>
-              <span style={{ fontSize: '0.7rem', opacity: 0.8 }}>₹{prices[lvl]}</span>
+              <span style={{ fontSize: isMobile ? '0.65rem' : '0.7rem', opacity: 0.8 }}>₹{prices[lvl]}</span>
             </button>
           ))}
         </div>
 
         {/* Progress */}
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            marginBottom: '0.5rem',
+            fontSize: isMobile ? '0.75rem' : '0.85rem'
+          }}>
+            <span style={{ color: '#64748b' }}>
               Questions: <strong>{questions.length}</strong> / {MAX_QUESTIONS}
             </span>
             {isAtLimit && (
-              <span style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: '700' }}>
-                ⚠️ LIMIT REACHED
+              <span style={{ fontSize: isMobile ? '0.7rem' : '0.8rem', color: '#ef4444', fontWeight: '700' }}>
+                ⚠️ LIMIT
               </span>
             )}
           </div>
-          <div style={{ height: '8px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
+          <div style={{ height: isMobile ? '6px' : '8px', background: '#f1f5f9', borderRadius: '99px', overflow: 'hidden' }}>
             <div style={{
               height: '100%',
               width: `${progressPct}%`,
@@ -595,18 +630,20 @@ function AdminQuestions() {
         {/* Test Time Info */}
         <div style={{
           marginTop: '1rem',
-          padding: '0.75rem',
+          padding: isMobile ? '0.6rem' : '0.75rem',
           background: 'rgba(99,102,241,0.1)',
           borderRadius: '8px',
           display: 'flex',
           alignItems: 'center',
           gap: '0.5rem',
-          fontSize: '0.9rem',
+          fontSize: isMobile ? '0.75rem' : '0.9rem',
           color: '#6366f1',
           fontWeight: '600'
         }}>
-          <Clock size={16} />
-          Total Test Time: {testTimeLimit} minutes for {MAX_QUESTIONS} questions
+          <Clock size={isMobile ? 14 : 16} />
+          <span style={{ wordBreak: 'break-word' }}>
+            {isMobile ? `${testTimeLimit}m test` : `Total Test Time: ${testTimeLimit} minutes for ${MAX_QUESTIONS} questions`}
+          </span>
         </div>
       </div>
 
@@ -615,10 +652,10 @@ function AdminQuestions() {
         display: 'flex',
         justifyContent: 'space-between',
         marginBottom: '1rem',
-        gap: '0.75rem',
+        gap: isMobile ? '0.5rem' : '0.75rem',
         flexWrap: 'wrap'
       }}>
-        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: isMobile ? '0.4rem' : '0.6rem', flexWrap: 'wrap', flex: 1 }}>
           <button 
             onClick={() => { 
               if (!isAtLimit) {
@@ -632,7 +669,7 @@ function AdminQuestions() {
               }
             }} 
             style={{
-              padding: '0.65rem 1.25rem',
+              padding: isMobile ? '0.5rem 0.9rem' : '0.65rem 1.25rem',
               borderRadius: '10px',
               border: 'none',
               background: isAtLimit ? '#e2e8f0' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
@@ -641,19 +678,19 @@ function AdminQuestions() {
               cursor: isAtLimit ? 'not-allowed' : 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: '0.5rem',
-              fontSize: '0.9rem'
+              gap: '0.4rem',
+              fontSize: isMobile ? '0.75rem' : '0.9rem'
             }}
           >
-            {showForm && !editingId ? <X size={18} /> : <Plus size={18} />}
-            {showForm && !editingId ? 'Cancel' : isAtLimit ? 'Limit Reached' : 'Add Question'}
+            {showForm && !editingId ? <X size={isMobile ? 16 : 18} /> : <Plus size={isMobile ? 16 : 18} />}
+            {isMobile ? (showForm && !editingId ? 'Cancel' : (isAtLimit ? 'Limit' : 'Add')) : (showForm && !editingId ? 'Cancel' : isAtLimit ? 'Limit Reached' : 'Add Question')}
           </button>
 
           {selectedIds.length > 0 && (
             <button 
               onClick={handleBulkDelete} 
               style={{
-                padding: '0.65rem 1.25rem',
+                padding: isMobile ? '0.5rem 0.9rem' : '0.65rem 1.25rem',
                 borderRadius: '10px',
                 border: '2px solid rgba(239,68,68,0.3)',
                 background: 'rgba(239,68,68,0.1)',
@@ -662,16 +699,16 @@ function AdminQuestions() {
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '0.5rem',
-                fontSize: '0.9rem'
+                gap: '0.4rem',
+                fontSize: isMobile ? '0.75rem' : '0.9rem'
               }}
             >
-              <Trash2 size={16} />
-              Delete ({selectedIds.length})
+              <Trash2 size={isMobile ? 14 : 16} />
+              {isMobile ? `(${selectedIds.length})` : `Delete (${selectedIds.length})`}
             </button>
           )}
 
-          {questions.length > 0 && (
+          {questions.length > 0 && !isMobile && (
             <button 
               onClick={handleDeleteAll} 
               style={{
@@ -697,18 +734,18 @@ function AdminQuestions() {
         {/* Search */}
         <input
           type="text"
-          placeholder="Search..."
+          placeholder={isMobile ? "Search..." : "Search questions..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{
-            padding: '0.65rem 1rem',
+            padding: isMobile ? '0.5rem 0.8rem' : '0.65rem 1rem',
             border: '2px solid #e2e8f0',
             borderRadius: '10px',
-            fontSize: '0.9rem',
+            fontSize: isMobile ? '0.8rem' : '0.9rem',
             outline: 'none',
-            minWidth: '220px',
-            flex: '1',
-            maxWidth: '300px'
+            minWidth: isMobile ? '120px' : '220px',
+            flex: isMobile ? '1' : 'auto',
+            maxWidth: isMobile ? 'none' : '300px'
           }}
         />
       </div>
@@ -718,13 +755,24 @@ function AdminQuestions() {
         <div style={{
           background: '#fff',
           border: editingId ? '2px solid #f59e0b' : '2px solid #e2e8f0',
-          borderRadius: '16px',
-          padding: '2rem',
+          borderRadius: isMobile ? '12px' : '16px',
+          padding: isMobile ? '1rem' : '2rem',
           marginBottom: '1.5rem',
           boxShadow: '0 4px 24px rgba(0,0,0,0.08)'
         }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            marginBottom: isMobile ? '1rem' : '1.5rem',
+            flexWrap: 'wrap',
+            gap: '0.5rem'
+          }}>
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: isMobile ? '1rem' : '1.2rem', 
+              fontWeight: '700' 
+            }}>
               {editingId ? (
                 <span style={{ color: '#f59e0b' }}>✏️ Edit Question</span>
               ) : (
@@ -735,28 +783,32 @@ function AdminQuestions() {
               <button
                 onClick={handleCancelEdit}
                 style={{
-                  padding: '0.5rem 1rem',
+                  padding: isMobile ? '0.4rem 0.8rem' : '0.5rem 1rem',
                   borderRadius: '8px',
                   border: '2px solid #e2e8f0',
                   background: '#fff',
                   color: '#64748b',
                   fontWeight: '600',
                   cursor: 'pointer',
-                  fontSize: '0.85rem'
+                  fontSize: isMobile ? '0.75rem' : '0.85rem'
                 }}
               >
-                Cancel Edit
+                Cancel
               </button>
             )}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            gap: isMobile ? '1rem' : '1.25rem' 
+          }}>
             {/* Question */}
             <div>
               <label style={{
                 display: 'block',
                 marginBottom: '0.5rem',
-                fontSize: '0.85rem',
+                fontSize: isMobile ? '0.75rem' : '0.85rem',
                 fontWeight: '700',
                 color: '#64748b'
               }}>
@@ -769,10 +821,10 @@ function AdminQuestions() {
                 onChange={(e) => setFormData({...formData, question: e.target.value})}
                 style={{
                   width: '100%',
-                  padding: '0.85rem',
+                  padding: isMobile ? '0.7rem' : '0.85rem',
                   border: '2px solid #e2e8f0',
                   borderRadius: '8px',
-                  fontSize: '1rem',
+                  fontSize: isMobile ? '0.9rem' : '1rem',
                   outline: 'none',
                   boxSizing: 'border-box'
                 }}
@@ -784,7 +836,7 @@ function AdminQuestions() {
               <label style={{
                 display: 'block',
                 marginBottom: '0.5rem',
-                fontSize: '0.85rem',
+                fontSize: isMobile ? '0.75rem' : '0.85rem',
                 fontWeight: '700',
                 color: '#64748b'
               }}>
@@ -794,13 +846,13 @@ function AdminQuestions() {
                 placeholder="x = 5&#10;y = 3&#10;print(x + y)"
                 value={formData.code}
                 onChange={(e) => setFormData({...formData, code: e.target.value})}
-                rows="6"
+                rows={isMobile ? "5" : "6"}
                 style={{
                   width: '100%',
-                  padding: '1rem',
+                  padding: isMobile ? '0.8rem' : '1rem',
                   border: '2px solid #e2e8f0',
                   borderRadius: '8px',
-                  fontSize: '0.95rem',
+                  fontSize: isMobile ? '0.85rem' : '0.95rem',
                   fontFamily: 'monospace',
                   outline: 'none',
                   resize: 'vertical',
@@ -813,19 +865,19 @@ function AdminQuestions() {
             <div>
               <label style={{
                 display: 'block',
-                marginBottom: '0.75rem',
-                fontSize: '0.85rem',
+                marginBottom: isMobile ? '0.6rem' : '0.75rem',
+                fontSize: isMobile ? '0.75rem' : '0.85rem',
                 fontWeight: '700',
                 color: '#64748b'
               }}>
                 Options *
               </label>
-              <div style={{ display: 'grid', gap: '0.75rem' }}>
+              <div style={{ display: 'grid', gap: isMobile ? '0.6rem' : '0.75rem' }}>
                 {[1, 2, 3, 4].map(num => (
-                  <div key={num} style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                  <div key={num} style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '0.6rem' }}>
                     <div style={{
-                      width: '30px',
-                      height: '30px',
+                      width: isMobile ? '26px' : '30px',
+                      height: isMobile ? '26px' : '30px',
                       borderRadius: '50%',
                       background: parseInt(formData.correct) === num - 1 ? '#10b981' : '#e2e8f0',
                       color: parseInt(formData.correct) === num - 1 ? '#fff' : '#64748b',
@@ -833,7 +885,7 @@ function AdminQuestions() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       fontWeight: '800',
-                      fontSize: '0.85rem',
+                      fontSize: isMobile ? '0.75rem' : '0.85rem',
                       flexShrink: 0
                     }}>
                       {String.fromCharCode(64 + num)}
@@ -845,10 +897,10 @@ function AdminQuestions() {
                       onChange={(e) => setFormData({...formData, [`option${num}`]: e.target.value})}
                       style={{
                         flex: 1,
-                        padding: '0.7rem',
+                        padding: isMobile ? '0.6rem' : '0.7rem',
                         border: parseInt(formData.correct) === num - 1 ? '2px solid #10b981' : '2px solid #e2e8f0',
                         borderRadius: '8px',
-                        fontSize: '0.95rem',
+                        fontSize: isMobile ? '0.85rem' : '0.95rem',
                         outline: 'none',
                         background: parseInt(formData.correct) === num - 1 ? '#f0fdf4' : '#fff'
                       }}
@@ -863,31 +915,33 @@ function AdminQuestions() {
               <label style={{
                 display: 'block',
                 marginBottom: '0.6rem',
-                fontSize: '0.85rem',
+                fontSize: isMobile ? '0.75rem' : '0.85rem',
                 fontWeight: '700',
                 color: '#64748b'
               }}>
-                <CheckCircle size={14} color="#10b981" style={{ display: 'inline', marginRight: '0.3rem' }} />
+                <CheckCircle size={isMobile ? 12 : 14} color="#10b981" style={{ display: 'inline', marginRight: '0.3rem' }} />
                 Correct Answer *
               </label>
-              <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: isMobile ? '0.4rem' : '0.6rem', flexWrap: 'wrap' }}>
                 {[0,1,2,3].map(idx => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setFormData({...formData, correct: idx})}
                     style={{
-                      padding: '0.55rem 1.1rem',
+                      padding: isMobile ? '0.45rem 0.9rem' : '0.55rem 1.1rem',
                       borderRadius: '8px',
                       border: parseInt(formData.correct) === idx ? '2px solid #10b981' : '2px solid #e2e8f0',
                       background: parseInt(formData.correct) === idx ? '#f0fdf4' : '#fff',
                       color: parseInt(formData.correct) === idx ? '#10b981' : '#64748b',
                       fontWeight: '700',
                       cursor: 'pointer',
-                      fontSize: '0.9rem'
+                      fontSize: isMobile ? '0.75rem' : '0.9rem',
+                      flex: isMobile ? '1' : 'auto',
+                      minWidth: isMobile ? '0' : 'auto'
                     }}
                   >
-                    Option {idx + 1}
+                    {isMobile ? `${idx + 1}` : `Option ${idx + 1}`}
                   </button>
                 ))}
               </div>
@@ -898,12 +952,12 @@ function AdminQuestions() {
               onClick={handleSaveQuestion} 
               disabled={loading || isAtLimit} 
               style={{
-                padding: '1rem',
+                padding: isMobile ? '0.85rem' : '1rem',
                 borderRadius: '10px',
                 border: 'none',
                 background: loading || isAtLimit ? '#e2e8f0' : editingId ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, #10b981, #059669)',
                 color: loading || isAtLimit ? '#94a3b8' : '#fff',
-                fontSize: '1rem',
+                fontSize: isMobile ? '0.9rem' : '1rem',
                 fontWeight: '700',
                 cursor: loading || isAtLimit ? 'not-allowed' : 'pointer',
                 display: 'flex',
@@ -912,8 +966,8 @@ function AdminQuestions() {
                 gap: '0.5rem'
               }}
             >
-              {editingId ? <Edit2 size={18} /> : <Save size={18} />}
-              {loading ? 'Saving...' : editingId ? 'Update Question' : 'Save Question'}
+              {editingId ? <Edit2 size={isMobile ? 16 : 18} /> : <Save size={isMobile ? 16 : 18} />}
+              {loading ? 'Saving...' : editingId ? 'Update' : 'Save'}
             </button>
           </div>
         </div>
@@ -923,43 +977,54 @@ function AdminQuestions() {
       <div style={{
         background: '#fff',
         border: '1px solid #e2e8f0',
-        borderRadius: '16px',
+        borderRadius: isMobile ? '12px' : '16px',
         overflow: 'hidden',
         boxShadow: '0 2px 12px rgba(0,0,0,0.06)'
       }}>
         <div style={{
-          padding: '1.25rem',
+          padding: isMobile ? '0.85rem' : '1.25rem',
           borderBottom: '2px solid #f1f5f9',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: '0.75rem'
+          gap: isMobile ? '0.5rem' : '0.75rem'
         }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
             <input
               type="checkbox"
               checked={selectAll}
               onChange={handleSelectAll}
-              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+              style={{ width: isMobile ? '14px' : '16px', height: isMobile ? '14px' : '16px', cursor: 'pointer' }}
             />
-            <span style={{ fontSize: '0.85rem', fontWeight: '700', color: '#64748b' }}>
-              Select All
+            <span style={{ fontSize: isMobile ? '0.75rem' : '0.85rem', fontWeight: '700', color: '#64748b' }}>
+              {isMobile ? 'All' : 'Select All'}
             </span>
           </label>
-          <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: '600' }}>
-            {filteredQuestions.length} questions
+          <span style={{ fontSize: isMobile ? '0.8rem' : '0.9rem', color: '#64748b', fontWeight: '600' }}>
+            {filteredQuestions.length} {isMobile ? '' : 'questions'}
           </span>
         </div>
 
         {loading ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>
+          <div style={{ 
+            textAlign: 'center', 
+            padding: isMobile ? '3rem' : '4rem', 
+            color: '#94a3b8',
+            fontSize: isMobile ? '0.9rem' : '1rem'
+          }}>
             Loading...
           </div>
         ) : filteredQuestions.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '4rem', color: '#94a3b8' }}>
-            <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>📝</div>
-            <div>No questions yet. Click "Add Question" to create one.</div>
+          <div style={{ 
+            textAlign: 'center', 
+            padding: isMobile ? '3rem 1rem' : '4rem', 
+            color: '#94a3b8' 
+          }}>
+            <div style={{ fontSize: isMobile ? '2.5rem' : '3rem', marginBottom: '0.75rem' }}>📝</div>
+            <div style={{ fontSize: isMobile ? '0.85rem' : '1rem' }}>
+              No questions yet. {isMobile ? 'Add one!' : 'Click "Add Question" to create one.'}
+            </div>
           </div>
         ) : (
           filteredQuestions.map((q, index) => {
@@ -975,22 +1040,28 @@ function AdminQuestions() {
                   background: isEditing ? '#fffbeb' : isSelected ? '#fafbff' : '#fff',
                   borderLeft: isEditing ? '3px solid #f59e0b' : isSelected ? '3px solid #6366f1' : '3px solid transparent',
                   opacity: isDeleting ? 0.4 : 1,
-                  padding: '1.25rem',
+                  padding: isMobile ? '0.85rem' : '1.25rem',
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: '1rem'
+                  gap: isMobile ? '0.6rem' : '1rem'
                 }}
               >
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => toggleSelect(q.id)}
-                  style={{ width: '16px', height: '16px', marginTop: '3px', cursor: 'pointer', flexShrink: 0 }}
+                  style={{ 
+                    width: isMobile ? '14px' : '16px', 
+                    height: isMobile ? '14px' : '16px', 
+                    marginTop: '3px', 
+                    cursor: 'pointer', 
+                    flexShrink: 0 
+                  }}
                 />
 
                 <div style={{
-                  width: '28px',
-                  height: '28px',
+                  width: isMobile ? '24px' : '28px',
+                  height: isMobile ? '24px' : '28px',
                   borderRadius: '6px',
                   background: levelColor.badge,
                   color: levelColor.text,
@@ -998,7 +1069,7 @@ function AdminQuestions() {
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: '800',
-                  fontSize: '0.8rem',
+                  fontSize: isMobile ? '0.7rem' : '0.8rem',
                   flexShrink: 0
                 }}>
                   {index + 1}
@@ -1006,41 +1077,46 @@ function AdminQuestions() {
 
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontSize: '1.05rem',
+                    fontSize: isMobile ? '0.9rem' : '1.05rem',
                     fontWeight: '600',
                     color: '#0f172a',
                     marginBottom: '0.5rem',
-                    wordBreak: 'break-word'
+                    wordBreak: 'break-word',
+                    lineHeight: 1.4
                   }}>
                     {q.question}
                   </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: isMobile ? '0.4rem' : '0.5rem', flexWrap: 'wrap' }}>
                     <span style={{
                       background: '#f1f5f9',
                       color: '#64748b',
-                      padding: '0.2rem 0.6rem',
+                      padding: isMobile ? '0.15rem 0.5rem' : '0.2rem 0.6rem',
                       borderRadius: '6px',
-                      fontSize: '0.75rem',
+                      fontSize: isMobile ? '0.65rem' : '0.75rem',
                       fontWeight: '600'
                     }}>
-                      <Code size={11} style={{ display: 'inline', marginRight: '0.2rem' }} />
-                      {q.code.split('\n').length} lines
+                      <Code size={isMobile ? 9 : 11} style={{ display: 'inline', marginRight: '0.2rem' }} />
+                      {q.code.split('\n').length}L
                     </span>
                     <span style={{
                       background: '#f0fdf4',
                       color: '#10b981',
-                      padding: '0.2rem 0.6rem',
+                      padding: isMobile ? '0.15rem 0.5rem' : '0.2rem 0.6rem',
                       borderRadius: '6px',
-                      fontSize: '0.75rem',
-                      fontWeight: '600'
+                      fontSize: isMobile ? '0.65rem' : '0.75rem',
+                      fontWeight: '600',
+                      maxWidth: isMobile ? '150px' : 'none',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
                     }}>
                       ✓ {q.options?.[q.correct]}
                     </span>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                <div style={{ display: 'flex', gap: isMobile ? '0.4rem' : '0.5rem', flexShrink: 0 }}>
                   <button
                     onClick={() => handleEditQuestion(q)}
                     disabled={isDeleting}
@@ -1048,7 +1124,7 @@ function AdminQuestions() {
                       background: 'rgba(245,158,11,0.1)',
                       border: '1px solid rgba(245,158,11,0.2)',
                       borderRadius: '8px',
-                      padding: '0.45rem',
+                      padding: isMobile ? '0.4rem' : '0.45rem',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1056,7 +1132,7 @@ function AdminQuestions() {
                     }}
                     title="Edit question"
                   >
-                    <Edit2 size={15} color="#f59e0b" />
+                    <Edit2 size={isMobile ? 13 : 15} color="#f59e0b" />
                   </button>
 
                   <button
@@ -1066,7 +1142,7 @@ function AdminQuestions() {
                       background: 'rgba(239,68,68,0.1)',
                       border: '1px solid rgba(239,68,68,0.2)',
                       borderRadius: '8px',
-                      padding: '0.45rem',
+                      padding: isMobile ? '0.4rem' : '0.45rem',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -1074,7 +1150,7 @@ function AdminQuestions() {
                     }}
                     title="Delete question"
                   >
-                    <Trash2 size={15} color="#ef4444" />
+                    <Trash2 size={isMobile ? 13 : 15} color="#ef4444" />
                   </button>
                 </div>
               </div>
