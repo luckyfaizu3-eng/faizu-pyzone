@@ -232,66 +232,21 @@ export const addReview = async (productId, reviewData) => {
 };
 
 // ========================================
-// ✅ FIXED: Pending Order Create (payment se PEHLE)
-// ========================================
-export const createPendingOrder = async (orderData, userId) => {
-  try {
-    console.log('⏳ Creating PENDING order...');
-
-    const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
-      ...orderData,
-      userId: userId,
-      status: 'pending',
-      paymentId: null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    console.log('✅ Pending order created:', docRef.id);
-    return { success: true, id: docRef.id };
-  } catch (error) {
-    console.error('❌ Pending order error:', error.message);
-    return { success: false, error: error.message };
-  }
-};
-
-// ========================================
-// ✅ FIXED: Confirm Order (payment success ke baad)
-// ========================================
-export const confirmOrder = async (pendingOrderId, paymentId) => {
-  try {
-    console.log('✅ Confirming order:', pendingOrderId, 'PaymentId:', paymentId);
-
-    const orderRef = doc(db, ORDERS_COLLECTION, pendingOrderId);
-    await updateDoc(orderRef, {
-      status: 'completed',
-      paymentId: paymentId,
-      confirmedAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    console.log('✅ Order confirmed!');
-    return { success: true };
-  } catch (error) {
-    console.error('❌ Confirm order error:', error.message);
-    return { success: false, error: error.message };
-  }
-};
-
-// ========================================
-// ORIGINAL addOrder - purane code ke liye rakha hai
+// ✅ FIXED: addOrder - Payment success pe direct completed
 // ========================================
 export const addOrder = async (orderData, userId) => {
   try {
-    console.log('💾 Saving order:', JSON.stringify(orderData, null, 2));
+    console.log('💾 Saving order as COMPLETED:', JSON.stringify(orderData, null, 2));
 
     const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
       ...orderData,
       userId: userId,
-      createdAt: serverTimestamp()
+      status: orderData.status || 'completed', // ✅ Default completed
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     });
     
-    console.log('✅ Order saved:', docRef.id);
+    console.log('✅ Order saved as COMPLETED:', docRef.id);
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error('❌ Order error:', error.message);
@@ -300,7 +255,7 @@ export const addOrder = async (orderData, userId) => {
 };
 
 // ========================================
-// ✅ FIXED: getUserOrders - pending + completed dono fetch karo
+// ✅ getUserOrders - Fetch all user orders
 // ========================================
 export const getUserOrders = async (userId) => {
   try {
@@ -378,6 +333,51 @@ export const getAllOrders = async () => {
     }
     
     return { success: false, error: error.message, orders: [] };
+  }
+};
+
+// ========================================
+// ⚠️ OPTIONAL: Pending order functions
+// (Future use ke liye - COD, manual verification)
+// ========================================
+export const createPendingOrder = async (orderData, userId) => {
+  try {
+    console.log('⏳ Creating PENDING order (manual verification)...');
+
+    const docRef = await addDoc(collection(db, ORDERS_COLLECTION), {
+      ...orderData,
+      userId: userId,
+      status: 'pending',
+      paymentId: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log('✅ Pending order created:', docRef.id);
+    return { success: true, id: docRef.id };
+  } catch (error) {
+    console.error('❌ Pending order error:', error.message);
+    return { success: false, error: error.message };
+  }
+};
+
+export const confirmOrder = async (pendingOrderId, paymentId) => {
+  try {
+    console.log('✅ Confirming order:', pendingOrderId, 'PaymentId:', paymentId);
+
+    const orderRef = doc(db, ORDERS_COLLECTION, pendingOrderId);
+    await updateDoc(orderRef, {
+      status: 'completed',
+      paymentId: paymentId,
+      confirmedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    console.log('✅ Order confirmed!');
+    return { success: true };
+  } catch (error) {
+    console.error('❌ Confirm order error:', error.message);
+    return { success: false, error: error.message };
   }
 };
 
@@ -644,7 +644,7 @@ export const issueCertificateWithLevel = async (certificateData, userId, level) 
 };
 
 // ========================================
-// ✅ MANUAL QUESTIONS — Firebase se fetch
+// ✅ MANUAL QUESTIONS
 // ========================================
 
 export const getManualQuestions = async (level) => {
@@ -685,7 +685,7 @@ export const getManualQuestions = async (level) => {
 };
 
 // ========================================
-// 💰 TEST PRICES FUNCTIONS
+// 💰 TEST PRICES
 // ========================================
 
 export const getTestPrices = async () => {

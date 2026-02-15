@@ -9,8 +9,7 @@ import {
   deleteProduct as deleteProductDB, 
   getUserOrders,
   updateProduct as updateProductDB,
-  createPendingOrder,
-  confirmOrder
+  addOrder
 } from './dbService';
 
 // ✅ Import Analytics Tracker
@@ -66,7 +65,6 @@ function App() {
 
   // ✅ Custom Analytics Tracking (IP, Location, Device)
   useEffect(() => {
-    // Track initial page view
     trackPageView(window.location.pathname);
     console.log('✅ Custom analytics tracking started!');
   }, []);
@@ -126,7 +124,6 @@ function App() {
       window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
     
-    // ✅ Track page view on every page change
     trackPageView(`/${currentPage}`);
   }, [currentPage]);
   
@@ -325,7 +322,6 @@ function App() {
       window.showToast?.('✅ Added to cart!', 'success');
     }
     
-    // ✅ Track add to cart action
     trackAction(ACTIONS.ADD_TO_CART, {
       productId: product.id,
       productName: product.title,
@@ -339,7 +335,6 @@ function App() {
     setCart(cart.filter(item => item.id !== productId));
     window.showToast?.('🗑️ Removed from cart', 'info');
     
-    // ✅ Track remove from cart action
     if (product) {
       trackAction(ACTIONS.REMOVE_FROM_CART, {
         productId: product.id,
@@ -348,7 +343,7 @@ function App() {
     }
   };
 
-  // ✅ COMPLETELY FIXED buyNow - ab guaranteed completed status dikhega
+  // ✅ FIXED: Payment success = Direct completed order
   const buyNow = async (product) => {
     if (!user) {
       window.showToast?.('⚠️ Please login first to purchase!', 'warning');
@@ -356,7 +351,6 @@ function App() {
       return;
     }
 
-    // ✅ Track purchase initiation
     trackAction(ACTIONS.PURCHASE_INITIATED, {
       productId: product.id,
       productName: product.title,
@@ -374,51 +368,42 @@ function App() {
     };
     if (product.thumbnail) itemData.thumbnail = product.thumbnail;
 
-    // ✅ STEP 1: Payment se PEHLE pending order Firebase mein save karo
-    const pendingResult = await createPendingOrder({
-      userEmail: user.email,
-      userId: user.uid,
-      items: [itemData],
-      total: product.price,
-      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-    }, user.uid);
-
-    if (!pendingResult.success) {
-      window.showToast?.('❌ Could not initiate order. Please try again.', 'error');
-      return;
-    }
-
-    const pendingOrderId = pendingResult.id;
-
-    // ✅ STEP 2: Razorpay payment kholo
+    // ✅ STEP 1: Open Razorpay directly (no pending order pehle)
     initiatePayment(product.price, [product], async (response) => {
       try {
-        // ✅ STEP 3: Payment success → confirm order
-        console.log('💳 Payment successful! Confirming order...');
-        const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
+        console.log('💳 Payment SUCCESS! Creating completed order...');
+        
+        // ✅ STEP 2: Payment success → Direct completed order
+        const orderResult = await addOrder({
+          userEmail: user.email,
+          userId: user.uid,
+          items: [itemData],
+          total: product.price,
+          date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+          paymentId: response.razorpay_payment_id,
+          status: 'completed'
+        }, user.uid);
 
-        if (!confirmResult.success) {
-          console.error('❌ Confirm failed:', confirmResult.error);
-          window.showToast?.('⚠️ Order saving issue. Checking status...', 'warning');
+        if (!orderResult.success) {
+          console.error('❌ Order save failed:', orderResult.error);
+          window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error');
+          return;
         }
 
-        // ✅ STEP 4: Wait for Firebase to propagate (IMPORTANT - Firebase ko update hone ka time do!)
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        console.log('✅ Order saved as COMPLETED:', orderResult.id);
 
-        // ✅ STEP 5: Force fresh reload from Firebase
-        console.log('🔄 Reloading orders from Firebase...');
+        // ✅ STEP 3: Reload orders
+        await new Promise(resolve => setTimeout(resolve, 1000));
         await loadOrders();
-
-        // ✅ STEP 6: Wait a bit more for React state update
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // ✅ STEP 7: Navigate to orders page
+        // ✅ STEP 4: Navigate
         setCurrentPage('orders');
-        window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
+        window.showToast?.('🎊 Payment successful! Download your PDFs now!', 'success');
 
       } catch (error) {
-        console.error('❌ Error in payment handler:', error);
-        window.showToast?.('⚠️ Please check your orders page', 'warning');
+        console.error('❌ Payment handler error:', error);
+        window.showToast?.('⚠️ Payment successful but error occurred. Check orders or contact admin!', 'warning');
         await loadOrders();
         setCurrentPage('orders');
       }
@@ -434,7 +419,6 @@ function App() {
       window.showToast?.('🎉 Welcome back!', 'success');
       setCurrentPage('home');
       
-      // ✅ Track login
       trackAction(ACTIONS.LOGIN, { email: email });
       
       return { success: true };
@@ -450,7 +434,6 @@ function App() {
       window.showToast?.('🎊 Account created successfully!', 'success');
       setCurrentPage('home');
       
-      // ✅ Track registration
       trackAction(ACTIONS.REGISTER, { email: email, name: name });
       
       return { success: true };
@@ -463,7 +446,6 @@ function App() {
   const logout = async () => {
     const result = await logoutUser();
     if (result.success) {
-      // ✅ Track logout
       trackAction(ACTIONS.LOGOUT, { email: user?.email });
       
       setUser(null);
@@ -473,16 +455,16 @@ function App() {
     }
   };
 
-  // ✅ FIXED: pending orders bhi purchased count honge
+  // ✅ FIXED: Only completed orders count
   const isProductPurchased = (productId) => {
     if (!user || !orders || orders.length === 0) return false;
     return orders.some(order => 
-      (order.status === 'completed' || order.status === 'pending') &&
+      order.status === 'completed' &&
       order.items && order.items.some(item => item.id === productId)
     );
   };
 
-  // ✅ COMPLETELY FIXED completeOrder - cart ke liye same fix
+  // ✅ FIXED: Cart checkout - Payment success = completed
   const completeOrder = async () => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -507,54 +489,44 @@ function App() {
       return itemData;
     });
 
-    // ✅ STEP 1: Payment se PEHLE pending order save karo
-    const pendingResult = await createPendingOrder({
-      userEmail: user.email,
-      userId: user.uid,
-      items: orderItems,
-      total: cartTotal,
-      date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-    }, user.uid);
-
-    if (!pendingResult.success) {
-      window.showToast?.('❌ Could not initiate order. Please try again.', 'error');
-      return;
-    }
-
-    const pendingOrderId = pendingResult.id;
-
-    // ✅ STEP 2: Razorpay payment kholo
+    // ✅ STEP 1: Open Razorpay directly
     initiatePayment(cartTotal, cart, async (response) => {
       try {
-        // ✅ STEP 3: Payment success → confirm order
-        console.log('💳 Payment successful! Confirming order...');
-        const confirmResult = await confirmOrder(pendingOrderId, response.razorpay_payment_id);
+        console.log('💳 Payment SUCCESS! Creating completed order...');
+        
+        // ✅ STEP 2: Save as completed
+        const orderResult = await addOrder({
+          userEmail: user.email,
+          userId: user.uid,
+          items: orderItems,
+          total: cartTotal,
+          date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+          paymentId: response.razorpay_payment_id,
+          status: 'completed'
+        }, user.uid);
 
-        if (!confirmResult.success) {
-          console.error('❌ Confirm failed:', confirmResult.error);
-          window.showToast?.('⚠️ Order saving issue. Checking status...', 'warning');
+        if (!orderResult.success) {
+          console.error('❌ Order save failed:', orderResult.error);
+          window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error');
+          return;
         }
 
-        // ✅ STEP 4: Wait for Firebase to propagate
-        await new Promise(resolve => setTimeout(resolve, 1500));
+        console.log('✅ Order saved as COMPLETED:', orderResult.id);
 
-        // ✅ STEP 5: Force fresh reload from Firebase
-        console.log('🔄 Reloading orders from Firebase...');
-        await loadOrders();
-
-        // ✅ STEP 6: Clear cart and navigate
+        // ✅ STEP 3: Clear cart & reload
         setCart([]);
         localStorage.removeItem('faizupyzone_cart');
-
-        // ✅ STEP 7: Wait for state update
+        
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await loadOrders();
         await new Promise(resolve => setTimeout(resolve, 500));
 
         setCurrentPage('orders');
         window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
 
       } catch (error) {
-        console.error('❌ Error in payment handler:', error);
-        window.showToast?.('⚠️ Please check your orders page', 'warning');
+        console.error('❌ Payment handler error:', error);
+        window.showToast?.('⚠️ Payment successful but error occurred. Check orders!', 'warning');
         setCart([]);
         localStorage.removeItem('faizupyzone_cart');
         await loadOrders();

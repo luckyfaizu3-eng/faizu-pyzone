@@ -264,7 +264,7 @@ class FullscreenManager {
 }
 
 // ==========================================
-// 🔒 ENHANCED SECURITY MANAGER (FIXED BLUR)
+// 🔒 ENHANCED SECURITY MANAGER
 // ==========================================
 class SecurityManager {
   constructor(onWarning, onAutoSubmit) {
@@ -273,10 +273,9 @@ class SecurityManager {
     this.violationCount = 0;
     this.maxViolations = 5;
     this.lastBlurTime = 0;
-    this.blurCheckDelay = 500; // 500ms delay to prevent false positives
+    this.blurCheckDelay = 500;
     
     this.handlers = {
-      // Prevent copy/cut/paste
       copy: (e) => { 
         e.preventDefault(); 
         e.stopPropagation();
@@ -291,31 +290,18 @@ class SecurityManager {
         e.preventDefault(); 
         e.stopPropagation();
       },
-      
-      // Prevent right-click
       contextMenu: (e) => { 
         e.preventDefault(); 
         e.stopPropagation();
         this.recordViolation('⚠️ Right-click disabled!'); 
       },
-      
-      // Prevent keyboard shortcuts
       keydown: (e) => {
-        // Block copy/paste shortcuts
         const isCopyPaste = (e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'a', 's'].includes(e.key.toLowerCase());
-        
-        // Block developer tools
         const isDevTools = e.key === 'F12' || 
                           ((e.ctrlKey || e.metaKey) && e.shiftKey && ['i', 'j', 'c'].includes(e.key.toLowerCase())) ||
                           ((e.ctrlKey || e.metaKey) && ['u', 'i'].includes(e.key.toLowerCase()));
-        
-        // Block refresh
         const isRefresh = e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key === 'r');
-        
-        // Block print
         const isPrint = (e.ctrlKey || e.metaKey) && e.key === 'p';
-        
-        // Block screenshot shortcuts (Windows: Win+Shift+S, Mac: Cmd+Shift+4)
         const isScreenshot = (e.shiftKey && ['s', '4', '3'].includes(e.key.toLowerCase()) && (e.metaKey || e.key === 'Meta'));
         
         if (isCopyPaste || isDevTools || isRefresh || isPrint || isScreenshot) {
@@ -324,26 +310,19 @@ class SecurityManager {
           this.recordViolation('⚠️ Keyboard shortcut blocked!');
         }
       },
-      
-      // Prevent drag and drop
       dragstart: (e) => {
         e.preventDefault();
         e.stopPropagation();
       },
-      
       drop: (e) => {
         e.preventDefault();
         e.stopPropagation();
       },
-      
-      // Block text selection via mouse
       selectstart: (e) => {
         if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') {
           e.preventDefault();
         }
       },
-      
-      // Detect print attempt
       beforeprint: (e) => {
         e.preventDefault();
         this.recordViolation('⚠️ Printing disabled!');
@@ -370,13 +349,11 @@ class SecurityManager {
       document.addEventListener(event, handler, true);
     });
     
-    // Disable text selection via CSS
     document.body.style.userSelect = 'none';
     document.body.style.webkitUserSelect = 'none';
     document.body.style.msUserSelect = 'none';
     document.body.style.mozUserSelect = 'none';
     
-    // Monitor for developer tools
     this.startDevToolsDetection();
   }
 
@@ -385,18 +362,15 @@ class SecurityManager {
       document.removeEventListener(event, handler, true);
     });
     
-    // Restore text selection
     document.body.style.userSelect = '';
     document.body.style.webkitUserSelect = '';
     document.body.style.msUserSelect = '';
     document.body.style.mozUserSelect = '';
     
-    // Stop developer tools detection
     this.stopDevToolsDetection();
   }
 
   startDevToolsDetection() {
-    // Detect DevTools by checking window size changes
     this.devToolsInterval = setInterval(() => {
       const threshold = 160;
       const widthThreshold = window.outerWidth - window.innerWidth > threshold;
@@ -644,7 +618,6 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
   }, []);
 
   const handleSubmit = useCallback((penalized = false) => {
-    // Prevent double submission
     if (hasSubmittedRef.current) {
       console.log('⚠️ Already submitted, ignoring duplicate submission');
       return;
@@ -1178,7 +1151,7 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
 }
 
 // ==========================================
-// 🎯 MAIN APP - SINGLE CLEAN INTERFACE
+// 🎯 MAIN APP - COMPLETE FIXED VERSION
 // ==========================================
 export default function MockTestInterface({ 
   questions, 
@@ -1199,9 +1172,40 @@ export default function MockTestInterface({
     
     window.onbeforeunload = null;
     
+    // ✅ FIX: Comprehensive cleanup on unmount
     return () => {
+      console.log('🧹 [MockTestInterface] Cleaning up on unmount');
+      
+      // Exit fullscreen
       FullscreenManager.exit();
+      
+      // Clear beforeunload
       window.onbeforeunload = null;
+      
+      // Restore body/html styles
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.margin = '';
+      document.body.style.padding = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.overscrollBehavior = '';
+      document.body.style.userSelect = '';
+      document.body.style.webkitUserSelect = '';
+      document.body.style.msUserSelect = '';
+      document.body.style.mozUserSelect = '';
+      
+      // Restore any hidden elements
+      const allElements = document.querySelectorAll('[style*="display: none"]');
+      allElements.forEach(el => {
+        if (el && !el.hasAttribute('data-test-interface')) {
+          el.style.display = '';
+          el.style.visibility = '';
+        }
+      });
     };
   }, [userEmail]);
 
@@ -1212,11 +1216,20 @@ export default function MockTestInterface({
   const handleTestComplete = useCallback((testResults) => {
     console.log('✅ [MockTestInterface] Test completed, passing to parent');
     
-    // ✅ Clear beforeunload
+    // ✅ Clear beforeunload immediately
     window.onbeforeunload = null;
     
-    // ✅ Exit fullscreen
+    // ✅ Exit fullscreen immediately
     FullscreenManager.exit();
+    
+    // ✅ Restore body styles immediately
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.margin = '';
+    document.body.style.padding = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
     
     // ✅ Prepare complete test data
     const completeTestData = {

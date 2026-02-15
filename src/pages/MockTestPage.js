@@ -482,23 +482,77 @@ function MockTestPage() {
     }
   };
 
-  const handleExitTest = () => {
+  const handleExitTest = async () => {
     if (window.confirm('⚠️ Are you sure? Your progress will be lost!')) {
       console.log('🔙 [MockTestPage] Exiting test, returning to plans');
-      setCurrentStep('plans');
-      setTestQuestions([]);
-      setSelectedPlan(null);
+      await backToPlans();
     }
   };
 
-  const backToPlans = () => {
+  // ==========================================
+  // 🔧 FIX #2: ENHANCED BACK TO PLANS WITH CLEANUP
+  // ==========================================
+  const backToPlans = async () => {
     console.log('🔙 [MockTestPage] Back to plans clicked');
-    setCurrentStep('plans');
-    setSelectedPlan(null);
-    setTestQuestions([]);
-    setTestResults(null);
+    
+    // ✅ Exit fullscreen before going back
+    try {
+      if (document.fullscreenElement || 
+          document.webkitFullscreenElement || 
+          document.msFullscreenElement || 
+          document.mozFullScreenElement) {
+        
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          await document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+          await document.msExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+          await document.mozCancelFullScreen();
+        }
+      }
+    } catch (err) {
+      console.log('Fullscreen exit:', err.message);
+    }
+
+    // ✅ Clear beforeunload handler
+    window.onbeforeunload = null;
+
+    // ✅ Restore body/html overflow and styles
+    document.body.style.overflow = '';
+    document.documentElement.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.margin = '';
+    document.body.style.padding = '';
+    document.body.style.width = '';
+    document.body.style.height = '';
+    document.body.style.top = '';
+    document.body.style.left = '';
+    document.body.style.overscrollBehavior = '';
+    document.body.style.userSelect = '';
+    document.body.style.webkitUserSelect = '';
+    document.body.style.msUserSelect = '';
+    document.body.style.mozUserSelect = '';
+
+    // ✅ Small delay to ensure cleanup completes
+    setTimeout(() => {
+      setCurrentStep('plans');
+      setSelectedPlan(null);
+      setTestQuestions([]);
+      setTestResults(null);
+      
+      // Reload user data to refresh state
+      loadUserData();
+      
+      // Scroll to top smoothly
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }, 100);
   };
 
+  // ==========================================
+  // 🔧 FIX #1: ENHANCED PLAN SELECTION WITH DETAILS CHECK
+  // ==========================================
   const handleSelectPlan = async (plan) => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -507,18 +561,22 @@ function MockTestPage() {
 
     setSelectedPlan(plan);
 
+    // ✅ ADMIN ACCESS
     if (isAdmin(user.email)) {
       window.showToast?.('🔓 Admin access - Free test!', 'success');
       
+      // ✅ FIX: Only show form if details don't exist
       if (!userDetails) {
         setCurrentStep('form');
         return;
       }
 
+      // If details exist, directly start test
       await startTest(plan);
       return;
     }
 
+    // ✅ NON-ADMIN ACCESS
     const status = testStatus[plan.level];
 
     if (status?.status === 'locked') {
@@ -526,16 +584,19 @@ function MockTestPage() {
       return;
     }
 
+    // Need to purchase
     if (!paymentDetails[plan.level]?.hasPaid || status?.status === 'available') {
       handlePayment(plan);
       return;
     }
 
+    // ✅ FIX: Only show form if details don't exist
     if (!userDetails) {
       setCurrentStep('form');
       return;
     }
 
+    // If details exist, directly start test
     await startTest(plan);
   };
 

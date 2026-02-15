@@ -735,15 +735,21 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
       <div style={{
         maxWidth: '1400px',
         margin: isMobile ? '0 auto 2rem' : '0 auto 3rem',
-        display: 'flex',
-        gap: '0.75rem',
-        background: '#f1f5f9',
-        padding: '0.5rem',
-        borderRadius: '16px',
-        width: 'fit-content',
         overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch'
+        overflowY: 'hidden',
+        WebkitOverflowScrolling: 'touch',
+        scrollbarWidth: 'none', /* Firefox */
+        msOverflowStyle: 'none'  /* IE/Edge */
       }}>
+        <div style={{
+          display: 'flex',
+          gap: '0.75rem',
+          background: '#f1f5f9',
+          padding: '0.5rem',
+          borderRadius: '16px',
+          width: 'fit-content',
+          minWidth: isMobile ? '100%' : 'auto'
+        }}>
         {tabs.map((tab) => {
           const isActive = activeTab === tab.id;
           return (
@@ -766,7 +772,8 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
                 gap: '0.6rem',
                 transition: 'all 0.25s ease',
                 boxShadow: isActive ? '0 4px 15px rgba(99,102,241,0.35)' : 'none',
-                whiteSpace: 'nowrap'
+                whiteSpace: 'nowrap',
+                flexShrink: 0
               }}
               onMouseEnter={(e) => {
                 if (!isActive) {
@@ -800,6 +807,7 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
             </button>
           );
         })}
+        </div>
       </div>
 
       {/* ✅ PRODUCTS TAB */}
@@ -2256,6 +2264,15 @@ function AdminPanel({ products, addProduct, deleteProduct, orders }) {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+        
+        /* Hide scrollbar but keep functionality */
+        div::-webkit-scrollbar {
+          display: none;
+        }
+        div {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
         }
       `}</style>
     </div>

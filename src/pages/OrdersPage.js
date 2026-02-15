@@ -116,7 +116,7 @@ export default function OrdersPage({ orders, user, refreshOrders }) {
   const textSub  = isDark ? '#94a3b8' : '#64748b';
   const borderC  = isDark ? '#334155' : '#e2e8f0';
 
-  // split orders — defined BEFORE any early return
+  // ✅ Split orders - completed vs pending (rare)
   const allOrders       = orders || [];
   const completedOrders = allOrders.filter(o => o.status === 'completed');
   const pendingOrders   = allOrders.filter(o => o.status === 'pending');
@@ -268,8 +268,7 @@ ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem', flexWrap:'wrap', gap:'0.5rem' }}>
             {isPending ? (
               <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', background:'#fef3c7', color:'#92400e', padding:'0.35rem 0.9rem', borderRadius:'20px', fontSize:'0.78rem', fontWeight:'800', border:'1.5px solid #f59e0b' }}>
-                <div style={{ width:10, height:10, borderRadius:'50%', border:'2px solid #f59e0b', borderTopColor:'transparent', animation:'spin 0.8s linear infinite' }}/>
-                Payment Verifying
+                <Clock size={12}/> Manual Verification
               </div>
             ) : (
               <div style={{ display:'flex', alignItems:'center', gap:'0.4rem', background:'#dcfce7', color:'#166534', padding:'0.35rem 0.9rem', borderRadius:'20px', fontSize:'0.78rem', fontWeight:'800', border:'1.5px solid #bbf7d0' }}>
@@ -319,20 +318,20 @@ ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''
               </div>
             )}
 
-            {/* pending warning */}
+            {/* ✅ ONLY show warning if actually pending (rare - manual verification) */}
             {isPending && (
               <div style={{ background:'linear-gradient(135deg,#fef3c7,#fde68a)', border:'2px solid #f59e0b', borderRadius:'14px', padding:'1rem 1.25rem', marginBottom:'1.25rem', display:'flex', alignItems:'flex-start', gap:'0.75rem' }}>
                 <AlertCircle size={20} color="#92400e" style={{ flexShrink:0, marginTop:2 }}/>
                 <div>
-                  <div style={{ fontWeight:'800', fontSize:'0.9rem', color:'#92400e', marginBottom:'0.25rem' }}>Payment Verification Pending</div>
+                  <div style={{ fontWeight:'800', fontSize:'0.9rem', color:'#92400e', marginBottom:'0.25rem' }}>Manual Verification Pending</div>
                   <div style={{ fontSize:'0.8rem', color:'#b45309', lineHeight:1.5 }}>
-                    Agar aapka payment successful tha toh 24–72 hours mein automatically confirm ho jayega. Kisi problem ke liye admin se contact karein.
+                    This order requires manual verification. Please contact admin for confirmation.
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ✅ PDF Downloads - FORCE DOWNLOAD (browser mein nahi khulega) */}
+            {/* ✅ PDF Downloads - FORCE DOWNLOAD (only for completed) */}
             {!isPending && (
               <div style={{ marginBottom:'1.25rem' }}>
                 <div style={{ fontSize:'0.8rem', fontWeight:'800', color:textSub, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:'0.75rem' }}>
@@ -345,7 +344,7 @@ ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''
                     ))
                   ) : (
                     <div style={{ padding:'1rem', borderRadius:'12px', background: isDark ? '#1e293b' : '#f1f5f9', color:textSub, fontSize:'0.85rem', fontWeight:'600' }}>
-                      ℹ️ PDF links admin se milenge. Contact karo.
+                      ℹ️ PDF links will be added soon. Contact admin if needed.
                     </div>
                   )}
                 </div>
@@ -355,7 +354,7 @@ ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''
             {/* action buttons */}
             <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap' }}>
 
-              {/* invoice */}
+              {/* invoice - only for completed */}
               {!isPending && (
                 <button
                   onClick={() => downloadInvoice(order)}
@@ -406,7 +405,8 @@ ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''
           <div>
             <h1 style={{ fontSize:'clamp(1.4rem,4vw,1.8rem)', fontWeight:900, color:textMain, margin:0 }}>📦 My Orders</h1>
             <p style={{ color:textSub, fontSize:'0.88rem', marginTop:'0.25rem' }}>
-              {completedOrders.length} completed · {pendingOrders.length} pending
+              {completedOrders.length} completed
+              {pendingOrders.length > 0 && ` · ${pendingOrders.length} pending`}
             </p>
           </div>
           <button onClick={handleRefresh} style={{ display:'flex', alignItems:'center', gap:'0.5rem', background: isDark ? '#1e293b' : '#fff', border:`2px solid ${borderC}`, borderRadius:'12px', padding:'0.65rem 1.25rem', color:textSub, fontWeight:'700', fontSize:'0.9rem', cursor:'pointer' }}>
@@ -415,13 +415,13 @@ ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''
           </button>
         </div>
 
-        {/* pending section */}
+        {/* ✅ Show pending only if they exist (rare - manual verification) */}
         {pendingOrders.length > 0 && (
           <div style={{ marginBottom:'2rem' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem' }}>
               <Clock size={16} color="#f59e0b"/>
               <span style={{ fontWeight:'800', fontSize:'0.9rem', color:'#f59e0b', textTransform:'uppercase', letterSpacing:'0.06em' }}>
-                Pending Verification ({pendingOrders.length})
+                Manual Verification ({pendingOrders.length})
               </span>
             </div>
             {pendingOrders.map(order => renderOrderCard(order))}
@@ -434,7 +434,7 @@ ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''
             <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:'1rem' }}>
               <CheckCircle size={16} color="#10b981"/>
               <span style={{ fontWeight:'800', fontSize:'0.9rem', color:'#10b981', textTransform:'uppercase', letterSpacing:'0.06em' }}>
-                Completed Orders ({completedOrders.length})
+                Your Orders ({completedOrders.length})
               </span>
             </div>
             {completedOrders.map(order => renderOrderCard(order))}
