@@ -485,17 +485,16 @@ function MockTestPage() {
   const handleExitTest = async () => {
     if (window.confirm('⚠️ Are you sure? Your progress will be lost!')) {
       console.log('🔙 [MockTestPage] Exiting test, returning to plans');
-      await backToPlans();
+      backToPlans();
     }
   };
 
   // ==========================================
-  // 🔧 FIX #2: ENHANCED BACK TO PLANS WITH CLEANUP
+  // 🚀 OPTIMIZED: INSTANT FULLSCREEN EXIT
   // ==========================================
-  const backToPlans = async () => {
+  const backToPlans = () => {
     console.log('🔙 [MockTestPage] Back to plans clicked');
     
-    // ✅ Exit fullscreen before going back
     try {
       if (document.fullscreenElement || 
           document.webkitFullscreenElement || 
@@ -503,23 +502,21 @@ function MockTestPage() {
           document.mozFullScreenElement) {
         
         if (document.exitFullscreen) {
-          await document.exitFullscreen();
+          document.exitFullscreen();
         } else if (document.webkitExitFullscreen) {
-          await document.webkitExitFullscreen();
+          document.webkitExitFullscreen();
         } else if (document.msExitFullscreen) {
-          await document.msExitFullscreen();
+          document.msExitFullscreen();
         } else if (document.mozCancelFullScreen) {
-          await document.mozCancelFullScreen();
+          document.mozCancelFullScreen();
         }
       }
     } catch (err) {
       console.log('Fullscreen exit:', err.message);
     }
 
-    // ✅ Clear beforeunload handler
     window.onbeforeunload = null;
 
-    // ✅ Restore body/html overflow and styles
     document.body.style.overflow = '';
     document.documentElement.style.overflow = '';
     document.body.style.position = '';
@@ -535,23 +532,18 @@ function MockTestPage() {
     document.body.style.msUserSelect = '';
     document.body.style.mozUserSelect = '';
 
-    // ✅ Small delay to ensure cleanup completes
-    setTimeout(() => {
-      setCurrentStep('plans');
-      setSelectedPlan(null);
-      setTestQuestions([]);
-      setTestResults(null);
-      
-      // Reload user data to refresh state
-      loadUserData();
-      
-      // Scroll to top smoothly
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }, 100);
+    setCurrentStep('plans');
+    setSelectedPlan(null);
+    setTestQuestions([]);
+    setTestResults(null);
+    
+    loadUserData();
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ==========================================
-  // 🔧 FIX #1: ENHANCED PLAN SELECTION WITH DETAILS CHECK
+  // 🔧 ENHANCED PLAN SELECTION WITH DETAILS CHECK
   // ==========================================
   const handleSelectPlan = async (plan) => {
     if (!user) {
@@ -755,11 +747,44 @@ function MockTestPage() {
             fontSize: 'clamp(0.9rem, 3vw, 1.2rem)',
             color: isDark ? '#94a3b8' : '#64748b',
             maxWidth: '600px',
-            margin: '0 auto',
+            margin: '0 auto 2rem',
             padding: '0 1rem'
           }}>
             Professional certification tests with instant results
           </p>
+          
+          {/* Back to Home Button */}
+          <button
+            onClick={() => window.location.href = '/'}
+            style={{
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              border: 'none',
+              color: '#fff',
+              padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2.5rem)',
+              borderRadius: '12px',
+              fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
+              fontWeight: '700',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              boxShadow: '0 4px 15px rgba(99,102,241,0.4)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 20px rgba(99,102,241,0.5)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 15px rgba(99,102,241,0.4)';
+            }}
+          >
+            🏠 Back to Home
+          </button>
         </div>
 
         {/* Guidelines Section */}

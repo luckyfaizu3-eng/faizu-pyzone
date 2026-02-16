@@ -22,6 +22,7 @@ import Background from './components/Background';
 import TelegramButton from './components/TelegramButton';
 import ToastContainer from './components/ToastContainer';
 import SplashScreen from './components/SplashScreen';
+import Leaderboard from './components/Leaderboard';
 
 // Import Pages
 import HomePage from './pages/HomePage';
@@ -90,7 +91,7 @@ function App() {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
       if (hash.startsWith('products/')) return 'products';
-      const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login', 'mocktests'];
+      const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login', 'mocktests', 'leaderboard'];
       return validPages.includes(hash) ? hash : 'home';
     };
 
@@ -684,6 +685,7 @@ function App() {
                 />
               )}
               {currentPage === 'mocktests' && <MockTestPage />}
+              {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
             </main>
             
             {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, XCircle, Clock, Award, Download } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, Award, Download, Home } from 'lucide-react';
 
 function ResultsDisplay({ 
   testResults, 
@@ -225,6 +225,40 @@ function ResultsDisplay({
             justifyContent: 'center',
             flexWrap: 'wrap'
           }}>
+            {/* Back to Home Button */}
+            <button
+              onClick={() => window.location.href = '/'}
+              style={{
+                padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2rem)',
+                borderRadius: '12px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                color: '#fff',
+                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)',
+                fontWeight: '700',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(245,158,11,0.3)',
+                minWidth: '150px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                justifyContent: 'center',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(245,158,11,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(245,158,11,0.3)';
+              }}
+            >
+              <Home size={20} />
+              Back to Home
+            </button>
+
+            {/* Back to Tests Button */}
             <button
               onClick={onBackToPlans}
               style={{
@@ -237,12 +271,22 @@ function ResultsDisplay({
                 fontWeight: '700',
                 cursor: 'pointer',
                 boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
-                minWidth: '150px'
+                minWidth: '150px',
+                transition: 'all 0.3s ease'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(99,102,241,0.4)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(99,102,241,0.3)';
               }}
             >
               Back to Tests
             </button>
 
+            {/* View Certificate Button */}
             {testResults.percentage >= 55 && userCertificates.find(c => c.level === selectedPlan.level) && (
               <button
                 onClick={() => onViewCertificate(selectedPlan.level)}
@@ -260,7 +304,16 @@ function ResultsDisplay({
                   alignItems: 'center',
                   gap: '0.5rem',
                   minWidth: '150px',
-                  justifyContent: 'center'
+                  justifyContent: 'center',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(16,185,129,0.4)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(16,185,129,0.3)';
                 }}
               >
                 <Download size={20} />

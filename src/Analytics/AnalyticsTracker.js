@@ -19,50 +19,107 @@ class AnalyticsTracker {
     return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  // Get or create unique visitor ID (localStorage mein save)
+  // ✅ Get or create unique visitor ID (localStorage with fallback)
   getOrCreateVisitorId() {
-    let visitorId = localStorage.getItem('faizupyzone_visitor_id');
-    if (!visitorId) {
-      visitorId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      localStorage.setItem('faizupyzone_visitor_id', visitorId);
+    try {
+      let visitorId = localStorage.getItem('faizupyzone_visitor_id');
+      if (!visitorId) {
+        visitorId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        localStorage.setItem('faizupyzone_visitor_id', visitorId);
+      }
+      return visitorId;
+    } catch (error) {
+      console.warn('⚠️ localStorage not available (private mode?), using session ID');
+      return `visitor_session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
-    return visitorId;
   }
 
-  // Get IP and Location data
+  // ✅ Get IP and Location data with proper error handling
   async getIpData() {
     if (this.ipData) return this.ipData;
 
     try {
-      // Step 1: Get IP Address
-      const ipResponse = await fetch('https://api.ipify.org?format=json');
+      // Step 1: Get IP Address (with timeout)
+      const ipController = new AbortController();
+      const ipTimeoutId = setTimeout(() => ipController.abort(), 5000);
+
+      const ipResponse = await fetch('https://api.ipify.org?format=json', {
+        signal: ipController.signal
+      });
+      clearTimeout(ipTimeoutId);
+
+      if (!ipResponse.ok) {
+        throw new Error('IP fetch failed');
+      }
+
       const { ip } = await ipResponse.json();
+      console.log('✅ IP fetched:', ip);
 
-      // Step 2: Get Location from IP (Free API - 1000 requests/day)
-      const locationResponse = await fetch(`https://ipapi.co/${ip}/json/`);
-      const locationData = await locationResponse.json();
+      // Step 2: Get Location from IP (with fallback)
+      try {
+        const locController = new AbortController();
+        const locTimeoutId = setTimeout(() => locController.abort(), 5000);
 
-      this.ipData = {
-        ip: ip,
-        country: locationData.country_name || 'Unknown',
-        countryCode: locationData.country_code || 'XX',
-        city: locationData.city || 'Unknown',
-        region: locationData.region || 'Unknown',
-        timezone: locationData.timezone || 'Unknown',
-        latitude: locationData.latitude || null,
-        longitude: locationData.longitude || null,
-        isp: locationData.org || 'Unknown'
-      };
+        const locationResponse = await fetch(`https://ipapi.co/${ip}/json/`, {
+          signal: locController.signal
+        });
+        clearTimeout(locTimeoutId);
 
-      return this.ipData;
+        const locationData = await locationResponse.json();
+
+        // Check for rate limit or errors
+        if (locationData.error || locationData.reason === 'RateLimited') {
+          console.warn('⚠️ IP API rate limited or error, using IP only');
+          throw new Error('Rate limited');
+        }
+
+        this.ipData = {
+          ip: ip,
+          country: locationData.country_name || 'Unknown',
+          countryCode: locationData.country_code || 'XX',
+          city: locationData.city || 'Unknown',
+          region: locationData.region || 'Unknown',
+          timezone: locationData.timezone || 'Unknown',
+          latitude: locationData.latitude || null,
+          longitude: locationData.longitude || null,
+          isp: locationData.org || 'Unknown'
+        };
+
+        console.log('✅ Location data fetched:', this.ipData.city);
+        return this.ipData;
+
+      } catch (locError) {
+        // Fallback: Only IP, no location details
+        console.warn('⚠️ Location fetch failed:', locError.message);
+        this.ipData = {
+          ip: ip,
+          country: 'Unknown',
+          countryCode: 'XX',
+          city: 'Unknown',
+          region: 'Unknown',
+          timezone: 'Unknown',
+          latitude: null,
+          longitude: null,
+          isp: 'Unknown'
+        };
+        return this.ipData;
+      }
+
     } catch (error) {
-      console.error('❌ Error fetching IP data:', error);
-      return {
+      console.error('❌ IP fetch completely failed:', error.message);
+      // Complete fallback - analytics will still work
+      this.ipData = {
         ip: 'Unknown',
         country: 'Unknown',
+        countryCode: 'XX',
         city: 'Unknown',
-        region: 'Unknown'
+        region: 'Unknown',
+        timezone: 'Unknown',
+        latitude: null,
+        longitude: null,
+        isp: 'Unknown'
       };
+      return this.ipData;
     }
   }
 
@@ -75,8 +132,8 @@ class AnalyticsTracker {
     
     // Detect Browser
     let browser = 'Unknown';
-    if (userAgent.includes('Chrome')) browser = 'Chrome';
-    else if (userAgent.includes('Safari')) browser = 'Safari';
+    if (userAgent.includes('Chrome') && !userAgent.includes('Edge')) browser = 'Chrome';
+    else if (userAgent.includes('Safari') && !userAgent.includes('Chrome')) browser = 'Safari';
     else if (userAgent.includes('Firefox')) browser = 'Firefox';
     else if (userAgent.includes('Edge')) browser = 'Edge';
     else if (userAgent.includes('Opera')) browser = 'Opera';
@@ -101,10 +158,33 @@ class AnalyticsTracker {
     };
   }
 
-  // Track Page View
+  // ✅ Track Page View with timeout & error handling
   async trackPageView(pagePath = window.location.pathname) {
     try {
-      const ipData = await this.getIpData();
+      console.log('📊 Tracking page view:', pagePath);
+
+      // Get IP data with timeout (5 seconds max)
+      const ipDataPromise = this.getIpData();
+      const ipData = await Promise.race([
+        ipDataPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('IP timeout')), 5000)
+        )
+      ]).catch((err) => {
+        console.warn('⚠️ IP data timeout, using fallback');
+        return {
+          ip: 'Unknown',
+          country: 'Unknown',
+          countryCode: 'XX',
+          city: 'Unknown',
+          region: 'Unknown',
+          timezone: 'Unknown',
+          latitude: null,
+          longitude: null,
+          isp: 'Unknown'
+        };
+      });
+
       const deviceInfo = this.getDeviceInfo();
 
       const pageViewData = {
@@ -145,20 +225,24 @@ class AnalyticsTracker {
         type: 'pageview'
       };
 
-      // Save to Firebase
+      // Save to Firebase with error handling
       await addDoc(collection(db, 'analytics'), pageViewData);
       
-      console.log('✅ Page view tracked:', pagePath);
+      console.log('✅ Page view tracked successfully:', pagePath);
       this.isInitialized = true;
 
     } catch (error) {
-      console.error('❌ Error tracking page view:', error);
+      console.error('❌ Error tracking page view:', error.message);
+      // Don't throw - silently fail for analytics
+      // User experience should not be affected
     }
   }
 
-  // Track User Action (product view, purchase, etc.)
+  // ✅ Track User Action with error handling
   async trackAction(actionType, actionData = {}) {
     try {
+      console.log('🎯 Tracking action:', actionType);
+
       if (!this.isInitialized) {
         await this.trackPageView();
       }
@@ -206,10 +290,11 @@ class AnalyticsTracker {
       // Save to Firebase
       await addDoc(collection(db, 'user_actions'), actionEvent);
       
-      console.log('✅ Action tracked:', actionType, actionData);
+      console.log('✅ Action tracked:', actionType);
 
     } catch (error) {
-      console.error('❌ Error tracking action:', error);
+      console.error('❌ Error tracking action:', error.message);
+      // Silently fail - don't affect user experience
     }
   }
 

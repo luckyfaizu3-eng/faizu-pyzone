@@ -3,6 +3,47 @@ import { Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, B
 import UserDetailsForm from './UserDetailsForm';
 
 // ==========================================
+// 💾 LEADERBOARD STORAGE MANAGER
+// ==========================================
+class LeaderboardStorage {
+  static async saveEntry(testResult) {
+    try {
+      // Import Firestore functions
+      const { collection, addDoc } = await import('firebase/firestore');
+      const { db } = await import('../firebase');
+      
+      const newEntry = {
+        name: testResult.studentInfo?.name || testResult.studentInfo?.fullName || testResult.userName || 'Anonymous',
+        email: testResult.userEmail,
+        percentage: testResult.percentage,
+        score: `${testResult.correct}/${testResult.total}`,
+        testTitle: testResult.testTitle,
+        testLevel: testResult.testLevel,
+        timeTaken: testResult.timeTaken,
+        passed: testResult.passed,
+        penalized: testResult.penalized || false,
+        disqualificationReason: testResult.disqualificationReason || '',
+        date: new Date().toLocaleDateString('en-GB'),
+        timestamp: Date.now()
+      };
+
+      const docRef = await addDoc(collection(db, 'leaderboard'), newEntry);
+      console.log('✅ Leaderboard entry saved to FIRESTORE:', docRef.id);
+      console.log('📊 Entry details:', newEntry);
+      
+      return { success: true, id: docRef.id };
+    } catch (error) {
+      console.error('❌ Error saving to leaderboard:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  static getAllEntries() {
+    return [];
+  }
+}
+
+// ==========================================
 // 🎯 CONFIGURATION
 // ==========================================
 const APP_CONFIG = {
@@ -10,8 +51,9 @@ const APP_CONFIG = {
   MAX_TAB_SWITCHES: 3,
   PASS_PERCENTAGE: 55,
   WARNING_TIMEOUT: 3000,
-  CRITICAL_WARNING_TIMEOUT: 5000,
-  AUTO_SUBMIT_DELAY: 3000,
+  CRITICAL_WARNING_TIMEOUT: 8000,
+  FINAL_WARNING_TIMEOUT: 10000,
+  AUTO_SUBMIT_DELAY: 2000,
   CRITICAL_TIME_MINUTES: 5,
   CERTIFICATE_COOLDOWN_DAYS: 30,
 };
@@ -196,20 +238,12 @@ class FullscreenManager {
     meta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui';
     document.head.appendChild(meta);
 
-    document.documentElement.style.overflow = 'hidden';
-    document.body.style.overflow = 'hidden';
-    
-    // Wake lock to prevent screen sleep
     if ('wakeLock' in navigator) {
       navigator.wakeLock.request('screen').catch(() => {});
     }
-    
-    // Prevent pull-to-refresh
-    document.body.style.overscrollBehavior = 'none';
   }
 
   static lockOrientation() {
-    // Lock screen orientation if supported
     try {
       if (window.screen && window.screen.orientation && window.screen.orientation.lock) {
         window.screen.orientation.lock('portrait').catch(() => {});
@@ -387,6 +421,58 @@ class SecurityManager {
       clearInterval(this.devToolsInterval);
       this.devToolsInterval = null;
     }
+  }
+}
+
+// ==========================================
+// 🧹 CENTRALIZED CLEANUP MANAGER - ✅ CRITICAL FIX
+// ==========================================
+class CleanupManager {
+  static performFullCleanup() {
+    console.log('🧹 [CleanupManager] Starting full cleanup...');
+    
+    // ✅ Exit fullscreen
+    FullscreenManager.exit();
+    
+    // ✅ Clear beforeunload
+    window.onbeforeunload = null;
+    
+    // ✅ Restore ALL body/html/documentElement styles
+    const elementsToRestore = [document.body, document.documentElement];
+    elementsToRestore.forEach(el => {
+      if (el) {
+        el.style.overflow = '';
+        el.style.position = '';
+        el.style.margin = '';
+        el.style.padding = '';
+        el.style.width = '';
+        el.style.height = '';
+        el.style.top = '';
+        el.style.left = '';
+        el.style.overscrollBehavior = '';
+        el.style.userSelect = '';
+        el.style.webkitUserSelect = '';
+        el.style.msUserSelect = '';
+        el.style.mozUserSelect = '';
+      }
+    });
+    
+    // ✅ Restore hidden elements
+    const hiddenElements = document.querySelectorAll('[style*="display: none"], [style*="visibility: hidden"]');
+    hiddenElements.forEach(el => {
+      if (el && !el.hasAttribute('data-test-interface')) {
+        el.style.display = '';
+        el.style.visibility = '';
+      }
+    });
+    
+    // ✅ DON'T remove test elements - React will handle cleanup
+    // This prevents "removeChild" errors when React tries to unmount
+    
+    // ✅ Force scroll restoration
+    window.scrollTo(0, 0);
+    
+    console.log('✅ [CleanupManager] Cleanup completed successfully');
   }
 }
 
@@ -584,6 +670,8 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
   const [tabSwitches, setTabSwitches] = useState(0);
   const [showWarning, setShowWarning] = useState(false);
   const [warningMsg, setWarningMsg] = useState('');
+  const [warningType, setWarningType] = useState('normal');
+  const [isDisqualified, setIsDisqualified] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
 
   const startTimeRef = useRef(Date.now());
@@ -599,32 +687,48 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
   const timerTheme = TestUtils.getTimerTheme(timeLeft, timeLimit * 60);
   const isCriticalTime = timeLeft < APP_CONFIG.CRITICAL_TIME_MINUTES * 60;
 
-  const showWarningMessage = useCallback((message, critical = false) => {
+  const showWarningMessage = useCallback((message, type = 'normal') => {
     setWarningMsg(message);
+    setWarningType(type);
     setShowWarning(true);
 
     if (warningTimerRef.current) {
       clearTimeout(warningTimerRef.current);
     }
 
-    const timeout = critical ? APP_CONFIG.CRITICAL_WARNING_TIMEOUT : APP_CONFIG.WARNING_TIMEOUT;
+    let timeout = APP_CONFIG.WARNING_TIMEOUT;
+    if (type === 'critical') timeout = APP_CONFIG.CRITICAL_WARNING_TIMEOUT;
+    if (type === 'final') timeout = APP_CONFIG.FINAL_WARNING_TIMEOUT;
+
     warningTimerRef.current = setTimeout(() => {
       setShowWarning(false);
     }, timeout);
   }, []);
 
   const handleAnswer = useCallback((qIndex, optionIndex) => {
+    if (isDisqualified) return;
     setAnswers(prev => ({ ...prev, [qIndex]: optionIndex }));
-  }, []);
+  }, [isDisqualified]);
 
-  const handleSubmit = useCallback((penalized = false) => {
+  const handleSubmit = useCallback((penalized = false, reason = '') => {
     if (hasSubmittedRef.current) {
       console.log('⚠️ Already submitted, ignoring duplicate submission');
       return;
     }
 
-    if (!isAdmin && !allAnswered) {
-      showWarningMessage(`⚠️ Answer ALL questions! (${answeredCount}/${questions.length} done)`, true);
+    // ✅ IMMEDIATE FULLSCREEN EXIT - 0.1 second
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else if (document.webkitFullscreenElement) {
+      document.webkitExitFullscreen();
+    } else if (document.msFullscreenElement) {
+      document.msExitFullscreen();
+    } else if (document.mozFullScreenElement) {
+      document.mozCancelFullScreen();
+    }
+
+    if (!isAdmin && !allAnswered && !penalized) {
+      showWarningMessage(`⚠️ Answer ALL questions! (${answeredCount}/${questions.length} done)`, 'normal');
       return;
     }
 
@@ -638,20 +742,31 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
       timeTaken: `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`,
       tabSwitches,
       penalized,
+      disqualificationReason: reason,
       studentInfo
     };
 
     console.log('✅ [TestInterface] Submitting results:', results);
-    onComplete(results);
+    
+    // ✅ CRITICAL: Cleanup BEFORE completing
+    CleanupManager.performFullCleanup();
+    
+    // ✅ Small delay to ensure cleanup completes
+    setTimeout(() => {
+      onComplete(results);
+    }, 100);
+    
   }, [answers, questions, tabSwitches, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage]);
 
   const handleNavigation = useCallback((direction) => {
+    if (isDisqualified) return;
+    
     if (direction === 'next' && currentQuestion < questions.length - 1) {
       setCurrentQuestion(prev => prev + 1);
     } else if (direction === 'prev' && currentQuestion > 0) {
       setCurrentQuestion(prev => prev - 1);
     }
-  }, [currentQuestion, questions.length]);
+  }, [currentQuestion, questions.length, isDisqualified]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -783,8 +898,8 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
     const handleFullscreenChange = () => {
       const isFullscreen = FullscreenManager.isActive();
       
-      if (!isFullscreen && !hasSubmittedRef.current) {
-        showWarningMessage('⚠️ Stay in fullscreen mode!');
+      if (!isFullscreen && !hasSubmittedRef.current && !isDisqualified) {
+        showWarningMessage('⚠️ Stay in fullscreen mode!', 'normal');
         setTimeout(() => {
           FullscreenManager.enter();
         }, 2000);
@@ -795,18 +910,15 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
 
     return () => {
       cleanup();
-      if (FullscreenManager.isActive()) {
-        FullscreenManager.exit();
-      }
     };
-  }, [isAdmin, showWarningMessage]);
+  }, [isAdmin, showWarningMessage, isDisqualified]);
 
   useEffect(() => {
-    if (timeLeft <= 0 || hasSubmittedRef.current) {
-      if (timeLeft <= 0 && !hasSubmittedRef.current) {
+    if (timeLeft <= 0 || hasSubmittedRef.current || isDisqualified) {
+      if (timeLeft <= 0 && !hasSubmittedRef.current && !isDisqualified) {
         audioManagerRef.current.playAlarm();
-        showWarningMessage('⏰ TIME UP! Auto-submitting...', true);
-        setTimeout(() => handleSubmit(false), APP_CONFIG.AUTO_SUBMIT_DELAY);
+        showWarningMessage('⏰ TIME UP! Auto-submitting...', 'final');
+        setTimeout(() => handleSubmit(false, ''), APP_CONFIG.AUTO_SUBMIT_DELAY);
       }
       return;
     }
@@ -816,38 +928,68 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, showWarningMessage, handleSubmit]);
+  }, [timeLeft, showWarningMessage, handleSubmit, isDisqualified]);
 
   useEffect(() => {
-    if (isAdmin || timeLeft <= 0 || hasSubmittedRef.current) return;
+    if (isAdmin || timeLeft <= 0 || hasSubmittedRef.current || isDisqualified) return;
 
     const tickTimer = setInterval(() => {
       audioManagerRef.current.playTick(timeLeft % 2 === 0);
     }, 1000);
 
     return () => clearInterval(tickTimer);
-  }, [timeLeft, isAdmin]);
+  }, [timeLeft, isAdmin, isDisqualified]);
 
   useEffect(() => {
-    if (isAdmin) return;
+    if (isAdmin || isDisqualified) return;
 
     const handleVisibilityChange = () => {
       if (document.hidden && !hasSubmittedRef.current) {
         const newCount = tabSwitches + 1;
         setTabSwitches(newCount);
 
-        if (newCount >= APP_CONFIG.MAX_TAB_SWITCHES) {
-          showWarningMessage('🚨 Maximum tab switches! Auto-submitting...', true);
-          setTimeout(() => handleSubmit(true), APP_CONFIG.AUTO_SUBMIT_DELAY);
-        } else {
-          showWarningMessage(`⚠️ Tab Switch ${newCount}/${APP_CONFIG.MAX_TAB_SWITCHES}!`);
+        if (newCount === 1) {
+          showWarningMessage('⚠️ Warning! Tab Switch 1/3 - Stay focused on the test!', 'normal');
+        }
+        else if (newCount === 2) {
+          const criticalMessage = `🚨 FINAL WARNING! Tab Switch 2/3
+
+⚠️ If you switch tabs ONE MORE TIME:
+• Your test will be IMMEDIATELY SUBMITTED
+• You will be marked as FAIL
+• Your payment will NOT BE REFUNDABLE
+• Certificate will NOT be issued
+
+This is your LAST CHANCE!`;
+          
+          showWarningMessage(criticalMessage, 'critical');
+        }
+        else if (newCount >= APP_CONFIG.MAX_TAB_SWITCHES) {
+          setIsDisqualified(true);
+          
+          const disqualificationMessage = `🚫 TEST DISQUALIFIED
+
+Sorry! Cheating is NOT allowed.
+
+Your test has been auto-submitted with FAIL status.
+
+⚠️ IMPORTANT:
+• Payment is NON-REFUNDABLE
+• No certificate will be issued
+• This attempt is permanently recorded`;
+          
+          showWarningMessage(disqualificationMessage, 'final');
+          
+          setTimeout(() => {
+            handleSubmit(true, 'tab-switching-cheating');
+          }, APP_CONFIG.AUTO_SUBMIT_DELAY);
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [tabSwitches, isAdmin, showWarningMessage, handleSubmit]);
+  }, [tabSwitches, isAdmin, showWarningMessage, handleSubmit, isDisqualified]);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth <= 768);
@@ -856,6 +998,36 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
   }, []);
 
   const currentQ = questions[currentQuestion];
+
+  const getWarningStyle = () => {
+    if (warningType === 'final') {
+      return {
+        background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+        border: '5px solid #dc2626',
+        color: '#991b1b',
+        iconColor: '#dc2626',
+        iconSize: isMobile ? 80 : 100
+      };
+    } else if (warningType === 'critical') {
+      return {
+        background: 'linear-gradient(135deg, #fef3c7, #fde68a)',
+        border: '5px solid #f59e0b',
+        color: '#92400e',
+        iconColor: '#f59e0b',
+        iconSize: isMobile ? 70 : 85
+      };
+    } else {
+      return {
+        background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
+        border: '4px solid #ef4444',
+        color: '#991b1b',
+        iconColor: '#ef4444',
+        iconSize: isMobile ? 64 : 80
+      };
+    }
+  };
+
+  const warningStyle = getWarningStyle();
 
   return (
     <div 
@@ -871,7 +1043,8 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
         width: '100vw',
         height: '100vh',
         top: 0,
-        left: 0
+        left: 0,
+        pointerEvents: isDisqualified ? 'none' : 'auto'
       }}>
       {isAdmin && (
         <div style={{
@@ -887,28 +1060,45 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
 
       {showWarning && !isAdmin && (
         <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)',
           zIndex: 9999999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          backdropFilter: 'blur(10px)'
+          backdropFilter: 'blur(12px)'
         }}>
           <div style={{
-            background: 'linear-gradient(135deg, #fee2e2, #fecaca)',
-            padding: isMobile ? '2.5rem 2rem' : '3rem',
-            borderRadius: '28px', maxWidth: '500px', width: '90%',
-            border: '5px solid #ef4444',
-            boxShadow: '0 30px 80px rgba(239,68,68,0.6)',
-            textAlign: 'center', animation: 'pulse 0.5s infinite'
+            background: warningStyle.background,
+            padding: isMobile ? '2.5rem 2rem' : '3.5rem 3rem',
+            borderRadius: '28px', maxWidth: warningType === 'critical' || warningType === 'final' ? '600px' : '500px',
+            width: '90%',
+            border: warningStyle.border,
+            boxShadow: `0 30px 80px ${warningStyle.iconColor}60`,
+            textAlign: 'center',
+            animation: warningType === 'final' ? 'shake 0.5s infinite' : 'pulse 0.5s infinite'
           }}>
-            <AlertTriangle size={isMobile ? 64 : 80} color="#dc2626" strokeWidth={3} 
-              style={{ marginBottom: '1rem', animation: 'shake 0.5s infinite' }} />
+            <AlertTriangle 
+              size={warningStyle.iconSize} 
+              color={warningStyle.iconColor} 
+              strokeWidth={3} 
+              style={{ marginBottom: '1.5rem', animation: 'shake 0.5s infinite' }} 
+            />
             <div style={{
-              fontSize: isMobile ? '1.3rem' : '1.8rem',
-              fontWeight: '900', color: '#991b1b', lineHeight: 1.4
+              fontSize: warningType === 'critical' || warningType === 'final' ? (isMobile ? '1.1rem' : '1.4rem') : (isMobile ? '1.3rem' : '1.8rem'),
+              fontWeight: '900', 
+              color: warningStyle.color, 
+              lineHeight: 1.5,
+              whiteSpace: 'pre-line'
             }}>
               {warningMsg}
             </div>
             {tabSwitches > 0 && (
-              <div style={{ fontSize: '1rem', color: '#7f1d1d', fontWeight: '700', marginTop: '1rem' }}>
+              <div style={{ 
+                fontSize: isMobile ? '1rem' : '1.2rem', 
+                color: warningStyle.color, 
+                fontWeight: '800', 
+                marginTop: '1.5rem',
+                padding: '1rem',
+                background: 'rgba(0,0,0,0.1)',
+                borderRadius: '12px'
+              }}>
                 Tab Switches: {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
               </div>
             )}
@@ -920,7 +1110,8 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
         position: 'sticky', top: 0, background: '#fff',
         borderBottom: '3px solid #e2e8f0',
         padding: isMobile ? '0.75rem 1rem' : '1rem 1.5rem',
-        zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.08)'
+        zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+        opacity: isDisqualified ? 0.5 : 1
       }}>
         <div style={{
           maxWidth: '1400px', margin: '0 auto',
@@ -957,6 +1148,15 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
                   ⚠️ {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
                 </span>
               )}
+              {isDisqualified && (
+                <span style={{
+                  background: '#dc2626', color: '#fff',
+                  padding: '0.15rem 0.5rem', borderRadius: '6px',
+                  fontSize: '0.7rem', fontWeight: '800'
+                }}>
+                  🚫 DISQUALIFIED
+                </span>
+              )}
             </div>
           </div>
 
@@ -982,7 +1182,9 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
 
       <div style={{
         padding: isMobile ? '1.5rem 1rem' : '2rem 1.5rem',
-        maxWidth: '1400px', margin: '0 auto', paddingBottom: '6rem'
+        maxWidth: '1400px', margin: '0 auto', paddingBottom: '6rem',
+        opacity: isDisqualified ? 0.3 : 1,
+        pointerEvents: isDisqualified ? 'none' : 'auto'
       }}>
         <div key={currentQuestion} style={{
           background: '#fff', padding: isMobile ? '1.5rem' : '2.5rem',
@@ -1021,11 +1223,13 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
           {currentQ.options.map((option, idx) => {
             const isSelected = answers[currentQuestion] === idx;
             return (
-              <button key={idx} onClick={() => handleAnswer(currentQuestion, idx)} style={{
+              <button key={idx} onClick={() => handleAnswer(currentQuestion, idx)} 
+                disabled={isDisqualified}
+                style={{
                 padding: isMobile ? '1.25rem' : '1.75rem',
                 background: isSelected ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#fff',
                 border: `3px solid ${isSelected ? '#3b82f6' : '#e2e8f0'}`,
-                borderRadius: '16px', cursor: 'pointer', textAlign: 'left',
+                borderRadius: '16px', cursor: isDisqualified ? 'not-allowed' : 'pointer', textAlign: 'left',
                 color: isSelected ? '#fff' : '#1e293b',
                 fontSize: isMobile ? '1rem' : '1.3rem', fontWeight: '600',
                 display: 'flex', alignItems: 'center', gap: isMobile ? '1rem' : '1.5rem',
@@ -1053,12 +1257,14 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '2.5rem' }}>
-          <button onClick={() => handleNavigation('prev')} disabled={currentQuestion === 0} style={{
+          <button onClick={() => handleNavigation('prev')} 
+            disabled={currentQuestion === 0 || isDisqualified} 
+            style={{
             padding: isMobile ? '1rem 1.5rem' : '1.25rem 2rem',
-            background: currentQuestion === 0 ? '#f1f5f9' : 'linear-gradient(135deg, #fff, #f8fafc)',
-            border: `3px solid ${currentQuestion === 0 ? '#e2e8f0' : '#cbd5e1'}`,
-            borderRadius: '12px', cursor: currentQuestion === 0 ? 'not-allowed' : 'pointer',
-            fontWeight: '700', color: currentQuestion === 0 ? '#94a3b8' : '#1e293b',
+            background: (currentQuestion === 0 || isDisqualified) ? '#f1f5f9' : 'linear-gradient(135deg, #fff, #f8fafc)',
+            border: `3px solid ${(currentQuestion === 0 || isDisqualified) ? '#e2e8f0' : '#cbd5e1'}`,
+            borderRadius: '12px', cursor: (currentQuestion === 0 || isDisqualified) ? 'not-allowed' : 'pointer',
+            fontWeight: '700', color: (currentQuestion === 0 || isDisqualified) ? '#94a3b8' : '#1e293b',
             fontSize: isMobile ? '0.95rem' : '1.1rem',
             display: 'flex', alignItems: 'center', gap: '0.5rem',
             transition: 'all 0.2s'
@@ -1068,25 +1274,32 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
           </button>
 
           {currentQuestion === questions.length - 1 ? (
-            <button onClick={() => handleSubmit(false)} disabled={!allAnswered && !isAdmin} style={{
+            <button onClick={() => handleSubmit(false, '')} 
+              disabled={((!allAnswered && !isAdmin) || isDisqualified)} 
+              style={{
               padding: isMobile ? '1rem 2rem' : '1.25rem 3rem',
-              background: (allAnswered || isAdmin) ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
-              border: `3px solid ${(allAnswered || isAdmin) ? '#059669' : '#e2e8f0'}`,
+              background: ((allAnswered || isAdmin) && !isDisqualified) ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
+              border: `3px solid ${((allAnswered || isAdmin) && !isDisqualified) ? '#059669' : '#e2e8f0'}`,
               borderRadius: '12px',
-              cursor: (allAnswered || isAdmin) ? 'pointer' : 'not-allowed',
-              fontWeight: '800', color: (allAnswered || isAdmin) ? '#fff' : '#94a3b8',
+              cursor: ((allAnswered || isAdmin) && !isDisqualified) ? 'pointer' : 'not-allowed',
+              fontWeight: '800', color: ((allAnswered || isAdmin) && !isDisqualified) ? '#fff' : '#94a3b8',
               fontSize: isMobile ? '1rem' : '1.2rem',
-              boxShadow: (allAnswered || isAdmin) ? '0 8px 24px rgba(16,185,129,0.4)' : 'none',
+              boxShadow: ((allAnswered || isAdmin) && !isDisqualified) ? '0 8px 24px rgba(16,185,129,0.4)' : 'none',
               textTransform: 'uppercase', transition: 'all 0.2s'
             }}>
-              {(allAnswered || isAdmin) ? '✅ Submit Test' : '⚠️ Answer All First'}
+              {((allAnswered || isAdmin) && !isDisqualified) ? '✅ Submit Test' : '⚠️ Answer All First'}
             </button>
           ) : (
-            <button onClick={() => handleNavigation('next')} style={{
+            <button onClick={() => handleNavigation('next')} 
+              disabled={isDisqualified}
+              style={{
               padding: isMobile ? '1rem 1.5rem' : '1.25rem 2rem',
-              background: 'linear-gradient(135deg, #fff, #f8fafc)',
-              border: '3px solid #cbd5e1', borderRadius: '12px',
-              cursor: 'pointer', fontWeight: '700', color: '#1e293b',
+              background: isDisqualified ? '#f1f5f9' : 'linear-gradient(135deg, #fff, #f8fafc)',
+              border: `3px solid ${isDisqualified ? '#e2e8f0' : '#cbd5e1'}`,
+              borderRadius: '12px',
+              cursor: isDisqualified ? 'not-allowed' : 'pointer',
+              fontWeight: '700', 
+              color: isDisqualified ? '#94a3b8' : '#1e293b',
               fontSize: isMobile ? '0.95rem' : '1.1rem',
               display: 'flex', alignItems: 'center', gap: '0.5rem',
               transition: 'all 0.2s'
@@ -1118,16 +1331,19 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
               const isAnswered = answers[idx] !== undefined;
               const isCurrent = idx === currentQuestion;
               return (
-                <button key={idx} onClick={() => setCurrentQuestion(idx)} style={{
+                <button key={idx} onClick={() => !isDisqualified && setCurrentQuestion(idx)} 
+                  disabled={isDisqualified}
+                  style={{
                   height: isMobile ? '44px' : '56px', borderRadius: '10px',
                   border: isCurrent ? '3px solid #3b82f6' : 'none',
                   background: isAnswered ? 'linear-gradient(135deg, #10b981, #059669)' : '#e2e8f0',
                   color: isAnswered ? '#fff' : '#1e293b',
-                  fontWeight: '800', cursor: 'pointer',
+                  fontWeight: '800', cursor: isDisqualified ? 'not-allowed' : 'pointer',
                   fontSize: isMobile ? '0.95rem' : '1.15rem',
                   boxShadow: isAnswered ? '0 4px 12px rgba(16,185,129,0.3)' : 'none',
                   transition: 'all 0.2s',
-                  transform: isCurrent ? 'scale(1.05)' : 'scale(1)'
+                  transform: isCurrent ? 'scale(1.05)' : 'scale(1)',
+                  opacity: isDisqualified ? 0.5 : 1
                 }}>
                   {idx + 1}
                 </button>
@@ -1151,7 +1367,7 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
 }
 
 // ==========================================
-// 🎯 MAIN APP - COMPLETE FIXED VERSION
+// 🎯 MAIN APP - ✅ COMPLETE FIXED VERSION
 // ==========================================
 export default function MockTestInterface({ 
   questions, 
@@ -1164,6 +1380,7 @@ export default function MockTestInterface({
 }) {
   const [stage, setStage] = useState('instructions');
   const [studentInfo, setStudentInfo] = useState(null);
+  const hasSubmittedFormRef = useRef(false);
 
   useEffect(() => {
     if (userEmail !== APP_CONFIG.ADMIN_EMAIL) {
@@ -1172,69 +1389,67 @@ export default function MockTestInterface({
     
     window.onbeforeunload = null;
     
-    // ✅ FIX: Comprehensive cleanup on unmount
+    // ✅ Comprehensive cleanup on unmount
     return () => {
       console.log('🧹 [MockTestInterface] Cleaning up on unmount');
-      
-      // Exit fullscreen
-      FullscreenManager.exit();
-      
-      // Clear beforeunload
-      window.onbeforeunload = null;
-      
-      // Restore body/html styles
-      document.body.style.overflow = '';
-      document.documentElement.style.overflow = '';
-      document.body.style.position = '';
-      document.body.style.margin = '';
-      document.body.style.padding = '';
-      document.body.style.width = '';
-      document.body.style.height = '';
-      document.body.style.top = '';
-      document.body.style.left = '';
-      document.body.style.overscrollBehavior = '';
-      document.body.style.userSelect = '';
-      document.body.style.webkitUserSelect = '';
-      document.body.style.msUserSelect = '';
-      document.body.style.mozUserSelect = '';
-      
-      // Restore any hidden elements
-      const allElements = document.querySelectorAll('[style*="display: none"]');
-      allElements.forEach(el => {
-        if (el && !el.hasAttribute('data-test-interface')) {
-          el.style.display = '';
-          el.style.visibility = '';
-        }
-      });
+      CleanupManager.performFullCleanup();
     };
   }, [userEmail]);
+
+  // ✅ Handle browser back button
+  useEffect(() => {
+    const handlePopState = (e) => {
+      e.preventDefault();
+      
+      const confirmExit = window.confirm(
+        'Are you sure you want to exit the test?\n\n' +
+        '• Your progress will be lost\n' +
+        '• Payment is non-refundable\n' +
+        '• You can restart later'
+      );
+      
+      if (confirmExit) {
+        CleanupManager.performFullCleanup();
+        if (onExit) onExit();
+      } else {
+        window.history.pushState(null, '', window.location.href);
+      }
+    };
+
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [onExit]);
 
   const handleInstructionsAccept = () => {
     setStage('form');
   };
 
+  const handleFormSubmit = useCallback((info) => {
+    if (hasSubmittedFormRef.current) {
+      console.log('⚠️ Form already submitted, ignoring duplicate');
+      return;
+    }
+    
+    hasSubmittedFormRef.current = true;
+    setStudentInfo(info);
+    setStage('test');
+  }, []);
+
   const handleTestComplete = useCallback((testResults) => {
     console.log('✅ [MockTestInterface] Test completed, passing to parent');
     
-    // ✅ Clear beforeunload immediately
-    window.onbeforeunload = null;
-    
-    // ✅ Exit fullscreen immediately
-    FullscreenManager.exit();
-    
-    // ✅ Restore body styles immediately
-    document.body.style.overflow = '';
-    document.documentElement.style.overflow = '';
-    document.body.style.position = '';
-    document.body.style.margin = '';
-    document.body.style.padding = '';
-    document.body.style.width = '';
-    document.body.style.height = '';
+    // ✅ CRITICAL: Immediate cleanup FIRST
+    CleanupManager.performFullCleanup();
     
     // ✅ Prepare complete test data
     const completeTestData = {
       ...testResults,
       studentInfo: studentInfo,
+      userName: studentInfo?.fullName,  // ✅ Fixed - Use fullName instead of name
       testTitle: testTitle,
       testLevel: testLevel,
       userEmail: userEmail,
@@ -1243,13 +1458,32 @@ export default function MockTestInterface({
     };
     
     console.log('📊 [MockTestInterface] Passing data to parent:', completeTestData);
+    console.log('🔍 DEBUG - studentInfo:', studentInfo);
+    console.log('🔍 DEBUG - userName from studentInfo:', studentInfo?.fullName);
+    console.log('🔍 DEBUG - completeTestData.userName:', completeTestData.userName);
     
-    // ✅ Pass results to parent component
-    if (onComplete && typeof onComplete === 'function') {
-      onComplete(completeTestData);
-    }
+    // ✅ Save to leaderboard
+    LeaderboardStorage.saveEntry(completeTestData);
+    
+    // ✅ Pass results to parent component with small delay
+    setTimeout(() => {
+      if (onComplete && typeof onComplete === 'function') {
+        onComplete(completeTestData);
+      }
+    }, 200);
     
   }, [studentInfo, testTitle, testLevel, userEmail, onComplete]);
+
+  const handleFormCancel = () => {
+    const confirmCancel = window.confirm(
+      'Are you sure you want to go back?\n\nYou will need to accept instructions again.'
+    );
+    
+    if (confirmCancel) {
+      hasSubmittedFormRef.current = false;
+      setStage('instructions');
+    }
+  };
 
   return (
     <>
@@ -1263,11 +1497,8 @@ export default function MockTestInterface({
       )}
       {stage === 'form' && (
         <UserDetailsForm
-          onSubmit={(info) => { 
-            setStudentInfo(info); 
-            setStage('test'); 
-          }}
-          onCancel={() => setStage('instructions')}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormCancel}
         />
       )}
       {stage === 'test' && (

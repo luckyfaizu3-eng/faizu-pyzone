@@ -233,13 +233,14 @@ function HomePage({ setCurrentPage }) {
       }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
+          gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(5, 1fr)',
           gap: isMobile ? '10px' : '14px'
         }}>
           {[
             { icon: '📚', label: 'Browse Notes', page: 'products', gradient: 'linear-gradient(135deg, #6366f1, #8b5cf6)' },
             { icon: '🐍', label: 'Mock Tests', page: 'mocktests', gradient: 'linear-gradient(135deg, #10b981, #34d399)' },
             { icon: '📦', label: 'My Orders', page: 'orders', gradient: 'linear-gradient(135deg, #f59e0b, #fbbf24)' },
+            { icon: '🏆', label: 'Leaderboard', page: 'leaderboard', gradient: 'linear-gradient(135deg, #8b5cf6, #d946ef)' },
             user ?
               { icon: '👤', label: 'Logout', page: null, gradient: 'linear-gradient(135deg, #ef4444, #dc2626)', action: logout } :
               { icon: '🔐', label: 'Login', page: 'login', gradient: 'linear-gradient(135deg, #ec4899, #f472b6)' }
