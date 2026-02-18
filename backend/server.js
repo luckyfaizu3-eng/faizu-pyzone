@@ -1,6 +1,9 @@
-const express = require('express');
-const cors    = require('cors');
-const axios   = require('axios');
+const express  = require('express');
+const cors     = require('cors');
+const { execSync, spawn } = require('child_process');
+const fs       = require('fs');
+const path     = require('path');
+const os       = require('os');
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -8,63 +11,71 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
 
+// Check if python3 is available on this system
+const PYTHON = (() => {
+  try { execSync('python3 --version'); return 'python3'; } catch {}
+  try { execSync('python --version'); return 'python'; }  catch {}
+  return null;
+})();
+
+console.log('Python binary:', PYTHON || 'NOT FOUND');
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: '🐍 FaizUpyZone Python Compiler!' });
+  res.json({ 
+    status: 'ok', 
+    message: '🐍 FaizUpyZone Python Compiler!',
+    python: PYTHON || 'not available'
+  });
 });
 
 app.post('/run', async (req, res) => {
   const { code, stdin = '' } = req.body;
   if (!code || !code.trim()) return res.status(400).json({ error: 'No code' });
 
-  // ── Wandbox API — correct compiler name ──
+  if (!PYTHON) {
+    return res.status(500).json({
+      stdout: '',
+      stderr: '❌ Python not available on server',
+      exitCode: 1,
+    });
+  }
+
+  const tmpFile = path.join(os.tmpdir(), `py_${Date.now()}.py`);
+
   try {
-    const response = await axios.post(
-      'https://wandbox.org/api/compile.json',
-      {
-        compiler: 'cpython-3.12.3',
-        code: code,
-        stdin: stdin,
-      },
-      { timeout: 25000, headers: { 'Content-Type': 'application/json' } }
-    );
+    fs.writeFileSync(tmpFile, code, 'utf8');
 
-    const d = response.data;
-    const stdout = d.program_output || '';
-    const stderr = d.program_error || d.compiler_error || '';
-    return res.json({ stdout, stderr, exitCode: d.status ? parseInt(d.status) : 0 });
+    const result = await new Promise((resolve) => {
+      const proc = spawn(PYTHON, [tmpFile]);
+      let stdout = '', stderr = '';
+      let killed = false;
 
-  } catch (e1) {
-    console.error('Wandbox error:', e1.message);
+      if (stdin) { proc.stdin.write(stdin); }
+      proc.stdin.end();
 
-    // ── Fallback: Rextester (Python 3) ──
-    try {
-      const params = new URLSearchParams();
-      params.append('LanguageChoiceWrapper', '24');
-      params.append('EditorChoiceWrapper', '1');
-      params.append('LayoutChoiceWrapper', '1');
-      params.append('Program', code);
-      params.append('Input', stdin);
-      params.append('CompilerArgs', '');
+      proc.stdout.on('data', d => { stdout += d.toString(); });
+      proc.stderr.on('data', d => { stderr += d.toString(); });
 
-      const r2 = await axios.post(
-        'https://rextester.com/rundotnet/Run',
-        params,
-        { timeout: 20000 }
-      );
-      return res.json({
-        stdout: r2.data.Result || '',
-        stderr: r2.data.Errors || '',
-        exitCode: r2.data.Errors ? 1 : 0,
+      proc.on('close', code => {
+        if (!killed) resolve({ stdout, stderr, exitCode: code ?? 0 });
       });
 
-    } catch (e2) {
-      console.error('Rextester error:', e2.message);
-      return res.status(500).json({
-        stdout: '',
-        stderr: '❌ Execution failed. Please try again.',
-        exitCode: 1,
+      proc.on('error', err => {
+        resolve({ stdout: '', stderr: '❌ ' + err.message, exitCode: 1 });
       });
-    }
+
+      setTimeout(() => {
+        killed = true;
+        proc.kill('SIGKILL');
+        resolve({ stdout, stderr: (stderr || '') + '\n⏱️ Time limit exceeded (10s)', exitCode: 1 });
+      }, 10000);
+    });
+
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ stdout: '', stderr: '❌ ' + err.message, exitCode: 1 });
+  } finally {
+    try { fs.unlinkSync(tmpFile); } catch {}
   }
 });
 
@@ -79,6 +90,7 @@ app.post('/check-input', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log('\n🐍 Python Backend running on http://localhost:' + PORT);
+  console.log('\n🐍 Python Backend on http://localhost:' + PORT);
+  console.log('   Python binary: ' + (PYTHON || 'NOT FOUND'));
   console.log('   Press Ctrl+C to stop\n');
 });
