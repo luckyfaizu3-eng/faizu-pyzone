@@ -110,7 +110,7 @@ const CodeEditor = ({ value, onChange, fontSize, isMobile }) => {
   const hiRef  = useRef(null);
   const lnRef  = useRef(null);
   const valRef = useRef(value);
-  const [scroll, setScroll] = useState({ top: 0, left: 0 });
+
 
   useEffect(() => { valRef.current = value; }, [value]);
 
@@ -119,7 +119,6 @@ const CodeEditor = ({ value, onChange, fontSize, isMobile }) => {
     if (!ta) return;
     if (hiRef.current) { hiRef.current.scrollTop = ta.scrollTop; hiRef.current.scrollLeft = ta.scrollLeft; }
     if (lnRef.current) { lnRef.current.scrollTop = ta.scrollTop; }
-    setScroll({ top: ta.scrollTop, left: ta.scrollLeft });
   }, []);
 
   const handleKeyDown = useCallback((e) => {
