@@ -9,77 +9,75 @@ app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', message: '🐍 FaizUpyZone Python Compiler Backend!' });
+  res.json({ status: 'ok', message: '🐍 FaizUpyZone Python Compiler!' });
 });
-
-// ── Judge0 free public API ──
-const JUDGE0 = 'https://judge0-ce.p.rapidapi.com';
-const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY || '';
 
 app.post('/run', async (req, res) => {
   const { code, stdin = '' } = req.body;
   if (!code || !code.trim()) return res.status(400).json({ error: 'No code' });
 
+  // ── Wandbox API (free, no key needed) ──
   try {
-    // Try Piston first (glot.io mirror)
     const response = await axios.post(
-      'https://glot.io/api/run/python/latest',
+      'https://wandbox.org/api/compile.json',
       {
-        files: [{ name: 'main.py', content: code }],
+        compiler: 'cpython-3.12.0',
+        code: code,
         stdin: stdin,
+        'compiler-option-raw': '',
       },
-      {
-        timeout: 15000,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Token ' + (process.env.GLOT_TOKEN || ''),
-        },
-      }
+      { timeout: 20000, headers: { 'Content-Type': 'application/json' } }
     );
-    const { stdout = '', stderr = '' } = response.data;
+
+    const d = response.data;
+    const stdout = d.program_output || d.output || '';
+    const stderr = d.program_error || d.compiler_error || '';
     return res.json({ stdout, stderr, exitCode: stderr ? 1 : 0 });
 
   } catch (e1) {
-    // Fallback: Piston v2 (different endpoint)
+    console.error('Wandbox error:', e1.message);
+
+    // ── Fallback: tio.run API ──
     try {
+      const lang = 'python3';
+      const payload = `#lang:${lang}\n#code:${Buffer.from(code).toString('base64')}\n#input:${Buffer.from(stdin).toString('base64')}`;
+      
       const r2 = await axios.post(
-        'https://emkc.org/api/v2/piston/execute',
-        {
-          language: 'python',
-          version: '3.10',
-          files: [{ name: 'main.py', content: code }],
-          stdin: stdin,
-        },
-        { timeout: 15000 }
+        'https://tio.run/cgi-bin/run/api/',
+        payload,
+        { timeout: 20000, headers: { 'Content-Type': 'text/plain' } }
       );
-      const { run } = r2.data;
-      return res.json({
-        stdout: run.stdout || '',
-        stderr: run.stderr || '',
-        exitCode: run.code ?? 0,
-      });
+      return res.json({ stdout: r2.data || '', stderr: '', exitCode: 0 });
+
     } catch (e2) {
-      // Final fallback: Onecompiler API (free, no key)
+      console.error('TIO error:', e2.message);
+
+      // ── Fallback 2: Rextester ──
       try {
+        const params = new URLSearchParams();
+        params.append('LanguageChoiceWrapper', '24'); // Python 3
+        params.append('EditorChoiceWrapper', '1');
+        params.append('LayoutChoiceWrapper', '1');
+        params.append('Program', code);
+        params.append('Input', stdin);
+        params.append('CompilerArgs', '');
+
         const r3 = await axios.post(
-          'https://onecompiler-apis.p.rapidapi.com/api/v1/run',
-          {
-            language: 'python',
-            files: [{ name: 'main.py', content: code }],
-            stdin: stdin,
-          },
-          { timeout: 15000, headers: { 'Content-Type': 'application/json' } }
+          'https://rextester.com/rundotnet/Run',
+          params,
+          { timeout: 20000 }
         );
-        const d = r3.data;
+        const result = r3.data;
         return res.json({
-          stdout: d.stdout || '',
-          stderr: d.stderr || d.error || '',
-          exitCode: d.error ? 1 : 0,
+          stdout: result.Result || '',
+          stderr: result.Errors || '',
+          exitCode: result.Errors ? 1 : 0,
         });
       } catch (e3) {
+        console.error('Rextester error:', e3.message);
         return res.status(500).json({
           stdout: '',
-          stderr: '❌ All execution servers are unavailable. Please try again.',
+          stderr: '❌ Execution failed. Please try again in a moment.',
           exitCode: 1,
         });
       }
