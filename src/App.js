@@ -19,7 +19,7 @@ import { trackPageView, trackAction, ACTIONS } from './Analytics/AnalyticsTracke
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Background from './components/Background';
-import TelegramButton from './components/TelegramButton';
+import AIChatBot from './components/AIChatBot';
 import ToastContainer from './components/ToastContainer';
 import SplashScreen from './components/SplashScreen';
 import Leaderboard from './components/Leaderboard';
@@ -32,6 +32,8 @@ import OrdersPage from './pages/OrdersPage';
 import AdminPanel from './pages/AdminPanel';
 import LoginPage from './pages/LoginPage';
 import MockTestPage from './pages/MockTestPage';
+import AIChatPage from './pages/AIChatPage';
+import PythonCompiler from './pages/PythonCompiler'; // ✅ ADDED
 
 // Contexts
 export const CartContext = React.createContext();
@@ -84,6 +86,9 @@ function App() {
   
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [razorpayError, setRazorpayError] = useState(false);
+
+  // ✅ Compiler state — initialCode passed from AIChatPage
+  const [compilerInitialCode, setCompilerInitialCode] = useState('');
   
   // ✅ COMPLETE BROWSER BACK BUTTON FIX
   useEffect(() => {
@@ -91,6 +96,8 @@ function App() {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
       if (hash.startsWith('products/')) return 'products';
+      // ✅ FIX: 'compiler' aur 'aichat' removed from validPages
+      // Taake npm start ya refresh pe hamesha home aaye, compiler freeze na ho
       const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login', 'mocktests', 'leaderboard'];
       return validPages.includes(hash) ? hash : 'home';
     };
@@ -98,9 +105,8 @@ function App() {
     const initialPage = getInitialPage();
     setCurrentPage(initialPage);
 
-    if (!window.history.state || !window.history.state.page) {
-      window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
-    }
+    // ✅ FIX: replaceState se pehle se saved #compiler hash bhi reset ho jayega
+    window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
 
     const handlePopState = (event) => {
       if (event.state && event.state.page) {
@@ -124,7 +130,6 @@ function App() {
     if (currentPage !== window.history.state?.page) {
       window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
-    
     trackPageView(`/${currentPage}`);
   }, [currentPage]);
   
@@ -344,7 +349,6 @@ function App() {
     }
   };
 
-  // ✅ FIXED: Payment success = Direct completed order
   const buyNow = async (product) => {
     if (!user) {
       window.showToast?.('⚠️ Please login first to purchase!', 'warning');
@@ -369,12 +373,8 @@ function App() {
     };
     if (product.thumbnail) itemData.thumbnail = product.thumbnail;
 
-    // ✅ STEP 1: Open Razorpay directly (no pending order pehle)
     initiatePayment(product.price, [product], async (response) => {
       try {
-        console.log('💳 Payment SUCCESS! Creating completed order...');
-        
-        // ✅ STEP 2: Payment success → Direct completed order
         const orderResult = await addOrder({
           userEmail: user.email,
           userId: user.uid,
@@ -386,19 +386,14 @@ function App() {
         }, user.uid);
 
         if (!orderResult.success) {
-          console.error('❌ Order save failed:', orderResult.error);
           window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error');
           return;
         }
 
-        console.log('✅ Order saved as COMPLETED:', orderResult.id);
-
-        // ✅ STEP 3: Reload orders
         await new Promise(resolve => setTimeout(resolve, 1000));
         await loadOrders();
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // ✅ STEP 4: Navigate
         setCurrentPage('orders');
         window.showToast?.('🎊 Payment successful! Download your PDFs now!', 'success');
 
@@ -419,9 +414,7 @@ function App() {
     if (result.success) {
       window.showToast?.('🎉 Welcome back!', 'success');
       setCurrentPage('home');
-      
       trackAction(ACTIONS.LOGIN, { email: email });
-      
       return { success: true };
     } else {
       window.showToast?.('❌ ' + result.error, 'error');
@@ -434,9 +427,7 @@ function App() {
     if (result.success) {
       window.showToast?.('🎊 Account created successfully!', 'success');
       setCurrentPage('home');
-      
       trackAction(ACTIONS.REGISTER, { email: email, name: name });
-      
       return { success: true };
     } else {
       window.showToast?.('❌ ' + result.error, 'error');
@@ -448,7 +439,6 @@ function App() {
     const result = await logoutUser();
     if (result.success) {
       trackAction(ACTIONS.LOGOUT, { email: user?.email });
-      
       setUser(null);
       setOrders([]);
       setCurrentPage('home');
@@ -456,7 +446,6 @@ function App() {
     }
   };
 
-  // ✅ FIXED: Only completed orders count
   const isProductPurchased = (productId) => {
     if (!user || !orders || orders.length === 0) return false;
     return orders.some(order => 
@@ -465,7 +454,6 @@ function App() {
     );
   };
 
-  // ✅ FIXED: Cart checkout - Payment success = completed
   const completeOrder = async () => {
     if (!user) {
       window.showToast?.('⚠️ Please login first!', 'warning');
@@ -490,12 +478,8 @@ function App() {
       return itemData;
     });
 
-    // ✅ STEP 1: Open Razorpay directly
     initiatePayment(cartTotal, cart, async (response) => {
       try {
-        console.log('💳 Payment SUCCESS! Creating completed order...');
-        
-        // ✅ STEP 2: Save as completed
         const orderResult = await addOrder({
           userEmail: user.email,
           userId: user.uid,
@@ -507,14 +491,10 @@ function App() {
         }, user.uid);
 
         if (!orderResult.success) {
-          console.error('❌ Order save failed:', orderResult.error);
           window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error');
           return;
         }
 
-        console.log('✅ Order saved as COMPLETED:', orderResult.id);
-
-        // ✅ STEP 3: Clear cart & reload
         setCart([]);
         localStorage.removeItem('faizupyzone_cart');
         
@@ -600,6 +580,14 @@ function App() {
     }
   };
 
+  // ✅ Handler: AIChatPage se compiler open karne ke liye
+  // AIChatPage mein yeh call karo:
+  //   props.openCompiler(code)  → compiler page khulega us code ke saath
+  const openCompiler = useCallback((code = '') => {
+    setCompilerInitialCode(code);
+    setCurrentPage('compiler');
+  }, []);
+
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
@@ -620,8 +608,9 @@ function App() {
             
             <ToastContainer />
             <Background />
-            
-            {currentPage === 'home' && <TelegramButton />}
+
+            {/* ✅ AI ChatBot - Sab pages par visible */}
+            <AIChatBot setCurrentPage={setCurrentPage} currentPage={currentPage} />
             
             {!razorpayLoaded && !razorpayError && (
               <div style={{
@@ -671,8 +660,10 @@ function App() {
                 />
               )}
               
-              {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
-              {currentPage === 'login' && <LoginPage />}
+              {currentPage === 'cart' && (
+                <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />
+              )}
+              {currentPage === 'login'  && <LoginPage />}
               {currentPage === 'orders' && (
                 <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />
               )}
@@ -684,8 +675,25 @@ function App() {
                   orders={orders} 
                 />
               )}
-              {currentPage === 'mocktests' && <MockTestPage />}
+              {currentPage === 'mocktests'   && <MockTestPage />}
               {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
+
+              {/* ✅ AIChatPage — openCompiler prop pass kiya */}
+              {currentPage === 'aichat' && (
+                <AIChatPage
+                  setCurrentPage={setCurrentPage}
+                  user={user}
+                  openCompiler={openCompiler}
+                />
+              )}
+
+              {/* ✅ PythonCompiler — separate full page */}
+              {currentPage === 'compiler' && (
+                <PythonCompiler
+                  initialCode={compilerInitialCode}
+                  onClose={() => setCurrentPage('aichat')}
+                />
+              )}
             </main>
             
             {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}

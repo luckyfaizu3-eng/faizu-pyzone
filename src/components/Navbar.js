@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Menu, X, User, LogOut, Moon, Sun, Palette } from 'lucide-react';
+import { ShoppingCart, Menu, X, User, LogOut, Moon, Sun, Palette, Send } from 'lucide-react';
 import { useTheme } from '../App';
 
 const Navbar = ({ 
@@ -29,25 +29,17 @@ const Navbar = ({
     };
   }, []);
 
+  // ✅ Compiler aur AI Chat page pe Navbar bilkul hide karo
+  if (currentPage === 'compiler' || currentPage === 'aichat') return null;
+
   const handleNavClick = (page) => {
     setCurrentPage(page);
     setMobileMenuOpen(false);
   };
 
-  // Theme names for display
   const themeNames = [
-    'Purple',
-    'Blue', 
-    'Green',
-    'Orange',
-    'Red',
-    'Violet',
-    'Teal',
-    'Indigo',
-    'Lime',
-    'Fuchsia',
-    'Sky',
-    'Yellow'
+    'Purple', 'Blue', 'Green', 'Orange', 'Red', 'Violet',
+    'Teal', 'Indigo', 'Lime', 'Fuchsia', 'Sky', 'Yellow'
   ];
 
   return (
@@ -223,7 +215,6 @@ const Navbar = ({
                 Browse Notes
               </button>
 
-              {/* ✅ MOCK TESTS BUTTON */}
               <button 
                 onClick={() => setCurrentPage('mocktests')} 
                 style={{
@@ -331,6 +322,31 @@ const Navbar = ({
                             {user.email}
                           </div>
                         </div>
+
+                        <button
+                          onClick={() => window.open('https://t.me/FaizUpyZone', '_blank')}
+                          style={{
+                            width: '100%',
+                            padding: '0.75rem 1rem',
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#0088cc',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '0.95rem',
+                            fontWeight: '600',
+                            transition: 'background 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = isDark ? '#0c2233' : '#e8f4fd'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          <Send size={16} color="#0088cc" /> Telegram Support
+                        </button>
+
                         <button
                           onClick={() => {
                             logout();
@@ -444,7 +460,6 @@ const Navbar = ({
           {/* Mobile Menu Icons */}
           {isMobile && (
             <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
-              {/* Background Toggle - Mobile */}
               <button
                 onClick={toggleBackground}
                 style={{
@@ -462,7 +477,6 @@ const Navbar = ({
                 <Palette size={18} color="#6366f1" />
               </button>
 
-              {/* Dark Mode Toggle - Mobile */}
               <button
                 onClick={toggleTheme}
                 style={{
@@ -538,7 +552,7 @@ const Navbar = ({
           )}
         </div>
 
-        {/* Running Marquee - Mobile (below navbar) */}
+        {/* Running Marquee - Mobile */}
         {isMobile && (
           <div style={{
             marginTop: '0.5rem',
@@ -584,7 +598,6 @@ const Navbar = ({
           maxHeight: '85vh',
           overflowY: 'auto'
         }}>
-          {/* Mobile Menu Items */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             <button 
               onClick={() => handleNavClick('products')} 
@@ -606,7 +619,6 @@ const Navbar = ({
               📚 Browse Notes
             </button>
 
-            {/* ✅ MOCK TESTS BUTTON - MOBILE */}
             <button 
               onClick={() => handleNavClick('mocktests')} 
               style={{
@@ -625,6 +637,27 @@ const Navbar = ({
               }}
             >
               🐍 Mock Tests
+            </button>
+
+            <button 
+              onClick={() => window.open('https://t.me/FaizUpyZone', '_blank')}
+              style={{
+                background: isDark ? 'rgba(0,136,204,0.15)' : 'rgba(0,136,204,0.08)',
+                border: '1.5px solid rgba(0,136,204,0.3)',
+                color: '#0088cc',
+                cursor: 'pointer',
+                fontSize: '1rem',
+                fontWeight: '600',
+                padding: '1rem',
+                borderRadius: '12px',
+                textAlign: 'left',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              <Send size={18} color="#0088cc" /> Telegram Support
             </button>
             
             {user?.isAdmin && (
@@ -733,23 +766,12 @@ const Navbar = ({
       
       <style>{`
         @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
+          from { opacity: 0; transform: translateY(-10px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
-        
         @keyframes marquee {
-          0% {
-            transform: translateX(100%);
-          }
-          100% {
-            transform: translateX(-100%);
-          }
+          0%   { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
         }
       `}</style>
     </>
