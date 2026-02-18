@@ -424,9 +424,11 @@ async function downloadAsPDF(cert) {
 ══════════════════════════════════════════ */
 export default function CertificateViewer({ certificate, onClose }) {
   const [downloading, setDownloading] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
   const cert = certificate || {};
   const level = (cert.level || 'basic').toLowerCase();
   const cfg = LEVEL_CONFIG[level] || LEVEL_CONFIG.basic;
+  const goldDark = cfg.goldDark || '#8B6914';
 
   const previewW = Math.min(typeof window !== 'undefined' ? window.innerWidth - 60 : 860, 900);
   const scale = previewW / 1056;
@@ -437,6 +439,68 @@ export default function CertificateViewer({ certificate, onClose }) {
     try { await downloadAsPDF(cert); }
     catch (e) { console.error(e); alert('Download failed: ' + e.message); }
     finally { setDownloading(false); }
+  };
+
+  const handleSaveImage = async () => {
+    setSavingImage(true);
+    try {
+      // Render SVG to DOM
+      const wrap = document.createElement('div');
+      wrap.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1056px;height:748px;overflow:hidden;';
+      document.body.appendChild(wrap);
+      const { createRoot } = await import('react-dom/client');
+      const root = createRoot(wrap);
+      root.render(<CertSVG cert={cert} />);
+      await new Promise(r => setTimeout(r, 500));
+
+      const svgEl = wrap.querySelector('svg');
+      const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+      styleEl.textContent = `@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Cinzel:wght@400;600;700&family=Dancing+Script:wght@600;700&display=swap');`;
+      svgEl.insertBefore(styleEl, svgEl.firstChild);
+      if (document.fonts) await document.fonts.ready;
+      await new Promise(r => setTimeout(r, 1200));
+
+      const serializer = new XMLSerializer();
+      const svgStr = serializer.serializeToString(svgEl);
+      const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+
+      // 4K scale = 4224 x 2992px
+      const SCALE = 4;
+      const canvas = document.createElement('canvas');
+      canvas.width = 1056 * SCALE;
+      canvas.height = 748 * SCALE;
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(); };
+        img.onerror = reject;
+        img.src = url;
+      });
+
+      URL.revokeObjectURL(url);
+      root.unmount();
+      document.body.removeChild(wrap);
+
+      // Download as PNG — mobile saves to gallery
+      canvas.toBlob((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const name = (cert.userName || 'cert').replace(/\s+/g, '_');
+        a.download = `Certificate_${(cert.level || 'basic').toUpperCase()}_${name}.png`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      }, 'image/png', 1.0);
+
+    } catch (e) {
+      console.error(e);
+      alert('Image save failed: ' + e.message);
+    } finally {
+      setSavingImage(false);
+    }
   };
 
   if (!certificate) return null;
@@ -482,7 +546,7 @@ export default function CertificateViewer({ certificate, onClose }) {
             }}>← BACK</button>
 
             <button onClick={handleDownload} disabled={downloading} style={{
-              padding: '13px 44px',
+              padding: '13px 34px',
               background: downloading ? '#333' : cfg.leftBg,
               border: 'none', borderRadius: 8, color: '#fff',
               fontFamily: '"Cinzel",serif', fontSize: 12, fontWeight: 700, letterSpacing: 2,
@@ -492,10 +556,23 @@ export default function CertificateViewer({ certificate, onClose }) {
             }}>
               ↓ {downloading ? 'GENERATING...' : 'DOWNLOAD PDF'}
             </button>
+
+            {/* Save as Image — 4K PNG, saves to gallery on mobile */}
+            <button onClick={handleSaveImage} disabled={savingImage} style={{
+              padding: '13px 34px',
+              background: savingImage ? '#333' : `linear-gradient(135deg, ${cfg.goldDark || '#8B6914'}, #F0C040, ${cfg.goldDark || '#8B6914'})`,
+              border: 'none', borderRadius: 8, color: '#1a1a1a',
+              fontFamily: '"Cinzel",serif', fontSize: 12, fontWeight: 700, letterSpacing: 2,
+              cursor: savingImage ? 'not-allowed' : 'pointer',
+              boxShadow: savingImage ? 'none' : '0 6px 24px rgba(240,192,64,0.5)',
+              opacity: savingImage ? 0.7 : 1,
+            }}>
+              🖼 {savingImage ? 'SAVING...' : 'SAVE AS IMAGE'}
+            </button>
           </div>
 
           <div style={{ fontFamily: '"Cinzel",serif', fontSize: 9, color: '#3a3a3a', letterSpacing: 2 }}>
-            HIGH RESOLUTION • PRINT READY • SHARP PDF
+            PDF • 4K IMAGE • PRINT READY • GALLERY SAVE
           </div>
         </div>
       </div>
