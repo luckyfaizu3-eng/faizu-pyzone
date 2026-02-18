@@ -9,7 +9,7 @@ import { useTheme } from '../App';
 // ═══════════════════════════════════════════════
 //  CONFIG
 // ═══════════════════════════════════════════════
-const HF_TOKEN = "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";
+const HF_TOKEN = import.meta.env.VITE_HF_TOKEN;
 const MODEL    = "openai/gpt-oss-120b:groq";
 const BASE_URL = "https://router.huggingface.co/v1";
 
