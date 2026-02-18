@@ -399,8 +399,22 @@ async function downloadAsPDF(cert) {
   document.body.removeChild(wrap);
 
   const imgData = canvas.toDataURL('image/png', 1.0);
-  const pdf = new jsPDF({ orientation: 'landscape', unit: 'px', format: [canvas.width, canvas.height], compress: true });
-  pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height, undefined, 'FAST');
+
+  // Use standard A4 landscape — mobile viewers auto-fit this correctly
+  const A4_W = 841.89, A4_H = 595.28; // pts
+  const pdf = new jsPDF({
+    orientation: 'landscape',
+    unit: 'pt',
+    format: 'a4',
+    compress: true,
+  });
+
+  // Fill entire A4 page with certificate image
+  pdf.addImage(imgData, 'PNG', 0, 0, A4_W, A4_H, undefined, 'FAST');
+
+  // Tell PDF viewer to fit the page on open — works on mobile too
+  pdf.setDisplayMode('fullpage', 'single');
+
   const name = (cert.userName || 'cert').replace(/\s+/g, '_');
   pdf.save(`Certificate_${level.toUpperCase()}_${name}.pdf`);
 }
