@@ -428,8 +428,6 @@ export default function CertificateViewer({ certificate, onClose }) {
   const cert = certificate || {};
   const level = (cert.level || 'basic').toLowerCase();
   const cfg = LEVEL_CONFIG[level] || LEVEL_CONFIG.basic;
-  const goldDark = cfg.goldDark || '#8B6914';
-
   const previewW = Math.min(typeof window !== 'undefined' ? window.innerWidth - 60 : 860, 900);
   const scale = previewW / 1056;
   const previewH = 748 * scale;
