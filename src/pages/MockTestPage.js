@@ -75,6 +75,9 @@ function MockTestPage() {
   const [testQuestions, setTestQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // ✅ Tab State — ONLY NEW STATE ADDED
+  const [activeTab, setActiveTab] = useState('tests');
+
   // ✅ Dynamic Prices from Firebase
   const [prices, setPrices] = useState(DEFAULT_PRICES);
 
@@ -715,6 +718,31 @@ function MockTestPage() {
     );
   }
 
+  // ==========================================
+  // TAB BUTTON STYLE HELPER — ONLY NEW CODE
+  // ==========================================
+  const tabStyle = (tabName) => ({
+    flex: 1,
+    padding: 'clamp(0.65rem, 2vw, 0.9rem) clamp(0.5rem, 2vw, 1rem)',
+    borderRadius: '12px',
+    border: 'none',
+    cursor: 'pointer',
+    fontWeight: '700',
+    fontSize: 'clamp(0.75rem, 2vw, 0.92rem)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '0.4rem',
+    transition: 'all 0.25s ease',
+    background: activeTab === tabName
+      ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+      : 'transparent',
+    color: activeTab === tabName ? '#fff' : isDark ? '#94a3b8' : '#64748b',
+    boxShadow: activeTab === tabName ? '0 4px 14px rgba(99,102,241,0.4)' : 'none',
+    transform: activeTab === tabName ? 'translateY(-1px)' : 'none',
+    whiteSpace: 'nowrap',
+  });
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -731,7 +759,7 @@ function MockTestPage() {
       }}>
         <div style={{
           textAlign: 'center',
-          marginBottom: '3rem',
+          marginBottom: '2rem',
           animation: 'fadeInUp 0.6s ease'
         }}>
           <h1 style={{
@@ -787,528 +815,608 @@ function MockTestPage() {
           </button>
         </div>
 
-        {/* Guidelines Section */}
+        {/* ==========================================
+            🗂️ TAB NAVIGATION — ONLY NEW UI CODE
+        ========================================== */}
         <div style={{
-          background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))',
-          border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`,
-          borderRadius: '20px',
-          padding: 'clamp(1rem, 3vw, 1.5rem)',
-          marginBottom: '3rem',
-          animation: 'fadeInUp 0.8s ease'
+          display: 'flex',
+          gap: '0.4rem',
+          background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+          borderRadius: '16px',
+          padding: '6px',
+          marginBottom: '2.5rem',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
+          maxWidth: '520px',
+          margin: '0 auto 2.5rem',
         }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '1rem',
-            marginBottom: '1rem',
-            flexWrap: 'wrap',
-            justifyContent: 'center'
-          }}>
-            <div style={{
-              width: 'clamp(50px, 12vw, 70px)',
-              height: 'clamp(50px, 12vw, 70px)',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(99,102,241,0.4)'
-            }}>
-              <Monitor size={window.innerWidth < 768 ? 24 : 32} color="#fff" />
-            </div>
-            <h3 style={{
-              fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)',
-              fontWeight: '900',
-              color: isDark ? '#e2e8f0' : '#1e293b',
-              margin: 0
-            }}>
-              ⚠️ Important Guidelines
-            </h3>
-          </div>
+          <button style={tabStyle('tests')} onClick={() => setActiveTab('tests')}>
+            🐍 Mock Tests
+          </button>
 
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))',
-            gap: '1rem',
-            marginBottom: '1rem'
-          }}>
-            <div style={{
-              padding: 'clamp(0.75rem, 2vw, 1rem)',
-              background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
-              borderRadius: '12px',
-              border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.2)'}`
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginBottom: '0.5rem',
-                color: '#6366f1',
-                fontWeight: '700',
-                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
+          <button style={tabStyle('certificates')} onClick={() => setActiveTab('certificates')}>
+            🏆 Certificates
+            {userCertificates.length > 0 && (
+              <span style={{
+                background: activeTab === 'certificates' ? 'rgba(255,255,255,0.3)' : 'rgba(99,102,241,0.2)',
+                color: activeTab === 'certificates' ? '#fff' : '#6366f1',
+                borderRadius: '20px',
+                padding: '1px 7px',
+                fontSize: '0.7rem',
+                fontWeight: '800',
               }}>
-                <Monitor size={18} />
-                Desktop Mode
-              </div>
-              <p style={{
-                fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                color: isDark ? '#cbd5e1' : '#475569',
-                margin: 0,
-                lineHeight: '1.5'
-              }}>
-                For best experience, use desktop site mode on mobile or laptop/computer
-              </p>
-            </div>
+                {userCertificates.length}
+              </span>
+            )}
+          </button>
 
-            <div style={{
-              padding: 'clamp(0.75rem, 2vw, 1rem)',
-              background: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.1)',
-              borderRadius: '12px',
-              border: `1px solid ${isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginBottom: '0.5rem',
-                color: '#10b981',
-                fontWeight: '700',
-                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
+          <button style={tabStyle('results')} onClick={() => setActiveTab('results')}>
+            📊 Results
+            {testHistory.length > 0 && (
+              <span style={{
+                background: activeTab === 'results' ? 'rgba(255,255,255,0.3)' : 'rgba(99,102,241,0.2)',
+                color: activeTab === 'results' ? '#fff' : '#6366f1',
+                borderRadius: '20px',
+                padding: '1px 7px',
+                fontSize: '0.7rem',
+                fontWeight: '800',
               }}>
-                <Clock size={18} />
-                12-Hour Window
-              </div>
-              <p style={{
-                fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                color: isDark ? '#cbd5e1' : '#475569',
-                margin: 0,
-                lineHeight: '1.5'
-              }}>
-                After purchase, you have 12 hours to start the test. No refunds if time expires.
-              </p>
-            </div>
-
-            <div style={{
-              padding: 'clamp(0.75rem, 2vw, 1rem)',
-              background: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)',
-              borderRadius: '12px',
-              border: `1px solid ${isDark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginBottom: '0.5rem',
-                color: '#ef4444',
-                fontWeight: '700',
-                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
-              }}>
-                <Lock size={18} />
-                7-Day Lock
-              </div>
-              <p style={{
-                fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                color: isDark ? '#cbd5e1' : '#475569',
-                margin: 0,
-                lineHeight: '1.5'
-              }}>
-                After viewing results, test locks for 7 days. Then repurchase to try again.
-              </p>
-            </div>
-
-            <div style={{
-              padding: 'clamp(0.75rem, 2vw, 1rem)',
-              background: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.1)',
-              borderRadius: '12px',
-              border: `1px solid ${isDark ? 'rgba(245,158,11,0.3)' : 'rgba(245,158,11,0.2)'}`
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-                marginBottom: '0.5rem',
-                color: '#f59e0b',
-                fontWeight: '700',
-                fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
-              }}>
-                <Trophy size={18} />
-                Pass Mark: 55%
-              </div>
-              <p style={{
-                fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                color: isDark ? '#cbd5e1' : '#475569',
-                margin: 0,
-                lineHeight: '1.5'
-              }}>
-                Score 55% or above to receive your certificate (one per level, lifetime)
-              </p>
-            </div>
-          </div>
-
-          <div style={{
-            padding: 'clamp(0.75rem, 2vw, 1rem)',
-            background: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)',
-            borderRadius: '12px',
-            border: `2px dashed ${isDark ? 'rgba(245,158,11,0.4)' : 'rgba(245,158,11,0.3)'}`,
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: '0.75rem'
-          }}>
-            <Smartphone size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              <div style={{
-                fontWeight: '700',
-                color: '#f59e0b',
-                marginBottom: '0.5rem',
-                fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)'
-              }}>
-                📱 Enable Desktop Mode on Mobile:
-              </div>
-              <div style={{
-                fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                color: isDark ? '#cbd5e1' : '#475569',
-                lineHeight: '1.5'
-              }}>
-                Browser Menu (⋮) → "Desktop site" → Enable → Refresh page
-              </div>
-            </div>
-          </div>
+                {testHistory.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Test Plans Grid */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
-          gap: '2rem',
-          marginBottom: '3rem'
-        }}>
-          {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
-            const status = testStatus[plan.level] || {};
-            const hasCert = userCertificates.find(c => c.level === plan.level);
-            const userIsAdmin = isAdmin(user?.email);
+        {/* ==========================================
+            TAB: MOCK TESTS — original content, zero changes
+        ========================================== */}
+        {activeTab === 'tests' && (
+          <>
+            {/* Guidelines Section */}
+            <div style={{
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))',
+              border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`,
+              borderRadius: '20px',
+              padding: 'clamp(1rem, 3vw, 1.5rem)',
+              marginBottom: '3rem',
+              animation: 'fadeInUp 0.8s ease'
+            }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '1rem',
+                marginBottom: '1rem',
+                flexWrap: 'wrap',
+                justifyContent: 'center'
+              }}>
+                <div style={{
+                  width: 'clamp(50px, 12vw, 70px)',
+                  height: 'clamp(50px, 12vw, 70px)',
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                  borderRadius: '50%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(99,102,241,0.4)'
+                }}>
+                  <Monitor size={window.innerWidth < 768 ? 24 : 32} color="#fff" />
+                </div>
+                <h3 style={{
+                  fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)',
+                  fontWeight: '900',
+                  color: isDark ? '#e2e8f0' : '#1e293b',
+                  margin: 0
+                }}>
+                  ⚠️ Important Guidelines
+                </h3>
+              </div>
 
-            let timeRemainingDisplay = '';
-            if (status.timeRemaining) {
-              timeRemainingDisplay = formatTimeRemaining(status.timeRemaining);
-            }
-
-            return (
-              <div
-                key={plan.id}
-                style={{
-                  background: isDark ? '#1e293b' : '#fff',
-                  borderRadius: '24px',
-                  padding: 'clamp(1.5rem, 4vw, 2rem)',
-                  boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`,
-                  border: plan.badge ? '3px solid #fbbf24' : userIsAdmin ? '3px solid #10b981' : 'none'
-                }}
-              >
-                {userIsAdmin && (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))',
+                gap: '1rem',
+                marginBottom: '1rem'
+              }}>
+                <div style={{
+                  padding: 'clamp(0.75rem, 2vw, 1rem)',
+                  background: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.1)',
+                  borderRadius: '12px',
+                  border: `1px solid ${isDark ? 'rgba(99,102,241,0.3)' : 'rgba(99,102,241,0.2)'}`
+                }}>
                   <div style={{
-                    position: 'absolute',
-                    top: '1rem',
-                    left: '1rem',
-                    background: 'linear-gradient(135deg, #10b981, #059669)',
-                    color: '#fff',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '20px',
-                    fontSize: 'clamp(0.65rem, 2vw, 0.75rem)',
-                    fontWeight: '700',
-                    boxShadow: '0 4px 12px rgba(16,185,129,0.4)'
-                  }}>
-                    🔓 ADMIN FREE
-                  </div>
-                )}
-
-                {plan.badge && !userIsAdmin && (
-                  <div style={{
-                    position: 'absolute',
-                    top: '1rem',
-                    right: '1rem',
-                    background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
-                    color: '#fff',
-                    padding: '0.5rem 1rem',
-                    borderRadius: '20px',
-                    fontSize: 'clamp(0.65rem, 2vw, 0.75rem)',
-                    fontWeight: '700',
-                    boxShadow: '0 4px 12px rgba(251,191,36,0.4)'
-                  }}>
-                    {plan.badge}
-                  </div>
-                )}
-
-                <div style={{ textAlign: 'center', marginBottom: '1.5rem', marginTop: userIsAdmin || plan.badge ? '2.5rem' : '0' }}>
-                  <div style={{
-                    width: 'clamp(60px, 15vw, 80px)',
-                    height: 'clamp(60px, 15vw, 80px)',
-                    background: plan.level === 'basic'
-                      ? 'linear-gradient(135deg, #10b981, #059669)'
-                      : plan.level === 'advanced'
-                      ? 'linear-gradient(135deg, #6366f1, #4f46e5)'
-                      : 'linear-gradient(135deg, #f59e0b, #d97706)',
-                    borderRadius: '50%',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    margin: '0 auto 1rem',
-                    fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',
-                    boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
-                  }}>
-                    {plan.level === 'basic' ? '🌱' : plan.level === 'advanced' ? '🔥' : '⭐'}
-                  </div>
-
-                  <h2 style={{
-                    fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
-                    fontWeight: '900',
-                    color: isDark ? '#e2e8f0' : '#1e293b',
+                    gap: '0.5rem',
                     marginBottom: '0.5rem',
-                    textTransform: 'uppercase',
-                    letterSpacing: '1px'
+                    color: '#6366f1',
+                    fontWeight: '700',
+                    fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
                   }}>
-                    {plan.level}
-                  </h2>
-
-                  <p style={{
-                    color: isDark ? '#94a3b8' : '#64748b',
-                    fontSize: 'clamp(0.8rem, 2.5vw, 0.95rem)',
-                    marginBottom: '1rem'
-                  }}>
-                    {plan.description}
-                  </p>
-
-                  <div style={{
-                    fontSize: 'clamp(2rem, 6vw, 2.5rem)',
-                    fontWeight: '900',
-                    color: userIsAdmin ? '#10b981' : '#6366f1',
-                    marginBottom: '0.5rem'
-                  }}>
-                    {userIsAdmin ? 'FREE' : `₹${prices[plan.level] || plan.price}`}
+                    <Monitor size={18} />
+                    Desktop Mode
                   </div>
-                  {userIsAdmin && (
-                    <div style={{
-                      fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                      color: '#10b981',
-                      fontWeight: '600'
-                    }}>
-                      Admin Privilege
-                    </div>
-                  )}
+                  <p style={{
+                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    margin: 0,
+                    lineHeight: '1.5'
+                  }}>
+                    For best experience, use desktop site mode on mobile or laptop/computer
+                  </p>
                 </div>
 
                 <div style={{
-                  background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)',
-                  borderRadius: '16px',
-                  padding: '1.5rem',
-                  marginBottom: '1.5rem'
+                  padding: 'clamp(0.75rem, 2vw, 1rem)',
+                  background: isDark ? 'rgba(16,185,129,0.2)' : 'rgba(16,185,129,0.1)',
+                  borderRadius: '12px',
+                  border: `1px solid ${isDark ? 'rgba(16,185,129,0.3)' : 'rgba(16,185,129,0.2)'}`
                 }}>
-                  {plan.features.map((feature, idx) => (
-                    <div
-                      key={idx}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.75rem',
-                        marginBottom: idx === plan.features.length - 1 ? 0 : '0.75rem',
-                        fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
-                        color: isDark ? '#cbd5e1' : '#475569'
-                      }}
-                    >
-                      <CheckCircle size={18} color="#10b981" style={{ flexShrink: 0 }} />
-                      <span>{feature}</span>
-                    </div>
-                  ))}
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    marginBottom: '0.5rem',
+                    color: '#10b981',
+                    fontWeight: '700',
+                    fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
+                  }}>
+                    <Clock size={18} />
+                    12-Hour Window
+                  </div>
+                  <p style={{
+                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    margin: 0,
+                    lineHeight: '1.5'
+                  }}>
+                    After purchase, you have 12 hours to start the test. No refunds if time expires.
+                  </p>
                 </div>
 
-                {userIsAdmin && (
+                <div style={{
+                  padding: 'clamp(0.75rem, 2vw, 1rem)',
+                  background: isDark ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.1)',
+                  borderRadius: '12px',
+                  border: `1px solid ${isDark ? 'rgba(239,68,68,0.3)' : 'rgba(239,68,68,0.2)'}`
+                }}>
                   <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(16,185,129,0.1)',
-                    border: '1px solid rgba(16,185,129,0.3)',
-                    borderRadius: '8px',
-                    marginBottom: '1rem',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '0.5rem',
-                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                    color: '#10b981',
-                    fontWeight: '600'
-                  }}>
-                    <CheckCircle size={16} />
-                    🔓 Admin - Unlimited Access
-                  </div>
-                )}
-
-                {!userIsAdmin && status.status === 'grace_period' && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(16,185,129,0.1)',
-                    border: '1px solid rgba(16,185,129,0.3)',
-                    borderRadius: '8px',
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                    color: '#10b981',
-                    fontWeight: '600'
-                  }}>
-                    <Unlock size={16} />
-                    ✅ Available - Grace Period: {timeRemainingDisplay}
-                  </div>
-                )}
-
-                {!userIsAdmin && status.status === 'in_progress' && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(245,158,11,0.1)',
-                    border: '1px solid rgba(245,158,11,0.3)',
-                    borderRadius: '8px',
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                    color: '#f59e0b',
-                    fontWeight: '600'
-                  }}>
-                    <TrendingUp size={16} />
-                    📝 Test in Progress - Resume
-                  </div>
-                )}
-
-                {hasCert && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(99,102,241,0.1)',
-                    border: '1px solid rgba(99,102,241,0.3)',
-                    borderRadius: '8px',
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
-                    color: '#6366f1',
-                    fontWeight: '600'
-                  }}>
-                    <Award size={16} />
-                    Certificate Earned (One per level)
-                  </div>
-                )}
-
-                {!userIsAdmin && status.status === 'locked' && (
-                  <div style={{
-                    padding: '0.75rem',
-                    background: 'rgba(239,68,68,0.1)',
-                    border: '1px solid rgba(239,68,68,0.3)',
-                    borderRadius: '8px',
-                    marginBottom: '1rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem',
-                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                    marginBottom: '0.5rem',
                     color: '#ef4444',
-                    fontWeight: '600'
-                  }}>
-                    <Lock size={16} />
-                    🔒 Locked - {timeRemainingDisplay}
-                  </div>
-                )}
-
-                <button
-                  onClick={() => handleSelectPlan(plan)}
-                  disabled={!userIsAdmin && status.status === 'locked'}
-                  style={{
-                    width: '100%',
-                    background: (!userIsAdmin && status.status === 'locked')
-                      ? 'rgba(99,102,241,0.3)'
-                      : userIsAdmin
-                      ? 'linear-gradient(135deg, #10b981, #059669)'
-                      : status.status === 'grace_period' || status.status === 'in_progress'
-                      ? 'linear-gradient(135deg, #10b981, #059669)'
-                      : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                    border: 'none',
-                    color: '#fff',
-                    padding: 'clamp(1rem, 3vw, 1.25rem)',
-                    borderRadius: '16px',
-                    fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)',
                     fontWeight: '700',
-                    cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer',
-                    transition: 'all 0.3s ease',
+                    fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
+                  }}>
+                    <Lock size={18} />
+                    7-Day Lock
+                  </div>
+                  <p style={{
+                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    margin: 0,
+                    lineHeight: '1.5'
+                  }}>
+                    After viewing results, test locks for 7 days. Then repurchase to try again.
+                  </p>
+                </div>
+
+                <div style={{
+                  padding: 'clamp(0.75rem, 2vw, 1rem)',
+                  background: isDark ? 'rgba(245,158,11,0.2)' : 'rgba(245,158,11,0.1)',
+                  borderRadius: '12px',
+                  border: `1px solid ${isDark ? 'rgba(245,158,11,0.3)' : 'rgba(245,158,11,0.2)'}`
+                }}>
+                  <div style={{
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '0.75rem',
-                    boxShadow: (!userIsAdmin && status.status === 'locked')
-                      ? 'none'
-                      : userIsAdmin
-                      ? '0 4px 20px rgba(16,185,129,0.4)'
-                      : status.status === 'grace_period' || status.status === 'in_progress'
-                      ? '0 4px 20px rgba(16,185,129,0.4)'
-                      : '0 4px 20px rgba(99,102,241,0.4)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '1px',
-                    opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1
-                  }}
-                  onMouseEnter={(e) => {
-                    if (userIsAdmin || status.status !== 'locked') {
-                      e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = userIsAdmin
-                        ? '0 8px 30px rgba(16,185,129,0.5)'
-                        : status.status === 'grace_period' || status.status === 'in_progress'
-                        ? '0 8px 30px rgba(16,185,129,0.5)'
-                        : '0 8px 30px rgba(99,102,241,0.5)';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = (!userIsAdmin && status.status === 'locked')
-                      ? 'none'
-                      : userIsAdmin
-                      ? '0 4px 20px rgba(16,185,129,0.4)'
-                      : status.status === 'grace_period' || status.status === 'in_progress'
-                      ? '0 4px 20px rgba(16,185,129,0.4)'
-                      : '0 4px 20px rgba(99,102,241,0.4)';
-                  }}
-                >
-                  {userIsAdmin ? (
-                    <>
-                      <Zap size={24} />
-                      🔓 Start Free Test
-                    </>
-                  ) : status.status === 'grace_period' || status.status === 'in_progress' ? (
-                    <>
-                      <Zap size={24} />
-                      {status.status === 'in_progress' ? 'Resume Test' : 'Start Test'}
-                    </>
-                  ) : status.status === 'locked' ? (
-                    <>
-                      <Lock size={24} />
-                      🔒 Locked - {timeRemainingDisplay}
-                    </>
-                  ) : (
-                    <>
-                      <Zap size={24} />
-                      Buy Test (₹{prices[plan.level] || plan.price})
-                    </>
-                  )}
-                </button>
+                    gap: '0.5rem',
+                    marginBottom: '0.5rem',
+                    color: '#f59e0b',
+                    fontWeight: '700',
+                    fontSize: 'clamp(0.85rem, 2.5vw, 1rem)'
+                  }}>
+                    <Trophy size={18} />
+                    Pass Mark: 55%
+                  </div>
+                  <p style={{
+                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    margin: 0,
+                    lineHeight: '1.5'
+                  }}>
+                    Score 55% or above to receive your certificate (one per level, lifetime)
+                  </p>
+                </div>
               </div>
-            );
-          })}
-        </div>
 
-        {/* Certificate and Test History Section */}
-        <Certificatesection
-          userCertificates={userCertificates}
-          testHistory={testHistory}
-          isDark={isDark}
-          onViewCertificate={setSelectedCertificate}
-          onDeleteCertificate={handleDeleteCertificate}
-          onDeleteTest={handleDeleteClick}
-        />
+              <div style={{
+                padding: 'clamp(0.75rem, 2vw, 1rem)',
+                background: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)',
+                borderRadius: '12px',
+                border: `2px dashed ${isDark ? 'rgba(245,158,11,0.4)' : 'rgba(245,158,11,0.3)'}`,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '0.75rem'
+              }}>
+                <Smartphone size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <div style={{
+                    fontWeight: '700',
+                    color: '#f59e0b',
+                    marginBottom: '0.5rem',
+                    fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)'
+                  }}>
+                    📱 Enable Desktop Mode on Mobile:
+                  </div>
+                  <div style={{
+                    fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                    color: isDark ? '#cbd5e1' : '#475569',
+                    lineHeight: '1.5'
+                  }}>
+                    Browser Menu (⋮) → "Desktop site" → Enable → Refresh page
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Test Plans Grid */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
+              gap: '2rem',
+              marginBottom: '3rem'
+            }}>
+              {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
+                const status = testStatus[plan.level] || {};
+                const hasCert = userCertificates.find(c => c.level === plan.level);
+                const userIsAdmin = isAdmin(user?.email);
+
+                let timeRemainingDisplay = '';
+                if (status.timeRemaining) {
+                  timeRemainingDisplay = formatTimeRemaining(status.timeRemaining);
+                }
+
+                return (
+                  <div
+                    key={plan.id}
+                    style={{
+                      background: isDark ? '#1e293b' : '#fff',
+                      borderRadius: '24px',
+                      padding: 'clamp(1.5rem, 4vw, 2rem)',
+                      boxShadow: '0 10px 40px rgba(0,0,0,0.2)',
+                      position: 'relative',
+                      overflow: 'hidden',
+                      animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`,
+                      border: plan.badge ? '3px solid #fbbf24' : userIsAdmin ? '3px solid #10b981' : 'none'
+                    }}
+                  >
+                    {userIsAdmin && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '1rem',
+                        left: '1rem',
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        color: '#fff',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '20px',
+                        fontSize: 'clamp(0.65rem, 2vw, 0.75rem)',
+                        fontWeight: '700',
+                        boxShadow: '0 4px 12px rgba(16,185,129,0.4)'
+                      }}>
+                        🔓 ADMIN FREE
+                      </div>
+                    )}
+
+                    {plan.badge && !userIsAdmin && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '1rem',
+                        right: '1rem',
+                        background: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
+                        color: '#fff',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '20px',
+                        fontSize: 'clamp(0.65rem, 2vw, 0.75rem)',
+                        fontWeight: '700',
+                        boxShadow: '0 4px 12px rgba(251,191,36,0.4)'
+                      }}>
+                        {plan.badge}
+                      </div>
+                    )}
+
+                    <div style={{ textAlign: 'center', marginBottom: '1.5rem', marginTop: userIsAdmin || plan.badge ? '2.5rem' : '0' }}>
+                      <div style={{
+                        width: 'clamp(60px, 15vw, 80px)',
+                        height: 'clamp(60px, 15vw, 80px)',
+                        background: plan.level === 'basic'
+                          ? 'linear-gradient(135deg, #10b981, #059669)'
+                          : plan.level === 'advanced'
+                          ? 'linear-gradient(135deg, #6366f1, #4f46e5)'
+                          : 'linear-gradient(135deg, #f59e0b, #d97706)',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        margin: '0 auto 1rem',
+                        fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',
+                        boxShadow: '0 8px 20px rgba(0,0,0,0.15)'
+                      }}>
+                        {plan.level === 'basic' ? '🌱' : plan.level === 'advanced' ? '🔥' : '⭐'}
+                      </div>
+
+                      <h2 style={{
+                        fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
+                        fontWeight: '900',
+                        color: isDark ? '#e2e8f0' : '#1e293b',
+                        marginBottom: '0.5rem',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px'
+                      }}>
+                        {plan.level}
+                      </h2>
+
+                      <p style={{
+                        color: isDark ? '#94a3b8' : '#64748b',
+                        fontSize: 'clamp(0.8rem, 2.5vw, 0.95rem)',
+                        marginBottom: '1rem'
+                      }}>
+                        {plan.description}
+                      </p>
+
+                      <div style={{
+                        fontSize: 'clamp(2rem, 6vw, 2.5rem)',
+                        fontWeight: '900',
+                        color: userIsAdmin ? '#10b981' : '#6366f1',
+                        marginBottom: '0.5rem'
+                      }}>
+                        {userIsAdmin ? 'FREE' : `₹${prices[plan.level] || plan.price}`}
+                      </div>
+                      {userIsAdmin && (
+                        <div style={{
+                          fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                          color: '#10b981',
+                          fontWeight: '600'
+                        }}>
+                          Admin Privilege
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{
+                      background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)',
+                      borderRadius: '16px',
+                      padding: '1.5rem',
+                      marginBottom: '1.5rem'
+                    }}>
+                      {plan.features.map((feature, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            marginBottom: idx === plan.features.length - 1 ? 0 : '0.75rem',
+                            fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)',
+                            color: isDark ? '#cbd5e1' : '#475569'
+                          }}
+                        >
+                          <CheckCircle size={18} color="#10b981" style={{ flexShrink: 0 }} />
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {userIsAdmin && (
+                      <div style={{
+                        padding: '0.75rem',
+                        background: 'rgba(16,185,129,0.1)',
+                        border: '1px solid rgba(16,185,129,0.3)',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                        color: '#10b981',
+                        fontWeight: '600'
+                      }}>
+                        <CheckCircle size={16} />
+                        🔓 Admin - Unlimited Access
+                      </div>
+                    )}
+
+                    {!userIsAdmin && status.status === 'grace_period' && (
+                      <div style={{
+                        padding: '0.75rem',
+                        background: 'rgba(16,185,129,0.1)',
+                        border: '1px solid rgba(16,185,129,0.3)',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                        color: '#10b981',
+                        fontWeight: '600'
+                      }}>
+                        <Unlock size={16} />
+                        ✅ Available - Grace Period: {timeRemainingDisplay}
+                      </div>
+                    )}
+
+                    {!userIsAdmin && status.status === 'in_progress' && (
+                      <div style={{
+                        padding: '0.75rem',
+                        background: 'rgba(245,158,11,0.1)',
+                        border: '1px solid rgba(245,158,11,0.3)',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                        color: '#f59e0b',
+                        fontWeight: '600'
+                      }}>
+                        <TrendingUp size={16} />
+                        📝 Test in Progress - Resume
+                      </div>
+                    )}
+
+                    {hasCert && (
+                      <div style={{
+                        padding: '0.75rem',
+                        background: 'rgba(99,102,241,0.1)',
+                        border: '1px solid rgba(99,102,241,0.3)',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                        color: '#6366f1',
+                        fontWeight: '600'
+                      }}>
+                        <Award size={16} />
+                        Certificate Earned (One per level)
+                      </div>
+                    )}
+
+                    {!userIsAdmin && status.status === 'locked' && (
+                      <div style={{
+                        padding: '0.75rem',
+                        background: 'rgba(239,68,68,0.1)',
+                        border: '1px solid rgba(239,68,68,0.3)',
+                        borderRadius: '8px',
+                        marginBottom: '1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        fontSize: 'clamp(0.75rem, 2vw, 0.85rem)',
+                        color: '#ef4444',
+                        fontWeight: '600'
+                      }}>
+                        <Lock size={16} />
+                        🔒 Locked - {timeRemainingDisplay}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => handleSelectPlan(plan)}
+                      disabled={!userIsAdmin && status.status === 'locked'}
+                      style={{
+                        width: '100%',
+                        background: (!userIsAdmin && status.status === 'locked')
+                          ? 'rgba(99,102,241,0.3)'
+                          : userIsAdmin
+                          ? 'linear-gradient(135deg, #10b981, #059669)'
+                          : status.status === 'grace_period' || status.status === 'in_progress'
+                          ? 'linear-gradient(135deg, #10b981, #059669)'
+                          : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        border: 'none',
+                        color: '#fff',
+                        padding: 'clamp(1rem, 3vw, 1.25rem)',
+                        borderRadius: '16px',
+                        fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)',
+                        fontWeight: '700',
+                        cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer',
+                        transition: 'all 0.3s ease',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.75rem',
+                        boxShadow: (!userIsAdmin && status.status === 'locked')
+                          ? 'none'
+                          : userIsAdmin
+                          ? '0 4px 20px rgba(16,185,129,0.4)'
+                          : status.status === 'grace_period' || status.status === 'in_progress'
+                          ? '0 4px 20px rgba(16,185,129,0.4)'
+                          : '0 4px 20px rgba(99,102,241,0.4)',
+                        textTransform: 'uppercase',
+                        letterSpacing: '1px',
+                        opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1
+                      }}
+                      onMouseEnter={(e) => {
+                        if (userIsAdmin || status.status !== 'locked') {
+                          e.currentTarget.style.transform = 'translateY(-2px)';
+                          e.currentTarget.style.boxShadow = userIsAdmin
+                            ? '0 8px 30px rgba(16,185,129,0.5)'
+                            : status.status === 'grace_period' || status.status === 'in_progress'
+                            ? '0 8px 30px rgba(16,185,129,0.5)'
+                            : '0 8px 30px rgba(99,102,241,0.5)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = (!userIsAdmin && status.status === 'locked')
+                          ? 'none'
+                          : userIsAdmin
+                          ? '0 4px 20px rgba(16,185,129,0.4)'
+                          : status.status === 'grace_period' || status.status === 'in_progress'
+                          ? '0 4px 20px rgba(16,185,129,0.4)'
+                          : '0 4px 20px rgba(99,102,241,0.4)';
+                      }}
+                    >
+                      {userIsAdmin ? (
+                        <>
+                          <Zap size={24} />
+                          🔓 Start Free Test
+                        </>
+                      ) : status.status === 'grace_period' || status.status === 'in_progress' ? (
+                        <>
+                          <Zap size={24} />
+                          {status.status === 'in_progress' ? 'Resume Test' : 'Start Test'}
+                        </>
+                      ) : status.status === 'locked' ? (
+                        <>
+                          <Lock size={24} />
+                          🔒 Locked - {timeRemainingDisplay}
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={24} />
+                          Buy Test (₹{prices[plan.level] || plan.price})
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ==========================================
+            TAB: CERTIFICATES
+            Same Certificatesection — testHistory=[] pass kiya
+            taaki sirf certificates dikhein
+        ========================================== */}
+        {activeTab === 'certificates' && (
+          <Certificatesection
+            userCertificates={userCertificates}
+            testHistory={[]}
+            isDark={isDark}
+            onViewCertificate={setSelectedCertificate}
+            onDeleteCertificate={handleDeleteCertificate}
+            onDeleteTest={handleDeleteClick}
+          />
+        )}
+
+        {/* ==========================================
+            TAB: RESULTS
+            Same Certificatesection — userCertificates=[] pass kiya
+            taaki sirf results dikhein
+        ========================================== */}
+        {activeTab === 'results' && (
+          <Certificatesection
+            userCertificates={[]}
+            testHistory={testHistory}
+            isDark={isDark}
+            onViewCertificate={setSelectedCertificate}
+            onDeleteCertificate={handleDeleteCertificate}
+            onDeleteTest={handleDeleteClick}
+          />
+        )}
 
         {/* Certificate Viewer Modal */}
         {selectedCertificate && (

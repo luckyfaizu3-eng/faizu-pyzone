@@ -1,3 +1,5 @@
+require('dotenv').config();   // ✅ .env file load karo
+
 const express  = require('express');
 const cors     = require('cors');
 const { execSync, spawn } = require('child_process');
@@ -11,6 +13,13 @@ const PORT = process.env.PORT || 5000;
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
 
+// ═══════════════════════════════════════════════
+// HuggingFace Config
+// ═══════════════════════════════════════════════
+const HF_KEY   = process.env.REACT_APP_HF_KEY || process.env.HF_KEY || "";
+const HF_MODEL = process.env.HF_MODEL || "openai/gpt-oss-120b:groq";
+const HF_URL   = "https://router.huggingface.co/v1/chat/completions";
+
 // Check if python3 is available on this system
 const PYTHON = (() => {
   try { execSync('python3 --version'); return 'python3'; } catch {}
@@ -20,14 +29,86 @@ const PYTHON = (() => {
 
 console.log('Python binary:', PYTHON || 'NOT FOUND');
 
+// ═══════════════════════════════════════════════
+// HEALTH CHECK
+// ═══════════════════════════════════════════════
 app.get('/', (req, res) => {
   res.json({ 
     status: 'ok', 
-    message: '🐍 FaizUpyZone Python Compiler!',
-    python: PYTHON || 'not available'
+    message: '🐍 FaizUpyZone Backend!',
+    python: PYTHON || 'not available',
+    hf_model: HF_MODEL,
+    hf_key: HF_KEY ? '✅ set' : '❌ missing',
   });
 });
 
+// ═══════════════════════════════════════════════
+// 🤖 HuggingFace PROXY — fixes CORS
+// POST /chat
+// Body: { messages: [...], temperature?, max_tokens? }
+// ═══════════════════════════════════════════════
+app.post('/chat', async (req, res) => {
+  if (!HF_KEY) {
+    return res.status(500).json({ error: 'HF_KEY not set on server. Add REACT_APP_HF_KEY to .env' });
+  }
+
+  const { messages, temperature = 0.7, max_tokens = 800 } = req.body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ error: 'messages array required' });
+  }
+
+  try {
+    const hfRes = await fetch(HF_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${HF_KEY}`,
+      },
+      body: JSON.stringify({
+        model:       HF_MODEL,
+        messages,
+        max_tokens,
+        temperature,
+        stream:      true,
+      }),
+    });
+
+    if (!hfRes.ok) {
+      const errText = await hfRes.text();
+      console.error('HF Error:', hfRes.status, errText);
+      return res.status(hfRes.status).json({ error: errText });
+    }
+
+    // ── Stream the response straight to the browser ──
+    res.setHeader('Content-Type',  'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection',    'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // nginx fix
+
+    const reader = hfRes.body.getReader();
+    const decoder = new TextDecoder();
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      res.write(chunk); // forward SSE chunks directly
+    }
+
+    res.end();
+
+  } catch (err) {
+    console.error('Proxy error:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════
+// PYTHON COMPILER — unchanged
+// ═══════════════════════════════════════════════
 app.post('/run', async (req, res) => {
   const { code, stdin = '' } = req.body;
   if (!code || !code.trim()) return res.status(400).json({ error: 'No code' });
@@ -90,7 +171,9 @@ app.post('/check-input', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log('\n🐍 Python Backend on http://localhost:' + PORT);
-  console.log('   Python binary: ' + (PYTHON || 'NOT FOUND'));
+  console.log('\n🚀 FaizUpyZone Backend on http://localhost:' + PORT);
+  console.log('   Python:   ' + (PYTHON || 'NOT FOUND'));
+  console.log('   HF Model: ' + HF_MODEL);
+  console.log('   HF Key:   ' + (HF_KEY ? '✅ set' : '❌ MISSING — add to .env'));
   console.log('   Press Ctrl+C to stop\n');
 });
