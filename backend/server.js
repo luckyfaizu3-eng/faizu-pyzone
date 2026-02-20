@@ -1,4 +1,4 @@
-require('dotenv').config();   // ✅ .env file load karo
+require('dotenv').config();
 
 const express  = require('express');
 const cors     = require('cors');
@@ -14,16 +14,33 @@ app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '2mb' }));
 
 // ═══════════════════════════════════════════════
-// HuggingFace Config
+// Groq Config — 7 Keys Auto Rotate
 // ═══════════════════════════════════════════════
-const HF_KEY   = process.env.REACT_APP_HF_KEY || process.env.HF_KEY || "";
-const HF_MODEL = process.env.HF_MODEL || "openai/gpt-oss-120b:groq";
-const HF_URL   = "https://router.huggingface.co/v1/chat/completions";
+const GROQ_KEYS = [
+  process.env.GROQ_KEY_1,
+  process.env.GROQ_KEY_2,
+  process.env.GROQ_KEY_3,
+  process.env.GROQ_KEY_4,
+  process.env.GROQ_KEY_5,
+  process.env.GROQ_KEY_6,
+  process.env.GROQ_KEY_7,
+].filter(Boolean);
 
-// Check if python3 is available on this system
+let keyIndex = 0;
+
+function getNextKey() {
+  const key = GROQ_KEYS[keyIndex];
+  keyIndex = (keyIndex + 1) % GROQ_KEYS.length;
+  return key;
+}
+
+const GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile"; // sabse fast + smart
+
+// Check if python3 is available
 const PYTHON = (() => {
   try { execSync('python3 --version'); return 'python3'; } catch {}
-  try { execSync('python --version'); return 'python'; }  catch {}
+  try { execSync('python --version');  return 'python';  } catch {}
   return null;
 })();
 
@@ -33,23 +50,23 @@ console.log('Python binary:', PYTHON || 'NOT FOUND');
 // HEALTH CHECK
 // ═══════════════════════════════════════════════
 app.get('/', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: '🐍 FaizUpyZone Backend!',
-    python: PYTHON || 'not available',
-    hf_model: HF_MODEL,
-    hf_key: HF_KEY ? '✅ set' : '❌ missing',
+  res.json({
+    status:      'ok',
+    message:     '🐍 FaizUpyZone Backend!',
+    python:      PYTHON || 'not available',
+    groq_model:  GROQ_MODEL,
+    groq_keys:   GROQ_KEYS.length > 0 ? `✅ ${GROQ_KEYS.length} keys loaded` : '❌ missing',
   });
 });
 
 // ═══════════════════════════════════════════════
-// 🤖 HuggingFace PROXY — fixes CORS
+// 🤖 GROQ CHAT PROXY
 // POST /chat
 // Body: { messages: [...], temperature?, max_tokens? }
 // ═══════════════════════════════════════════════
 app.post('/chat', async (req, res) => {
-  if (!HF_KEY) {
-    return res.status(500).json({ error: 'HF_KEY not set on server. Add REACT_APP_HF_KEY to .env' });
+  if (GROQ_KEYS.length === 0) {
+    return res.status(500).json({ error: 'No GROQ keys set. Add GROQ_KEY_1 to GROQ_KEY_7 in environment.' });
   }
 
   const { messages, temperature = 0.7, max_tokens = 800 } = req.body;
@@ -58,56 +75,72 @@ app.post('/chat', async (req, res) => {
     return res.status(400).json({ error: 'messages array required' });
   }
 
-  try {
-    const hfRes = await fetch(HF_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type':  'application/json',
-        'Authorization': `Bearer ${HF_KEY}`,
-      },
-      body: JSON.stringify({
-        model:       HF_MODEL,
-        messages,
-        max_tokens,
-        temperature,
-        stream:      true,
-      }),
-    });
+  // Try all keys if one fails due to rate limit
+  let lastError = null;
+  for (let attempt = 0; attempt < GROQ_KEYS.length; attempt++) {
+    const apiKey = getNextKey();
 
-    if (!hfRes.ok) {
-      const errText = await hfRes.text();
-      console.error('HF Error:', hfRes.status, errText);
-      return res.status(hfRes.status).json({ error: errText });
+    try {
+      const groqRes = await fetch(GROQ_URL, {
+        method:  'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model:       GROQ_MODEL,
+          messages,
+          max_tokens,
+          temperature,
+          stream:      true,
+        }),
+      });
+
+      // Rate limited — try next key
+      if (groqRes.status === 429) {
+        console.warn(`Key ${attempt + 1} rate limited, trying next...`);
+        lastError = '429 rate limit';
+        continue;
+      }
+
+      if (!groqRes.ok) {
+        const errText = await groqRes.text();
+        console.error('Groq Error:', groqRes.status, errText);
+        return res.status(groqRes.status).json({ error: errText });
+      }
+
+      // Stream response
+      res.setHeader('Content-Type',      'text/event-stream');
+      res.setHeader('Cache-Control',     'no-cache');
+      res.setHeader('Connection',        'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+
+      const reader  = groqRes.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(decoder.decode(value, { stream: true }));
+      }
+
+      res.end();
+      return; // success!
+
+    } catch (err) {
+      console.error('Proxy error:', err.message);
+      lastError = err.message;
     }
+  }
 
-    // ── Stream the response straight to the browser ──
-    res.setHeader('Content-Type',  'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection',    'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no'); // nginx fix
-
-    const reader = hfRes.body.getReader();
-    const decoder = new TextDecoder();
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value, { stream: true });
-      res.write(chunk); // forward SSE chunks directly
-    }
-
-    res.end();
-
-  } catch (err) {
-    console.error('Proxy error:', err.message);
-    if (!res.headersSent) {
-      res.status(500).json({ error: err.message });
-    }
+  // All keys failed
+  if (!res.headersSent) {
+    res.status(429).json({ error: `All ${GROQ_KEYS.length} keys rate limited. Try again later.` });
   }
 });
 
 // ═══════════════════════════════════════════════
-// PYTHON COMPILER — unchanged
+// PYTHON COMPILER
 // ═══════════════════════════════════════════════
 app.post('/run', async (req, res) => {
   const { code, stdin = '' } = req.body;
@@ -115,9 +148,7 @@ app.post('/run', async (req, res) => {
 
   if (!PYTHON) {
     return res.status(500).json({
-      stdout: '',
-      stderr: '❌ Python not available on server',
-      exitCode: 1,
+      stdout: '', stderr: '❌ Python not available on server', exitCode: 1,
     });
   }
 
@@ -172,8 +203,8 @@ app.post('/check-input', (req, res) => {
 
 app.listen(PORT, () => {
   console.log('\n🚀 FaizUpyZone Backend on http://localhost:' + PORT);
-  console.log('   Python:   ' + (PYTHON || 'NOT FOUND'));
-  console.log('   HF Model: ' + HF_MODEL);
-  console.log('   HF Key:   ' + (HF_KEY ? '✅ set' : '❌ MISSING — add to .env'));
+  console.log('   Python:    ' + (PYTHON || 'NOT FOUND'));
+  console.log('   Groq Model:' + GROQ_MODEL);
+  console.log('   Groq Keys: ' + (GROQ_KEYS.length > 0 ? `✅ ${GROQ_KEYS.length} keys loaded` : '❌ MISSING'));
   console.log('   Press Ctrl+C to stop\n');
 });
