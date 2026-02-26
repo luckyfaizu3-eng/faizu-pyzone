@@ -28,6 +28,7 @@ class LeaderboardStorage {
         passed: testResult.passed,
         penalized: testResult.penalized || false,
         disqualificationReason: testResult.disqualificationReason || '',
+        rawScore: testResult.rawScore || null,
         date: new Date().toLocaleDateString('en-GB'),
         timestamp: Date.now()
       };
@@ -116,6 +117,7 @@ export default function Leaderboard({ userEmail }) {
   const [filterType, setFilterType] = useState('all'); // 'all', 'passed', 'failed'
   const [selectedTest, setSelectedTest] = useState('all');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [activeTab, setActiveTab] = useState('python'); // 'python' | 'neet'
 
   const isAdmin = userEmail === CONFIG.ADMIN_EMAIL;
 
@@ -131,7 +133,7 @@ export default function Leaderboard({ userEmail }) {
   useEffect(() => {
     applyFilters();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, searchTerm, filterType, selectedTest]);
+  }, [entries, searchTerm, filterType, selectedTest, activeTab]);
 
   const loadEntries = async () => {
     const allEntries = await LeaderboardStorage.getAllEntries();
@@ -140,29 +142,35 @@ export default function Leaderboard({ userEmail }) {
   };
 
   const applyFilters = () => {
-    let filtered = [...entries];
+    // First apply tab filter
+    let tabFiltered = entries.filter(entry => {
+      const level = (entry.testLevel || '').toLowerCase().trim();
+      return activeTab === 'neet' ? level === 'neet' : level !== 'neet';
+    });
 
     // Search filter
     if (searchTerm) {
-      filtered = filtered.filter(entry => 
+      tabFiltered = tabFiltered.filter(entry => 
         entry.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         entry.email.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
-    // Pass/Fail filter
-    if (filterType === 'passed') {
-      filtered = filtered.filter(entry => entry.passed);
-    } else if (filterType === 'failed') {
-      filtered = filtered.filter(entry => !entry.passed);
+    // Pass/Fail filter (only for python tab)
+    if (activeTab !== 'neet') {
+      if (filterType === 'passed') {
+        tabFiltered = tabFiltered.filter(entry => entry.passed);
+      } else if (filterType === 'failed') {
+        tabFiltered = tabFiltered.filter(entry => !entry.passed);
+      }
     }
 
     // Test filter
     if (selectedTest !== 'all') {
-      filtered = filtered.filter(entry => entry.testTitle === selectedTest);
+      tabFiltered = tabFiltered.filter(entry => entry.testTitle === selectedTest);
     }
 
-    setFilteredEntries(filtered);
+    setFilteredEntries(tabFiltered);
   };
 
   const handleDelete = async (id) => {
@@ -372,35 +380,41 @@ export default function Leaderboard({ userEmail }) {
     };
   };
 
-  const uniqueTests = [...new Set(entries.map(e => e.testTitle))];
+  const uniqueTests = [...new Set(
+    entries
+      .filter(e => activeTab === 'neet' ? e.testLevel === 'neet' : e.testLevel !== 'neet')
+      .map(e => e.testTitle)
+  )];
+
+  const isMobile = window.innerWidth <= 768;
 
   return (
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: window.innerWidth <= 768 ? '80px 0.75rem 2rem' : '100px 1rem 2rem',
+      padding: isMobile ? '80px 0.75rem 2rem' : '100px 1rem 2rem',
       fontFamily: 'system-ui, -apple-system, sans-serif'
     }}>
       <div style={{ maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
         {/* Header */}
         <div style={{
           background: '#fff',
-          borderRadius: window.innerWidth <= 768 ? '16px' : '24px',
-          padding: window.innerWidth <= 768 ? '1.5rem 1rem' : '2rem',
-          marginBottom: window.innerWidth <= 768 ? '1rem' : '2rem',
+          borderRadius: isMobile ? '16px' : '24px',
+          padding: isMobile ? '1.5rem 1rem' : '2rem',
+          marginBottom: isMobile ? '1rem' : '2rem',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
           textAlign: 'center'
         }}>
           <div style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: window.innerWidth <= 768 ? '0.5rem' : '1rem',
+            gap: isMobile ? '0.5rem' : '1rem',
             background: 'linear-gradient(135deg, #667eea, #764ba2)',
-            padding: window.innerWidth <= 768 ? '0.75rem 1.25rem' : '1rem 2rem',
+            padding: isMobile ? '0.75rem 1.25rem' : '1rem 2rem',
             borderRadius: '50px',
-            marginBottom: window.innerWidth <= 768 ? '0.75rem' : '1rem'
+            marginBottom: isMobile ? '0.75rem' : '1rem'
           }}>
-            <Trophy size={window.innerWidth <= 768 ? 24 : 32} color="#fff" />
+            <Trophy size={isMobile ? 24 : 32} color="#fff" />
             <h1 style={{
               fontSize: 'clamp(1.3rem, 5vw, 2.5rem)',
               fontWeight: '900',
@@ -441,20 +455,66 @@ export default function Leaderboard({ userEmail }) {
           )}
         </div>
 
+        {/* ==================== TABS ==================== */}
+        <div style={{
+          background: '#fff',
+          borderRadius: isMobile ? '16px' : '20px',
+          padding: '0.5rem',
+          marginBottom: isMobile ? '1rem' : '1.5rem',
+          boxShadow: '0 12px 40px rgba(0,0,0,0.15)',
+          display: 'flex',
+          gap: '0.5rem'
+        }}>
+          {[
+            { key: 'python', label: '🐍 Python Tests' },
+            { key: 'neet', label: '🧬 NEET Test' }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => {
+                setActiveTab(tab.key);
+                setSelectedTest('all');
+                setFilterType('all');
+                setSearchTerm('');
+              }}
+              style={{
+                flex: 1,
+                padding: isMobile ? '0.75rem 1rem' : '0.9rem 1.5rem',
+                border: 'none',
+                borderRadius: isMobile ? '10px' : '14px',
+                fontSize: isMobile ? '0.95rem' : '1.05rem',
+                fontWeight: '800',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                background: activeTab === tab.key
+                  ? 'linear-gradient(135deg, #667eea, #764ba2)'
+                  : 'transparent',
+                color: activeTab === tab.key ? '#fff' : '#64748b',
+                boxShadow: activeTab === tab.key
+                  ? '0 4px 16px rgba(102, 126, 234, 0.4)'
+                  : 'none',
+                letterSpacing: '0.02em'
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         {/* Filters & Search */}
         <div style={{
           background: '#fff',
-          borderRadius: window.innerWidth <= 768 ? '16px' : '20px',
-          padding: window.innerWidth <= 768 ? '1rem' : '1.5rem',
-          marginBottom: window.innerWidth <= 768 ? '1rem' : '2rem',
+          borderRadius: isMobile ? '16px' : '20px',
+          padding: isMobile ? '1rem' : '1.5rem',
+          marginBottom: isMobile ? '1rem' : '2rem',
           boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
         }}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: window.innerWidth <= 768 
+            gridTemplateColumns: isMobile 
               ? '1fr' 
               : 'repeat(auto-fit, minmax(250px, 1fr))',
-            gap: window.innerWidth <= 768 ? '0.75rem' : '1rem',
+            gap: isMobile ? '0.75rem' : '1rem',
             marginBottom: isAdmin ? '1rem' : '0'
           }}>
             {/* Search */}
@@ -472,10 +532,10 @@ export default function Leaderboard({ userEmail }) {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: window.innerWidth <= 768 ? '0.75rem 1rem 0.75rem 2.75rem' : '0.9rem 1rem 0.9rem 3rem',
+                  padding: isMobile ? '0.75rem 1rem 0.75rem 2.75rem' : '0.9rem 1rem 0.9rem 3rem',
                   border: '2px solid #e2e8f0',
-                  borderRadius: window.innerWidth <= 768 ? '10px' : '12px',
-                  fontSize: window.innerWidth <= 768 ? '0.9rem' : '0.95rem',
+                  borderRadius: isMobile ? '10px' : '12px',
+                  fontSize: isMobile ? '0.9rem' : '0.95rem',
                   fontWeight: '600',
                   transition: 'all 0.2s'
                 }}
@@ -484,34 +544,36 @@ export default function Leaderboard({ userEmail }) {
               />
             </div>
 
-            {/* Filter by Pass/Fail */}
-            <div style={{ position: 'relative' }}>
-              <Filter size={20} color="#94a3b8" style={{
-                position: 'absolute',
-                left: '1rem',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                pointerEvents: 'none'
-              }} />
-              <select
-                value={filterType}
-                onChange={(e) => setFilterType(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: window.innerWidth <= 768 ? '0.75rem 1rem 0.75rem 2.75rem' : '0.9rem 1rem 0.9rem 3rem',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: window.innerWidth <= 768 ? '10px' : '12px',
-                  fontSize: window.innerWidth <= 768 ? '0.9rem' : '0.95rem',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  background: '#fff'
-                }}
-              >
-                <option value="all">All Results</option>
-                <option value="passed">✅ Passed Only</option>
-                <option value="failed">❌ Failed Only</option>
-              </select>
-            </div>
+            {/* Filter by Pass/Fail — only on Python tab */}
+            {activeTab === 'python' && (
+              <div style={{ position: 'relative' }}>
+                <Filter size={20} color="#94a3b8" style={{
+                  position: 'absolute',
+                  left: '1rem',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  pointerEvents: 'none'
+                }} />
+                <select
+                  value={filterType}
+                  onChange={(e) => setFilterType(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: isMobile ? '0.75rem 1rem 0.75rem 2.75rem' : '0.9rem 1rem 0.9rem 3rem',
+                    border: '2px solid #e2e8f0',
+                    borderRadius: isMobile ? '10px' : '12px',
+                    fontSize: isMobile ? '0.9rem' : '0.95rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    background: '#fff'
+                  }}
+                >
+                  <option value="all">All Results</option>
+                  <option value="passed">✅ Passed Only</option>
+                  <option value="failed">❌ Failed Only</option>
+                </select>
+              </div>
+            )}
 
             {/* Filter by Test */}
             <div style={{ position: 'relative' }}>
@@ -527,10 +589,10 @@ export default function Leaderboard({ userEmail }) {
                 onChange={(e) => setSelectedTest(e.target.value)}
                 style={{
                   width: '100%',
-                  padding: window.innerWidth <= 768 ? '0.75rem 1rem 0.75rem 2.75rem' : '0.9rem 1rem 0.9rem 3rem',
+                  padding: isMobile ? '0.75rem 1rem 0.75rem 2.75rem' : '0.9rem 1rem 0.9rem 3rem',
                   border: '2px solid #e2e8f0',
-                  borderRadius: window.innerWidth <= 768 ? '10px' : '12px',
-                  fontSize: window.innerWidth <= 768 ? '0.9rem' : '0.95rem',
+                  borderRadius: isMobile ? '10px' : '12px',
+                  fontSize: isMobile ? '0.9rem' : '0.95rem',
                   fontWeight: '600',
                   cursor: 'pointer',
                   background: '#fff'
@@ -541,7 +603,7 @@ export default function Leaderboard({ userEmail }) {
                   <option key={idx} value={test}>{test}</option>
                 ))}
                 {/* Add Pro test if not in database yet */}
-                {!uniqueTests.includes('Pro Python Test') && (
+                {activeTab === 'python' && !uniqueTests.includes('Pro Python Test') && (
                   <option value="Pro Python Test">Pro Python Test</option>
                 )}
               </select>
@@ -626,12 +688,227 @@ export default function Leaderboard({ userEmail }) {
               const rankStyle = getRankStyle(index);
               const isTopThree = index < 3;
 
+              // ==================== NEET CARD ====================
+              if (activeTab === 'neet') {
+                return (
+                  <div key={entry.id} style={{
+                    background: rankStyle.bg,
+                    border: `3px solid ${rankStyle.border}`,
+                    borderRadius: isMobile ? '16px' : '20px',
+                    padding: isMobile ? '1.25rem' : '1.75rem',
+                    boxShadow: rankStyle.shadow,
+                    transition: 'all 0.3s',
+                    position: 'relative',
+                    animation: `slideIn 0.4s ease ${index * 0.05}s backwards`
+                  }}>
+                    {/* Delete Confirmation Overlay */}
+                    {showDeleteConfirm === entry.id && (
+                      <div style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'rgba(0,0,0,0.95)',
+                        borderRadius: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '1rem',
+                        zIndex: 10,
+                        padding: '2rem'
+                      }}>
+                        <div style={{ color: '#fff', fontSize: '1.2rem', fontWeight: '800', textAlign: 'center' }}>
+                          Delete this entry?
+                        </div>
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                          <button
+                            onClick={() => handleDelete(entry.id)}
+                            style={{
+                              padding: '0.7rem 1.5rem',
+                              background: '#ef4444',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '10px',
+                              fontWeight: '800',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Yes, Delete
+                          </button>
+                          <button
+                            onClick={() => setShowDeleteConfirm(null)}
+                            style={{
+                              padding: '0.7rem 1.5rem',
+                              background: '#64748b',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: '10px',
+                              fontWeight: '800',
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: isMobile
+                        ? '1fr'
+                        : (isAdmin ? 'auto 1fr auto auto auto auto' : 'auto 1fr auto auto auto'),
+                      gap: isMobile ? '1rem' : '1.5rem',
+                      alignItems: 'center',
+                      textAlign: isMobile ? 'center' : 'left'
+                    }}>
+                      {/* Rank */}
+                      <div style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                      }}>
+                        {getRankIcon(index)}
+                        <div style={{
+                          fontSize: isTopThree ? '1.5rem' : '1.1rem',
+                          fontWeight: '900',
+                          color: rankStyle.text
+                        }}>
+                          #{index + 1}
+                        </div>
+                        {isTopThree && (
+                          <div style={{
+                            fontSize: '0.65rem',
+                            fontWeight: '800',
+                            textTransform: 'uppercase',
+                            color: rankStyle.text,
+                            opacity: 0.7,
+                            letterSpacing: '0.05em'
+                          }}>
+                            {index === 0 ? 'CHAMPION' : index === 1 ? 'RUNNER-UP' : '3RD PLACE'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Name */}
+                      <div>
+                        <div style={{
+                          fontSize: isTopThree ? 'clamp(1.4rem, 3.5vw, 1.8rem)' : 'clamp(1.2rem, 3vw, 1.5rem)',
+                          fontWeight: '800',
+                          color: '#1e293b'
+                        }}>
+                          {entry.name}
+                        </div>
+                      </div>
+
+                      {/* Marks /720 */}
+                      <div style={{
+                        textAlign: 'center',
+                        background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                        color: '#fff',
+                        padding: isTopThree ? '1.25rem 1.5rem' : '1rem 1.25rem',
+                        borderRadius: '16px',
+                        boxShadow: '0 6px 20px rgba(102,126,234,0.25)',
+                        minWidth: '110px',
+                        margin: isMobile ? '0 auto' : '0'
+                      }}>
+                        <div style={{
+                          fontSize: isTopThree ? '2.2rem' : '1.9rem',
+                          fontWeight: '900',
+                          lineHeight: 1,
+                          textShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                        }}>
+                          {entry.rawScore != null ? entry.rawScore : '—'}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '700', marginTop: '0.4rem', opacity: 0.9 }}>
+                          / 720 Marks
+                        </div>
+                      </div>
+
+                      {/* Questions Correct */}
+                      <div style={{
+                        textAlign: 'center',
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        color: '#fff',
+                        padding: isTopThree ? '1.25rem 1.5rem' : '1rem 1.25rem',
+                        borderRadius: '16px',
+                        boxShadow: '0 6px 20px rgba(16,185,129,0.25)',
+                        minWidth: '110px',
+                        margin: isMobile ? '0 auto' : '0'
+                      }}>
+                        <div style={{
+                          fontSize: isTopThree ? '2.2rem' : '1.9rem',
+                          fontWeight: '900',
+                          lineHeight: 1,
+                          textShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                        }}>
+                          {entry.score}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '700', marginTop: '0.4rem', opacity: 0.9 }}>
+                          Questions
+                        </div>
+                      </div>
+
+                      {/* Time Taken */}
+                      <div style={{
+                        textAlign: 'center',
+                        background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                        color: '#fff',
+                        padding: isTopThree ? '1.25rem 1.5rem' : '1rem 1.25rem',
+                        borderRadius: '16px',
+                        boxShadow: '0 6px 20px rgba(245,158,11,0.25)',
+                        minWidth: '110px',
+                        margin: isMobile ? '0 auto' : '0',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.3rem'
+                      }}>
+                        <Clock size={20} color="#fff" />
+                        <div style={{ fontSize: '1.1rem', fontWeight: '900', lineHeight: 1 }}>
+                          {entry.timeTaken}
+                        </div>
+                        <div style={{ fontSize: '0.8rem', fontWeight: '700', opacity: 0.9 }}>
+                          Time
+                        </div>
+                      </div>
+
+                      {/* Admin Delete Button */}
+                      {isAdmin && (
+                        <button
+                          onClick={() => setShowDeleteConfirm(entry.id)}
+                          style={{
+                            padding: '0.8rem',
+                            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '12px',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: '0 4px 12px rgba(239,68,68,0.3)',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
+                          onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              // ==================== PYTHON CARD (unchanged) ====================
               return (
                 <div key={entry.id} style={{
                   background: rankStyle.bg,
                   border: `3px solid ${rankStyle.border}`,
-                  borderRadius: window.innerWidth <= 768 ? '16px' : '20px',
-                  padding: window.innerWidth <= 768 ? '1.25rem' : '1.75rem',
+                  borderRadius: isMobile ? '16px' : '20px',
+                  padding: isMobile ? '1.25rem' : '1.75rem',
                   boxShadow: rankStyle.shadow,
                   transition: 'all 0.3s',
                   position: 'relative',
@@ -690,12 +967,12 @@ export default function Leaderboard({ userEmail }) {
 
                   <div style={{
                     display: 'grid',
-                    gridTemplateColumns: window.innerWidth <= 768 
+                    gridTemplateColumns: isMobile 
                       ? '1fr' 
                       : (isAdmin ? 'auto 1fr auto auto' : 'auto 1fr auto'),
-                    gap: window.innerWidth <= 768 ? '1rem' : '1.5rem',
+                    gap: isMobile ? '1rem' : '1.5rem',
                     alignItems: 'center',
-                    textAlign: window.innerWidth <= 768 ? 'center' : 'left'
+                    textAlign: isMobile ? 'center' : 'left'
                   }}>
                     {/* Rank */}
                     <div style={{
@@ -795,7 +1072,7 @@ export default function Leaderboard({ userEmail }) {
                         fontSize: '0.9rem',
                         color: '#64748b',
                         fontWeight: '600',
-                        justifyContent: window.innerWidth <= 768 ? 'center' : 'flex-start'
+                        justifyContent: isMobile ? 'center' : 'flex-start'
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                           <Trophy size={16} />
@@ -825,7 +1102,7 @@ export default function Leaderboard({ userEmail }) {
                         ? '0 6px 20px rgba(16,185,129,0.25)'
                         : '0 6px 20px rgba(239,68,68,0.25)',
                       minWidth: '120px',
-                      margin: window.innerWidth <= 768 ? '0 auto' : '0'
+                      margin: isMobile ? '0 auto' : '0'
                     }}>
                       <div style={{
                         fontSize: isTopThree ? '2.8rem' : '2.5rem',
@@ -875,86 +1152,130 @@ export default function Leaderboard({ userEmail }) {
           </div>
         )}
 
-        {/* Footer Stats */}
-        {entries.length > 0 && (
-          <div style={{
-            background: '#fff',
-            borderRadius: window.innerWidth <= 768 ? '16px' : '20px',
-            padding: window.innerWidth <= 768 ? '1.25rem 1rem' : '2rem',
-            marginTop: window.innerWidth <= 768 ? '1rem' : '2rem',
-            boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
-          }}>
-            <h3 style={{
-              fontSize: window.innerWidth <= 768 ? '1.1rem' : '1.3rem',
-              fontWeight: '800',
-              color: '#1e293b',
-              marginBottom: window.innerWidth <= 768 ? '1rem' : '1.5rem',
-              textAlign: 'center'
-            }}>
-              📊 Overall Statistics
-            </h3>
+        {/* Footer Stats - uses same tab filter as cards */}
+        {(() => {
+          const tabEntries = entries.filter(e => {
+            const level = (e.testLevel || '').toLowerCase().trim();
+            if (activeTab === 'neet') {
+              return level === 'neet';
+            } else {
+              return level !== 'neet';
+            }
+          });
 
+          if (tabEntries.length === 0) return null;
+
+          const statCard = (bg, value, label, shadow) => (
             <div style={{
-              display: 'grid',
-              gridTemplateColumns: window.innerWidth <= 768 
-                ? 'repeat(2, 1fr)' 
-                : 'repeat(auto-fit, minmax(200px, 1fr))',
-              gap: window.innerWidth <= 768 ? '0.75rem' : '1.5rem'
+              background: bg,
+              padding: isMobile ? '1rem' : '1.5rem',
+              borderRadius: isMobile ? '12px' : '16px',
+              textAlign: 'center',
+              color: '#fff',
+              boxShadow: shadow || 'none'
             }}>
-              <div style={{
-                background: 'linear-gradient(135deg, #667eea, #764ba2)',
-                padding: window.innerWidth <= 768 ? '1rem' : '1.5rem',
-                borderRadius: window.innerWidth <= 768 ? '12px' : '16px',
-                textAlign: 'center',
-                color: '#fff'
-              }}>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', fontWeight: '900' }}>{entries.length}</div>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.9rem', fontWeight: '700', opacity: 0.9 }}>Total Attempts</div>
-              </div>
-
-              <div style={{
-                background: 'linear-gradient(135deg, #10b981, #059669)',
-                padding: window.innerWidth <= 768 ? '1rem' : '1.5rem',
-                borderRadius: window.innerWidth <= 768 ? '12px' : '16px',
-                textAlign: 'center',
-                color: '#fff'
-              }}>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', fontWeight: '900' }}>
-                  {entries.filter(e => e.passed).length}
-                </div>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.9rem', fontWeight: '700', opacity: 0.9 }}>Passed</div>
-              </div>
-
-              <div style={{
-                background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                padding: window.innerWidth <= 768 ? '1rem' : '1.5rem',
-                borderRadius: window.innerWidth <= 768 ? '12px' : '16px',
-                textAlign: 'center',
-                color: '#fff'
-              }}>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', fontWeight: '900' }}>
-                  {entries.filter(e => !e.passed).length}
-                </div>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.9rem', fontWeight: '700', opacity: 0.9 }}>Failed</div>
-              </div>
-
-              <div style={{
-                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-                padding: window.innerWidth <= 768 ? '1rem' : '1.5rem',
-                borderRadius: window.innerWidth <= 768 ? '12px' : '16px',
-                textAlign: 'center',
-                color: '#fff'
-              }}>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '2rem' : '2.5rem', fontWeight: '900' }}>
-                  {entries.length > 0 
-                    ? Math.round(entries.reduce((sum, e) => sum + e.percentage, 0) / entries.length)
-                    : 0}%
-                </div>
-                <div style={{ fontSize: window.innerWidth <= 768 ? '0.75rem' : '0.9rem', fontWeight: '700', opacity: 0.9 }}>Average Score</div>
-              </div>
+              <div style={{ fontSize: isMobile ? '2rem' : '2.5rem', fontWeight: '900', lineHeight: 1 }}>{value}</div>
+              <div style={{ fontSize: isMobile ? '0.75rem' : '0.9rem', fontWeight: '700', opacity: 0.9, marginTop: '0.4rem' }}>{label}</div>
             </div>
-          </div>
-        )}
+          );
+
+          return (
+            <div style={{
+              background: '#fff',
+              borderRadius: isMobile ? '16px' : '20px',
+              padding: isMobile ? '1.25rem 1rem' : '2rem',
+              marginTop: isMobile ? '1rem' : '2rem',
+              boxShadow: '0 12px 40px rgba(0,0,0,0.15)'
+            }}>
+              <h3 style={{
+                fontSize: isMobile ? '1.1rem' : '1.3rem',
+                fontWeight: '800',
+                color: '#1e293b',
+                marginBottom: isMobile ? '1rem' : '1.5rem',
+                textAlign: 'center'
+              }}>
+                {activeTab === 'neet' ? '🧬 NEET Statistics' : '🐍 Python Test Statistics'}
+              </h3>
+
+              {activeTab === 'neet' ? (
+                // ── NEET Stats ──
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: isMobile ? '0.75rem' : '1.5rem'
+                }}>
+                  {statCard(
+                    'linear-gradient(135deg, #667eea, #764ba2)',
+                    tabEntries.length,
+                    'Total Attempts',
+                    '0 6px 20px rgba(102,126,234,0.25)'
+                  )}
+                  {statCard(
+                    'linear-gradient(135deg, #10b981, #059669)',
+                    tabEntries.reduce((max, e) => Math.max(max, e.rawScore || 0), 0),
+                    'Highest Marks',
+                    '0 6px 20px rgba(16,185,129,0.25)'
+                  )}
+                  {statCard(
+                    'linear-gradient(135deg, #f59e0b, #d97706)',
+                    tabEntries.length > 0
+                      ? Math.round(tabEntries.reduce((sum, e) => sum + (e.rawScore || 0), 0) / tabEntries.length)
+                      : 0,
+                    'Avg Marks /720',
+                    '0 6px 20px rgba(245,158,11,0.25)'
+                  )}
+                  {statCard(
+                    'linear-gradient(135deg, #3b82f6, #2563eb)',
+                    (() => {
+                      // find entry with best rawScore and return timeTaken
+                      const top = tabEntries.reduce((best, e) =>
+                        (e.rawScore || 0) > (best.rawScore || 0) ? e : best,
+                        tabEntries[0]
+                      );
+                      return top?.timeTaken || '—';
+                    })(),
+                    'Topper\'s Time',
+                    '0 6px 20px rgba(59,130,246,0.25)'
+                  )}
+                </div>
+              ) : (
+                // ── Python Stats ──
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: isMobile ? '0.75rem' : '1.5rem'
+                }}>
+                  {statCard(
+                    'linear-gradient(135deg, #667eea, #764ba2)',
+                    tabEntries.length,
+                    'Total Attempts',
+                    '0 6px 20px rgba(102,126,234,0.25)'
+                  )}
+                  {statCard(
+                    'linear-gradient(135deg, #10b981, #059669)',
+                    tabEntries.filter(e => e.passed).length,
+                    'Passed',
+                    '0 6px 20px rgba(16,185,129,0.25)'
+                  )}
+                  {statCard(
+                    'linear-gradient(135deg, #ef4444, #dc2626)',
+                    tabEntries.filter(e => !e.passed).length,
+                    'Failed',
+                    '0 6px 20px rgba(239,68,68,0.25)'
+                  )}
+                  {statCard(
+                    'linear-gradient(135deg, #f59e0b, #d97706)',
+                    tabEntries.length > 0
+                      ? Math.round(tabEntries.reduce((sum, e) => sum + e.percentage, 0) / tabEntries.length) + '%'
+                      : '0%',
+                    'Average Score',
+                    '0 6px 20px rgba(245,158,11,0.25)'
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       <style>{`
