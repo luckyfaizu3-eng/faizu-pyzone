@@ -35,7 +35,7 @@ function ResultsDisplay({
     return () => window.removeEventListener('resize', h);
   }, []);
 
-  // ✅ FIX: MockTestPage par wapas jaao — homepage nahi
+  // ✅ "Back to Home" = MockTestPage par jaao (onBackToPlans)
   const handleBackToMockTests = () => {
     if (onBackToPlans) onBackToPlans();
     else window.location.href = '/mocktests';
@@ -156,6 +156,9 @@ function ResultsDisplay({
 
 // ==========================================
 // NEET RESULT
+// ✅ "Back to Home" = MockTestPage par jaata hai
+// ✅ Light background — no black
+// ✅ Mobile responsive
 // ==========================================
 function NEETResult({ result, onBackToMockTests, isMobile, showWrong, setShowWrong, isDark }) {
   const toggleWrong = (subject) => setShowWrong(p => ({ ...p, [subject]: !p[subject] }));
@@ -339,7 +342,7 @@ function NEETResult({ result, onBackToMockTests, isMobile, showWrong, setShowWro
           );
         })}
 
-        {/* ✅ FIX: "Back to Mock Tests" — MockTestPage par jaata hai, homepage nahi */}
+        {/* ✅ NEET Bottom — Info + Back to Mock Tests (MockTestPage par jaata hai) */}
         <div style={{ marginBottom: '2rem' }}>
           <div style={{ padding: isMobile ? '0.85rem' : '1.25rem', background: isDark ? 'rgba(99,102,241,0.12)' : '#eff6ff', border: '2px solid rgba(99,102,241,0.3)', borderRadius: '12px', marginBottom: '0.85rem', display: 'flex', alignItems: 'flex-start', gap: '0.65rem' }}>
             <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>📊</span>
@@ -353,18 +356,10 @@ function NEETResult({ result, onBackToMockTests, isMobile, showWrong, setShowWro
             </div>
           </div>
 
-          {/* ✅ FIX: onBackToMockTests() call hoga — window.location.href = '/' nahi */}
-          <button
-            onClick={onBackToMockTests}
-            style={{
-              width: '100%', padding: isMobile ? '0.9rem' : '1.25rem',
-              background: 'linear-gradient(135deg,#6366f1,#8b5cf6)',
-              border: 'none', borderRadius: '12px', color: '#fff',
-              fontSize: isMobile ? '0.95rem' : '1.1rem', fontWeight: '900',
-              cursor: 'pointer', boxShadow: '0 6px 20px rgba(99,102,241,0.4)'
-            }}
+          <button onClick={() => window.location.href = '/'}
+            style={{ width: '100%', padding: isMobile ? '0.9rem' : '1.25rem', background: 'linear-gradient(135deg,#f59e0b,#d97706)', border: 'none', borderRadius: '12px', color: '#fff', fontSize: isMobile ? '0.95rem' : '1.1rem', fontWeight: '900', cursor: 'pointer', boxShadow: '0 6px 20px rgba(245,158,11,0.4)' }}
           >
-            🔙 Back to Mock Tests
+            🏠 Back to Home
           </button>
         </div>
 
