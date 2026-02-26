@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Clock, ChevronLeft, ChevronRight, CheckCircle, AlertTriangle, Shield, BookOpen, WifiOff } from 'lucide-react';
 
-// ==========================================
-// 🎯 NEET CONFIG
-// ==========================================
 const NEET_CONFIG = {
   ADMIN_EMAIL: 'luckyfaizu3@gmail.com',
   MAX_TAB_SWITCHES: 3,
@@ -22,9 +19,6 @@ const NEET_CONFIG = {
   PASS_PERCENTAGE: 55,
 };
 
-// ==========================================
-// 📚 NEET SECTIONS
-// ==========================================
 const NEET_SECTIONS = [
   { id: 'Physics',   label: '⚡ Physics',   total: 45, color: '#3b82f6', bg: '#eff6ff' },
   { id: 'Chemistry', label: '🧪 Chemistry', total: 45, color: '#a855f7', bg: '#fdf4ff' },
@@ -32,9 +26,6 @@ const NEET_SECTIONS = [
   { id: 'Zoology',   label: '🐾 Zoology',   total: 45, color: '#f97316', bg: '#fff7ed' },
 ];
 
-// ==========================================
-// 🎨 THEME
-// ==========================================
 const THEME = {
   timer: {
     safe:     { bg: '#d1fae5', border: '#10b981', text: '#065f46' },
@@ -43,9 +34,6 @@ const THEME = {
   }
 };
 
-// ==========================================
-// 🛠️ UTILITIES
-// ==========================================
 const isAdminUser = (email) => email === NEET_CONFIG.ADMIN_EMAIL;
 
 const formatTime = (totalSeconds) => {
@@ -62,9 +50,6 @@ const getTimerTheme = (timeLeft, totalTime) => {
   return THEME.timer.critical;
 };
 
-// ==========================================
-// 🔊 AUDIO MANAGER
-// ==========================================
 class AudioManager {
   constructor() { this.context = null; }
   init() {
@@ -98,9 +83,6 @@ class AudioManager {
   }
 }
 
-// ==========================================
-// 🖥️ FULLSCREEN MANAGER
-// ==========================================
 class FullscreenManager {
   static async enter() {
     try {
@@ -155,9 +137,6 @@ class FullscreenManager {
   }
 }
 
-// ==========================================
-// 🧹 CLEANUP MANAGER
-// ==========================================
 class CleanupManager {
   static performFullCleanup() {
     try { FullscreenManager.exit(); } catch {}
@@ -175,9 +154,6 @@ class CleanupManager {
   }
 }
 
-// ==========================================
-// 🔐 NEET SECURITY MANAGER
-// ==========================================
 class NEETSecurityManager {
   constructor(onWarning, onAutoSubmit, onViolationLog) {
     this.onWarning = onWarning;
@@ -265,11 +241,47 @@ class NEETSecurityManager {
 }
 
 // ==========================================
-// 📋 INSTRUCTION SCREEN
+// ✅ SWIPE PREVENTION HOOK
+// Horizontal swipe se browser back nahi hoga
 // ==========================================
+function usePreventSwipeBack(ref) {
+  useEffect(() => {
+    const el = ref?.current;
+    if (!el) return;
+
+    let startX = 0;
+    let startY = 0;
+
+    const onTouchStart = (e) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    };
+
+    const onTouchMove = (e) => {
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+
+      // Agar horizontal swipe zyada hai vertical se
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+        e.preventDefault(); // browser back/forward block
+        e.stopPropagation();
+      }
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false }); // passive: false zaroori hai
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+    };
+  }, [ref]);
+}
+
 function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, sessionId }) {
   const [accepted, setAccepted] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const containerRef = useRef(null);
+  usePreventSwipeBack(containerRef);
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
@@ -307,25 +319,17 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
   ];
 
   return (
-    <div style={{
+    <div ref={containerRef} style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       background: '#f8fafc', display: 'flex', alignItems: 'flex-start',
       justifyContent: 'center', padding: '1rem', overflowY: 'auto',
-      WebkitOverflowScrolling: 'touch', zIndex: 999999
+      WebkitOverflowScrolling: 'touch', zIndex: 999999,
+      overscrollBehavior: 'none', touchAction: 'pan-y',
     }}>
-      <style>{`* { touch-action: pan-x pan-y !important; } input,select,textarea { font-size: 16px !important; }`}</style>
+      <style>{`* { } input,select,textarea { font-size: 16px !important; }`}</style>
       <div style={{ width: '100%', maxWidth: '680px', padding: '1rem 0' }}>
-
-        {/* Monitoring Banner */}
-        <div style={{
-          background: 'linear-gradient(135deg, #dc2626, #991b1b)',
-          border: '2px solid #ef4444', borderRadius: '16px',
-          padding: isMobile ? '0.85rem 1rem' : '1rem 1.5rem',
-          marginBottom: '1rem', textAlign: 'center'
-        }}>
-          <div style={{ fontSize: isMobile ? '0.8rem' : '0.9rem', fontWeight: '900', color: '#fff', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>
-            🔴 LIVE MONITORING ACTIVE
-          </div>
+        <div style={{ background: 'linear-gradient(135deg, #dc2626, #991b1b)', border: '2px solid #ef4444', borderRadius: '16px', padding: isMobile ? '0.85rem 1rem' : '1rem 1.5rem', marginBottom: '1rem', textAlign: 'center' }}>
+          <div style={{ fontSize: isMobile ? '0.8rem' : '0.9rem', fontWeight: '900', color: '#fff', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>🔴 LIVE MONITORING ACTIVE</div>
           <div style={{ display: 'flex', justifyContent: 'center', gap: isMobile ? '1rem' : '2rem', flexWrap: 'wrap' }}>
             {[{ icon: '📍', label: 'Location Logged' }, { icon: '🖥️', label: 'Screen Tracked' }, { icon: '⚠️', label: `Violations: 0/${NEET_CONFIG.MAX_VIOLATIONS}` }].map((item, i) => (
               <div key={i} style={{ fontSize: isMobile ? '0.68rem' : '0.75rem', color: '#fecaca', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
@@ -333,30 +337,14 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
               </div>
             ))}
           </div>
-          {sessionId && (
-            <div style={{ marginTop: '0.4rem', fontSize: isMobile ? '0.62rem' : '0.7rem', color: '#fca5a5', fontWeight: '600' }}>
-              🌐 Session ID: {sessionId}
-            </div>
-          )}
+          {sessionId && <div style={{ marginTop: '0.4rem', fontSize: isMobile ? '0.62rem' : '0.7rem', color: '#fca5a5', fontWeight: '600' }}>🌐 Session ID: {sessionId}</div>}
         </div>
-
-        {/* Header */}
-        <div style={{
-          background: '#fff', border: '3px solid #e2e8f0', borderRadius: '20px',
-          padding: isMobile ? '1.25rem' : '1.75rem', marginBottom: '1rem',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)', textAlign: 'center'
-        }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
-            background: '#eff6ff', border: '2px solid #bfdbfe',
-            borderRadius: '50px', padding: '0.4rem 1rem', marginBottom: '1rem'
-          }}>
+        <div style={{ background: '#fff', border: '3px solid #e2e8f0', borderRadius: '20px', padding: isMobile ? '1.25rem' : '1.75rem', marginBottom: '1rem', boxShadow: '0 8px 24px rgba(0,0,0,0.08)', textAlign: 'center' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#eff6ff', border: '2px solid #bfdbfe', borderRadius: '50px', padding: '0.4rem 1rem', marginBottom: '1rem' }}>
             <Shield size={16} color="#3b82f6" />
             <span style={{ color: '#1d4ed8', fontWeight: '800', fontSize: '0.8rem', letterSpacing: '0.08em' }}>NEET MOCK TEST</span>
           </div>
-          <h1 style={{ fontSize: isMobile ? 'clamp(1.2rem,4vw,1.6rem)' : '1.9rem', fontWeight: '800', color: '#1e293b', margin: '0 0 1rem' }}>
-            {testTitle}
-          </h1>
+          <h1 style={{ fontSize: isMobile ? 'clamp(1.2rem,4vw,1.6rem)' : '1.9rem', fontWeight: '800', color: '#1e293b', margin: '0 0 1rem' }}>{testTitle}</h1>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
             {[
               { label: 'Questions', value: `${totalQuestions}`, color: '#3b82f6' },
@@ -371,62 +359,29 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
             ))}
           </div>
         </div>
-
-        {/* Sections */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.6rem', marginBottom: '1rem' }}>
           {NEET_SECTIONS.map(s => (
-            <div key={s.id} style={{
-              background: '#fff', border: `2px solid ${s.color}33`,
-              borderRadius: '12px', padding: isMobile ? '0.75rem' : '0.9rem', textAlign: 'center',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)'
-            }}>
+            <div key={s.id} style={{ background: '#fff', border: `2px solid ${s.color}33`, borderRadius: '12px', padding: isMobile ? '0.75rem' : '0.9rem', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
               <div style={{ fontSize: isMobile ? '0.9rem' : '1rem', fontWeight: '800', color: s.color }}>{s.label}</div>
-              <div style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', color: '#64748b', marginTop: '0.2rem', fontWeight: '600' }}>
-                {s.total} Questions • {s.total * 4} Marks
-              </div>
+              <div style={{ fontSize: isMobile ? '0.7rem' : '0.75rem', color: '#64748b', marginTop: '0.2rem', fontWeight: '600' }}>{s.total} Questions • {s.total * 4} Marks</div>
             </div>
           ))}
         </div>
-
-        {/* Instructions */}
-        <div style={{
-          background: '#fff', border: '3px solid #e2e8f0', borderRadius: '20px',
-          padding: isMobile ? '1.25rem' : '1.5rem', marginBottom: '1rem',
-          boxShadow: '0 8px 24px rgba(0,0,0,0.08)'
-        }}>
+        <div style={{ background: '#fff', border: '3px solid #e2e8f0', borderRadius: '20px', padding: isMobile ? '1.25rem' : '1.5rem', marginBottom: '1rem', boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
             <BookOpen size={16} color="#3b82f6" />
-            <span style={{ color: '#1e293b', fontWeight: '800', fontSize: isMobile ? '0.85rem' : '0.95rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Important Instructions
-            </span>
+            <span style={{ color: '#1e293b', fontWeight: '800', fontSize: isMobile ? '0.85rem' : '0.95rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Important Instructions</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginBottom: '1.25rem' }}>
             {instructions.map((item, idx) => (
-              <div key={idx} style={{
-                display: 'flex', gap: '0.75rem', padding: isMobile ? '0.75rem' : '0.9rem',
-                background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '12px', alignItems: 'flex-start'
-              }}>
+              <div key={idx} style={{ display: 'flex', gap: '0.75rem', padding: isMobile ? '0.75rem' : '0.9rem', background: '#f8fafc', border: '2px solid #e2e8f0', borderRadius: '12px', alignItems: 'flex-start' }}>
                 <span style={{ fontSize: isMobile ? '1rem' : '1.1rem', flexShrink: 0 }}>{item.icon}</span>
-                <span style={{ color: '#475569', fontSize: isMobile ? 'clamp(0.78rem,2.2vw,0.88rem)' : '0.88rem', fontWeight: '500', lineHeight: 1.55 }}>
-                  {item.text}
-                </span>
+                <span style={{ color: '#475569', fontSize: isMobile ? 'clamp(0.78rem,2.2vw,0.88rem)' : '0.88rem', fontWeight: '500', lineHeight: 1.55 }}>{item.text}</span>
               </div>
             ))}
           </div>
-
-          {/* Accept */}
-          <div onClick={() => setAccepted(!accepted)} style={{
-            display: 'flex', alignItems: 'center', gap: '1rem', padding: isMobile ? '1rem' : '1.25rem',
-            background: accepted ? '#f0fdf4' : '#fff',
-            border: `3px solid ${accepted ? '#10b981' : '#e2e8f0'}`,
-            borderRadius: '14px', cursor: 'pointer', transition: 'all 0.2s'
-          }}>
-            <div style={{
-              width: '32px', height: '32px', minWidth: '32px', borderRadius: '8px',
-              border: `3px solid ${accepted ? '#10b981' : '#cbd5e1'}`,
-              background: accepted ? '#10b981' : '#fff',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
-            }}>
+          <div onClick={() => setAccepted(!accepted)} style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: isMobile ? '1rem' : '1.25rem', background: accepted ? '#f0fdf4' : '#fff', border: `3px solid ${accepted ? '#10b981' : '#e2e8f0'}`, borderRadius: '14px', cursor: 'pointer', transition: 'all 0.2s' }}>
+            <div style={{ width: '32px', height: '32px', minWidth: '32px', borderRadius: '8px', border: `3px solid ${accepted ? '#10b981' : '#cbd5e1'}`, background: accepted ? '#10b981' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}>
               {accepted && <CheckCircle size={20} color="#fff" strokeWidth={3} />}
             </div>
             <span style={{ color: accepted ? '#065f46' : '#475569', fontSize: isMobile ? 'clamp(0.82rem,2.5vw,0.95rem)' : '0.95rem', fontWeight: accepted ? '800' : '700', lineHeight: 1.4, flex: 1 }}>
@@ -434,17 +389,7 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
             </span>
           </div>
         </div>
-
-        {/* Start Button */}
-        <button onClick={() => accepted && onAccept()} disabled={!accepted} style={{
-          width: '100%', padding: isMobile ? '1rem' : '1.15rem',
-          background: accepted ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : '#e2e8f0',
-          border: accepted ? '3px solid #ef4444' : '3px solid #e2e8f0',
-          borderRadius: '16px', color: accepted ? '#fff' : '#94a3b8',
-          fontSize: isMobile ? '1rem' : '1.05rem', fontWeight: '800',
-          cursor: accepted ? 'pointer' : 'not-allowed',
-          boxShadow: accepted ? '0 8px 24px rgba(220,38,38,0.35)' : 'none', transition: 'all 0.3s'
-        }}>
+        <button onClick={() => accepted && onAccept()} disabled={!accepted} style={{ width: '100%', padding: isMobile ? '1rem' : '1.15rem', background: accepted ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : '#e2e8f0', border: accepted ? '3px solid #ef4444' : '3px solid #e2e8f0', borderRadius: '16px', color: accepted ? '#fff' : '#94a3b8', fontSize: isMobile ? '1rem' : '1.05rem', fontWeight: '800', cursor: accepted ? 'pointer' : 'not-allowed', boxShadow: accepted ? '0 8px 24px rgba(220,38,38,0.35)' : 'none', transition: 'all 0.3s' }}>
           {accepted ? '🚀 Proceed to Fill Details' : '☑️ Please accept instructions first'}
         </button>
       </div>
@@ -452,14 +397,13 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
   );
 }
 
-// ==========================================
-// 👤 NEET NAME FORM
-// ==========================================
 function NEETNameForm({ onSubmit, onCancel }) {
   const [name, setName] = useState('');
   const [age,  setAge]  = useState('');
   const [errors, setErrors] = useState({});
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  const containerRef = useRef(null);
+  usePreventSwipeBack(containerRef);
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
@@ -478,15 +422,14 @@ function NEETNameForm({ onSubmit, onCancel }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 999999 }}>
-      <style>{`* { touch-action: pan-x pan-y !important; } input,select,textarea { font-size: 16px !important; }`}</style>
+    <div ref={containerRef} style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 999999, overscrollBehavior: 'none', touchAction: 'pan-y' }}>
+      <style>{`input,select,textarea { font-size: 16px !important; }`}</style>
       <div style={{ background: '#fff', border: '3px solid #e2e8f0', borderRadius: '24px', padding: isMobile ? '1.75rem 1.5rem' : '2.5rem', maxWidth: '440px', width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.12)' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ width: '70px', height: '70px', margin: '0 auto 1rem', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', boxShadow: '0 8px 24px rgba(59,130,246,0.35)' }}>🧬</div>
           <h2 style={{ margin: 0, fontSize: isMobile ? '1.4rem' : '1.7rem', fontWeight: '900', color: '#1e293b' }}>Enter Your Details</h2>
           <p style={{ margin: '0.5rem 0 0', color: '#64748b', fontSize: isMobile ? '0.82rem' : '0.9rem', fontWeight: '600' }}>Your name will appear on the leaderboard</p>
         </div>
-
         <div style={{ marginBottom: '1.25rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: '800', color: '#475569', letterSpacing: '0.04em' }}>FULL NAME *</label>
           <input type="text" value={name} onChange={e => { setName(e.target.value); setErrors(p => ({ ...p, name: '' })); }} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Enter your full name..." autoFocus
@@ -494,7 +437,6 @@ function NEETNameForm({ onSubmit, onCancel }) {
             onFocus={e => e.target.style.borderColor = '#3b82f6'} onBlur={e => e.target.style.borderColor = errors.name ? '#ef4444' : '#e2e8f0'} />
           {errors.name && <div style={{ color: '#ef4444', fontSize: '0.78rem', marginTop: '0.4rem', fontWeight: '700' }}>⚠️ {errors.name}</div>}
         </div>
-
         <div style={{ marginBottom: '2rem' }}>
           <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.85rem', fontWeight: '800', color: '#475569', letterSpacing: '0.04em' }}>AGE *</label>
           <input type="number" value={age} onChange={e => { setAge(e.target.value); setErrors(p => ({ ...p, age: '' })); }} onKeyDown={e => e.key === 'Enter' && handleSubmit()} placeholder="Enter your age..." min="10" max="40"
@@ -502,7 +444,6 @@ function NEETNameForm({ onSubmit, onCancel }) {
             onFocus={e => e.target.style.borderColor = '#3b82f6'} onBlur={e => e.target.style.borderColor = errors.age ? '#ef4444' : '#e2e8f0'} />
           {errors.age && <div style={{ color: '#ef4444', fontSize: '0.78rem', marginTop: '0.4rem', fontWeight: '700' }}>⚠️ {errors.age}</div>}
         </div>
-
         <div style={{ display: 'flex', gap: '0.75rem' }}>
           <button onClick={onCancel} style={{ flex: 1, padding: isMobile ? '0.9rem' : '1rem', background: '#fff', border: '3px solid #e2e8f0', borderRadius: '14px', color: '#64748b', fontWeight: '700', cursor: 'pointer', fontSize: isMobile ? '0.88rem' : '0.95rem' }}>← Back</button>
           <button onClick={handleSubmit} style={{ flex: 2, padding: isMobile ? '0.9rem' : '1rem', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', border: 'none', borderRadius: '14px', color: '#fff', fontWeight: '800', cursor: 'pointer', fontSize: isMobile ? '0.88rem' : '0.95rem', boxShadow: '0 6px 20px rgba(59,130,246,0.4)' }}>Start Test 🚀</button>
@@ -512,22 +453,17 @@ function NEETNameForm({ onSubmit, onCancel }) {
   );
 }
 
-// ==========================================
-// 🎮 NEET TEST INTERFACE
-// ==========================================
 function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEmail, studentInfo }) {
   const [currentSection, setCurrentSection] = useState('Physics');
   const [currentQIdx, setCurrentQIdx]       = useState(0);
   const [answers, setAnswers]               = useState({});
   const [timeLeft, setTimeLeft]             = useState(timeLimit * 60);
   const [tabSwitches, setTabSwitches]       = useState(0);
-  // eslint-disable-next-line no-unused-vars
   const [violations, setViolations]         = useState(0);
   const [showWarning, setShowWarning]       = useState(false);
   const [warningMsg, setWarningMsg]         = useState('');
   const [warningType, setWarningType]       = useState('normal');
   const [isDisqualified, setIsDisqualified] = useState(false);
-  // eslint-disable-next-line no-unused-vars
   const [violationLogs, setViolationLogs]   = useState([]);
   const [isMobile, setIsMobile]             = useState(window.innerWidth <= 768);
   const [showQPanel, setShowQPanel]         = useState(window.innerWidth > 768);
@@ -535,6 +471,8 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   const [showConfirm, setShowConfirm]       = useState(false);
   const [isSubmitting, setIsSubmitting]     = useState(false);
 
+  const containerRef     = useRef(null);
+  const sectionTabsRef   = useRef(null); // ✅ Section tabs ref for swipe prevention
   const hasSubmittedRef  = useRef(false);
   const startTimeRef     = useRef(Date.now());
   const audioRef         = useRef(new AudioManager());
@@ -543,6 +481,10 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   const tabSwitchesRef   = useRef(0);
   const violationsRef    = useRef(0);
   const answersRef       = useRef({});
+
+  // ✅ Swipe back prevention on main container AND section tabs
+  usePreventSwipeBack(containerRef);
+  usePreventSwipeBack(sectionTabsRef);
 
   const admin = isAdminUser(userEmail);
 
@@ -585,22 +527,18 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   const handleSubmit = useCallback((penalized = false, reason = '') => {
     if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
-
     try {
       if (document.fullscreenElement) document.exitFullscreen();
       else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
       else if (document.msFullscreenElement) document.msExitFullscreen();
       else if (document.mozFullScreenElement) document.mozCancelFullScreen();
     } catch {}
-
     setIsSubmitting(true);
     setShowConfirm(false);
-
     requestAnimationFrame(() => {
       setTimeout(() => {
         const currentAnswers = answersRef.current;
         const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
-
         const subjectScores = {};
         NEET_SECTIONS.forEach(s => {
           const qs = sectionQs[s.id] || [];
@@ -624,43 +562,25 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
           });
           subjectScores[s.id] = { correct, wrong, skipped, marks, total: qs.length, maxMarks: qs.length * 4, wrongDetails };
         });
-
         const totalCorrect = Object.values(subjectScores).reduce((a, s) => a + s.correct, 0);
         const totalWrong   = Object.values(subjectScores).reduce((a, s) => a + s.wrong, 0);
         const totalSkipped = Object.values(subjectScores).reduce((a, s) => a + s.skipped, 0);
         const totalScore   = Object.values(subjectScores).reduce((a, s) => a + s.marks, 0);
         const allQsCount   = NEET_SECTIONS.reduce((a, s) => a + (sectionQs[s.id] || []).length, 0);
         const pct = Math.round(Math.max(0, (totalScore / NEET_CONFIG.MAX_SCORE)) * 100);
-
         const results = {
-          score: totalScore,
-          correct: totalCorrect,
-          wrong: totalWrong,
-          skipped: totalSkipped,
-          total: allQsCount,
-          percentage: pct,
-          passed: pct >= NEET_CONFIG.PASS_PERCENTAGE,
+          score: totalScore, correct: totalCorrect, wrong: totalWrong, skipped: totalSkipped,
+          total: allQsCount, percentage: pct, passed: pct >= NEET_CONFIG.PASS_PERCENTAGE,
           timeTaken: `${Math.floor(timeTaken / 60)}m ${timeTaken % 60}s`,
-          tabSwitches: tabSwitchesRef.current,
-          violations: violationsRef.current,
-          violationLogs: [],
-          penalized,
-          disqualificationReason: reason,
-          subjectScores,
-          studentInfo,
+          tabSwitches: tabSwitchesRef.current, violations: violationsRef.current,
+          violationLogs: [], penalized, disqualificationReason: reason, subjectScores, studentInfo,
         };
-
         CleanupManager.performFullCleanup();
-
-        setTimeout(() => {
-          setIsSubmitting(false);
-          onComplete(results);
-        }, 300);
+        setTimeout(() => { setIsSubmitting(false); onComplete(results); }, 300);
       }, 50);
     });
   }, [sectionQs, studentInfo, onComplete, getGlobalIdx]);
 
-  // Security + UI setup
   useEffect(() => {
     if (!admin) {
       audioRef.current.init();
@@ -681,10 +601,7 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
       );
       securityRef.current.enable();
     }
-
-    const toHide = ['nav','header','footer','.navbar','.header','.footer','.menu','.toolbar',
-      '#toolbar','[role="navigation"]','[role="banner"]','.telegram-button',
-      '[class*="telegram"]','[class*="background"]','[class*="toast"]','[class*="razorpay"]','aside','.sidebar'];
+    const toHide = ['nav','header','footer','.navbar','.header','.footer','.menu','.toolbar','#toolbar','[role="navigation"]','[role="banner"]','.telegram-button','[class*="telegram"]','[class*="background"]','[class*="toast"]','[class*="razorpay"]','aside','.sidebar'];
     const hidden = [];
     toHide.forEach(sel => {
       try {
@@ -696,16 +613,13 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
         });
       } catch {}
     });
-
     document.body.style.overflow = 'hidden'; document.documentElement.style.overflow = 'hidden';
     document.body.style.position = 'fixed'; document.body.style.width = '100%';
     document.body.style.height = '100%'; document.body.style.top = '0'; document.body.style.left = '0';
     window.onbeforeunload = (e) => { if (!hasSubmittedRef.current) { e.preventDefault(); e.returnValue = ''; return ''; } };
-
     const goOnline  = () => { setIsOnline(true); showWarningMessage('✅ Connection restored!', 'normal'); };
     const goOffline = () => { setIsOnline(false); showWarningMessage('📵 Internet lost! Answers are safe.', 'critical'); };
     window.addEventListener('online', goOnline); window.addEventListener('offline', goOffline);
-
     const currentAudio = audioRef.current; const currentSecurity = securityRef.current;
     return () => {
       window.onbeforeunload = null;
@@ -820,8 +734,16 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   }
 
   return (
-    <div data-test-interface="true" style={{ position: 'fixed', inset: 0, background: '#f8fafc', zIndex: 999999, display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', pointerEvents: isDisqualified ? 'none' : 'auto' }}>
-      <style>{`* { touch-action: pan-x pan-y !important; } input, textarea, select { font-size: 16px !important; }`}</style>
+    <div ref={containerRef} data-test-interface="true" style={{ position: 'fixed', inset: 0, background: '#f8fafc', zIndex: 999999, display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', pointerEvents: isDisqualified ? 'none' : 'auto', overscrollBehavior: 'none' }}>
+      <style>{`
+        * { touch-action: pan-x pan-y !important; }
+        input, textarea, select { font-size: 16px !important; }
+        [data-test-interface] { overscroll-behavior: none; }
+        @keyframes slideIn { 0%{opacity:0;transform:translateY(30px) scale(0.95)} 100%{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
+        @keyframes blink { 0%,49%,100%{opacity:1} 50%,99%{opacity:0.25} }
+        @keyframes spin { to{transform:rotate(360deg)} }
+      `}</style>
 
       {showConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 10000000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)', padding: '1rem' }}>
@@ -897,8 +819,8 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
         </button>
       </div>
 
-      {/* SECTION TABS */}
-      <div style={{ background: '#fff', borderBottom: '2px solid #e2e8f0', padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', display: 'flex', gap: '0.4rem', flexShrink: 0, overflowX: 'auto' }}>
+      {/* ✅ SECTION TABS — ref lagaya swipe back rokne ke liye */}
+      <div ref={sectionTabsRef} style={{ background: '#fff', borderBottom: '2px solid #e2e8f0', padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', display: 'flex', gap: '0.4rem', flexShrink: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none', overscrollBehavior: 'contain' }}>
         {NEET_SECTIONS.map(s => {
           const qs = sectionQs[s.id] || [];
           const answered = qs.filter((_, li) => answers[getGlobalIdx(s.id, li)] !== undefined).length;
@@ -919,7 +841,7 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
 
       {/* MAIN CONTENT */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '1rem' : '1.5rem', WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '1rem' : '1.5rem', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
           {currentQ ? (
             <div style={{ maxWidth: '800px', margin: '0 auto', opacity: isDisqualified ? 0.3 : 1, pointerEvents: isDisqualified ? 'none' : 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1010,23 +932,10 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
           </div>
         )}
       </div>
-
-      <style>{`
-        @keyframes slideIn { 0%{opacity:0;transform:translateY(30px) scale(0.95)} 100%{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes fadeInUp { from{opacity:0;transform:translateX(-15px)} to{opacity:1;transform:translateX(0)} }
-        @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
-        @keyframes blink { 0%,49%,100%{opacity:1} 50%,99%{opacity:0.25} }
-        @keyframes spin { to{transform:rotate(360deg)} }
-      `}</style>
     </div>
   );
 }
 
-// ==========================================
-// 🚀 MAIN EXPORT
-// ✅ FIX: onExit NAHI call karo after onComplete
-// Results MockTestPage dikhayega — onExit yahan se mat karo
-// ==========================================
 export default function NEETMockTestInterface({ questions, userEmail, userId, onExit, onComplete }) {
   const [stage, setStage]             = useState('instructions');
   const [studentInfo, setStudentInfo] = useState(null);
@@ -1059,13 +968,9 @@ export default function NEETMockTestInterface({ questions, userEmail, userId, on
 
   const handleFormCancel = () => { hasSubmittedFormRef.current = false; setStage('instructions'); };
 
-  // ✅ KEY FIX: onExit BILKUL mat karo yahan
-  // MockTestPage ka handleNeetTestComplete results set karega aur currentStep='results' karega
-  // Agar onExit call kiya toh neetStep reset hoga aur results kabhi nahi dikhenge
   const handleTestComplete = useCallback(async (testResults) => {
     CleanupManager.performFullCleanup();
     setSaving(true);
-
     const completeData = {
       ...testResults,
       studentInfo,
@@ -1075,17 +980,10 @@ export default function NEETMockTestInterface({ questions, userEmail, userId, on
       completedAt: Date.now(),
       timestamp: new Date().toISOString(),
     };
-
     if (onComplete) {
-      try {
-        await onComplete(completeData);
-      } catch (err) {
-        console.error('❌ onComplete error:', err);
-      }
+      try { await onComplete(completeData); } catch (err) { console.error('❌ onComplete error:', err); }
     }
-
     setSaving(false);
-    // ✅ onExit NAHI karo — MockTestPage results dikhayega
   }, [studentInfo, userEmail, onComplete]);
 
   if (saving) {
@@ -1099,17 +997,8 @@ export default function NEETMockTestInterface({ questions, userEmail, userId, on
     );
   }
 
-  if (stage === 'instructions') {
-    return <InstructionScreen testTitle="NEET Mock Test" timeLimit={NEET_CONFIG.TIME_MINUTES} totalQuestions={questions.length} sessionId={sessionId.current} onAccept={() => setStage('form')} />;
-  }
-
-  if (stage === 'form') {
-    return <NEETNameForm onSubmit={handleFormSubmit} onCancel={handleFormCancel} />;
-  }
-
-  if (stage === 'test') {
-    return <NEETTestInterface questions={questions} testTitle="NEET Mock Test" timeLimit={NEET_CONFIG.TIME_MINUTES} userEmail={userEmail} studentInfo={studentInfo} onComplete={handleTestComplete} />;
-  }
-
+  if (stage === 'instructions') return <InstructionScreen testTitle="NEET Mock Test" timeLimit={NEET_CONFIG.TIME_MINUTES} totalQuestions={questions.length} sessionId={sessionId.current} onAccept={() => setStage('form')} />;
+  if (stage === 'form') return <NEETNameForm onSubmit={handleFormSubmit} onCancel={handleFormCancel} />;
+  if (stage === 'test') return <NEETTestInterface questions={questions} testTitle="NEET Mock Test" timeLimit={NEET_CONFIG.TIME_MINUTES} userEmail={userEmail} studentInfo={studentInfo} onComplete={handleTestComplete} />;
   return null;
 }
