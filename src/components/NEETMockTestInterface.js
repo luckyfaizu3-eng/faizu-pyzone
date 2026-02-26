@@ -578,7 +578,7 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   const answersRef       = useRef({});
 
   usePreventSwipeBack(containerRef);
-  usePreventSwipeBack(sectionTabsRef);
+  // sectionTabsRef pe pan-y nahi lagana — horizontal scroll block hoga
 
   const admin = isAdminUser(userEmail);
 
