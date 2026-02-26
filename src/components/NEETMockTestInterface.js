@@ -241,122 +241,45 @@ class NEETSecurityManager {
 }
 
 // ============================================================
-// 🔒 NUCLEAR SWIPE BACK KILLER HOOK
-// iOS Safari + Android Chrome dono ke liye — 6 layer protection
-// ROOT CAUSE FIX: History Stack Flood technique
+// 🔒 SWIPE BACK FIX — window.confirm trick
+// Yahi MockTestInterface mein kaam karta hai — same approach
+// Swipe karne pe browser ek confirm popup dikhata hai
+// User "Cancel" karta hai → page nahi jaata ✅
 // ============================================================
-function useSwipeBackKiller(isActive = true) {
-  const intervalRef   = useRef(null);
-  const pushCountRef  = useRef(0);
-
+function useSwipeBackKiller(isActive = true, onExitConfirmed = null) {
   useEffect(() => {
     if (!isActive) return;
 
-    // ── LAYER 1: History Stack Flood ──────────────────────────
-    // iOS Safari swipe = history mein peeche jaana
-    // 50 pushState → browser sochta hai "bahut aage hoon"
-    // Swipe karo toh bhi test page pe rahe
-    const STACK_SIZE = 50;
+    // Ek pushState daal do taaki popstate fire ho swipe pe
+    window.history.pushState({ neetGuard: true }, '', window.location.href);
 
-    const floodHistory = () => {
-      for (let i = 0; i < STACK_SIZE; i++) {
-        window.history.pushState(
-          { neetGuard: true, idx: pushCountRef.current + i, ts: Date.now() },
-          '',
-          window.location.href
-        );
-      }
-      pushCountRef.current += STACK_SIZE;
-    };
+    const handlePopState = (e) => {
+      // Turant re-push karo — page ko wapas le aao
+      window.history.pushState({ neetGuard: true }, '', window.location.href);
 
-    floodHistory();
-
-    // ── LAYER 2: popstate Trap ────────────────────────────────
-    // Agar phir bhi pop ho → turant re-push
-    const handlePopState = () => {
-      window.history.pushState(
-        { neetGuard: true, idx: pushCountRef.current++, ts: Date.now() },
-        '',
-        window.location.href
+      // Confirm dialog — user ko decide karne do
+      const confirmExit = window.confirm(
+        'Kya aap test se bahar jaana chahte hain?\n\n' +
+        '⚠️ Test chhod dene par:\n' +
+        '• Aapka progress save nahi hoga\n' +
+        '• Payment refundable nahi hai\n\n' +
+        'Cancel dabao test jaari rakhne ke liye.'
       );
-      // Stack low? Refill
-      if (pushCountRef.current % STACK_SIZE < 10) {
-        floodHistory();
+
+      if (confirmExit) {
+        // User bahar jaana chahta hai — cleanup karo
+        CleanupManager.performFullCleanup();
+        if (onExitConfirmed) onExitConfirmed();
       }
+      // Cancel → page wahi rahega (already re-pushed above)
     };
 
     window.addEventListener('popstate', handlePopState);
 
-    // ── LAYER 3: Stack Refill Interval ───────────────────────
-    intervalRef.current = setInterval(() => {
-      if (pushCountRef.current < 20) floodHistory();
-    }, 3000);
-
-    // ── LAYER 4: CSS Nuclear Option ──────────────────────────
-    const style = document.createElement('style');
-    style.id = '__neet_swipe_killer_css';
-    style.textContent = `
-      html, body {
-        overscroll-behavior: none !important;
-        overscroll-behavior-x: none !important;
-      }
-      * { -webkit-overflow-scrolling: auto !important; }
-    `;
-    document.head.appendChild(style);
-
-    // ── LAYER 5: Viewport Meta Lock ──────────────────────────
-    let meta = document.querySelector('meta[name="viewport"]');
-    const origMeta = meta?.content;
-    if (!meta) {
-      meta = document.createElement('meta');
-      meta.name = 'viewport';
-      document.head.appendChild(meta);
-    }
-    meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover';
-
-    // ── LAYER 6: Touch Event Edge Blocker ────────────────────
-    // Android Chrome + older iOS backup
-    let touchStartX = 0;
-    let touchStartY = 0;
-    const EDGE = 40; // pixels from screen edge
-
-    const onTouchStart = (e) => {
-      touchStartX = e.touches[0]?.clientX || 0;
-      touchStartY = e.touches[0]?.clientY || 0;
-    };
-
-    const onTouchMove = (e) => {
-      if (!e.touches[0]) return;
-      const dx    = e.touches[0].clientX - touchStartX;
-      const dy    = e.touches[0].clientY - touchStartY;
-      const absDx = Math.abs(dx);
-      const absDy = Math.abs(dy);
-      const fromEdge = touchStartX < EDGE || touchStartX > window.innerWidth - EDGE;
-      const isHoriz  = absDx > absDy && absDx > 10;
-
-      if (fromEdge && isHoriz) {
-        try { e.preventDefault(); } catch (_) {}
-        try { e.stopImmediatePropagation(); } catch (_) {}
-      } else if (isHoriz && absDx > absDy * 2 && absDx > 20) {
-        try { e.preventDefault(); } catch (_) {}
-        try { e.stopImmediatePropagation(); } catch (_) {}
-      }
-    };
-
-    document.addEventListener('touchstart', onTouchStart, { passive: true,  capture: true });
-    document.addEventListener('touchmove',  onTouchMove,  { passive: false, capture: true });
-
-    // ── CLEANUP ──────────────────────────────────────────────
     return () => {
       window.removeEventListener('popstate', handlePopState);
-      document.removeEventListener('touchstart', onTouchStart, { capture: true });
-      document.removeEventListener('touchmove',  onTouchMove,  { capture: true });
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      const s = document.getElementById('__neet_swipe_killer_css');
-      if (s) s.remove();
-      if (meta && origMeta) meta.content = origMeta;
     };
-  }, [isActive]);
+  }, [isActive, onExitConfirmed]);
 }
 
 // ============================================================
@@ -1154,9 +1077,8 @@ export default function NEETMockTestInterface({ questions, userEmail, userId, on
     `NEET-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substr(2,5).toUpperCase()}`
   );
 
-  // ✅ NUCLEAR SWIPE BACK KILLER — root level pe, har stage pe active
-  // History Stack Flood technique — iOS Safari ka native gesture bhi nahi chalega
-  useSwipeBackKiller(true);
+  // ✅ SWIPE BACK FIX — window.confirm trick (same as MockTestInterface)
+  useSwipeBackKiller(true, onExit);
 
   useEffect(() => {
     if (userEmail !== NEET_CONFIG.ADMIN_EMAIL) FullscreenManager.enter();

@@ -1118,9 +1118,10 @@ function MockTestPage() {
   };
 
   // ✅ FIX: Sirf 'plans' currentStep pe swipe kaam karega
-  // Test, form, results screen pe swipe se tabs switch nahi honge
+  // NEET test chal raha ho tab bhi swipe band
   const handleTouchEnd = (e) => {
     if (currentStep !== 'plans') return;
+    if (neetStep === 'test') return;
     if (touchStartX.current === null) return;
     const diff = touchStartX.current - e.changedTouches[0].clientX;
     if (Math.abs(diff) < 50) return;
