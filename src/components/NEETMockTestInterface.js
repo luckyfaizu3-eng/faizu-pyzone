@@ -241,99 +241,94 @@ class NEETSecurityManager {
 }
 
 // ==========================================
-// ✅ FIXED SWIPE PREVENTION HOOK
-// Horizontal swipe se browser back/forward BLOCK
-// Global level pe touchmove intercept karta hai
+// ✅ NUCLEAR SWIPE BACK FIX
+// iOS Safari + Android Chrome dono ke liye
+// 3 layer protection:
+//   1. CSS: overscroll-behavior-x + touch-action
+//   2. JS: document touchmove preventDefault (capture phase)
+//   3. Meta viewport: user-scalable=no
 // ==========================================
+
+// Layer 1 — Element level ref pe (backup)
 function usePreventSwipeBack(ref) {
   useEffect(() => {
     const el = ref?.current;
     if (!el) return;
-
-    let startX = 0;
-    let startY = 0;
-    let isHorizontal = false;
-
-    const onTouchStart = (e) => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      isHorizontal = false;
-    };
-
-    const onTouchMove = (e) => {
-      if (!e.touches[0]) return;
-      const dx = Math.abs(e.touches[0].clientX - startX);
-      const dy = Math.abs(e.touches[0].clientY - startY);
-
-      if (!isHorizontal && dx > 5 && dy > 5) {
-        isHorizontal = dx > dy;
-      }
-
-      // Horizontal swipe = browser back/forward prevent karo
-      if (isHorizontal || (dx > dy && dx > 8)) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-
-    const onTouchEnd = () => {
-      isHorizontal = false;
-    };
-
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-
+    // CSS directly element pe
+    el.style.overscrollBehavior = 'none';
+    el.style.overscrollBehaviorX = 'none';
+    el.style.touchAction = 'pan-y';
     return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
+      if (el) {
+        el.style.overscrollBehavior = '';
+        el.style.overscrollBehaviorX = '';
+        el.style.touchAction = '';
+      }
     };
   }, [ref]);
 }
 
-// ==========================================
-// ✅ GLOBAL SWIPE BLOCK HOOK (document level)
-// Poore page pe edge swipe block karta hai
-// ==========================================
+// Layer 2 — Global document level (main fix)
 function useGlobalSwipeBlock() {
   useEffect(() => {
+    // ✅ CSS fix — sabse reliable
+    const origHTMLOverscroll = document.documentElement.style.overscrollBehavior;
+    const origBodyOverscroll = document.body.style.overscrollBehavior;
+    const origHTMLTouch = document.documentElement.style.touchAction;
+    const origBodyTouch = document.body.style.touchAction;
+
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.documentElement.style.overscrollBehaviorX = 'none';
+    document.body.style.overscrollBehavior = 'none';
+    document.body.style.overscrollBehaviorX = 'none';
+    document.documentElement.style.touchAction = 'pan-y';
+    document.body.style.touchAction = 'pan-y';
+
+    // ✅ Meta viewport inject — iOS ke liye
+    const existingMeta = document.querySelector('meta[name="viewport"]');
+    const origContent = existingMeta?.content || '';
+    if (existingMeta) {
+      existingMeta.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+    }
+
+    // ✅ JS fix — touchmove capture phase mein block
     let startX = 0;
     let startY = 0;
 
     const onTouchStart = (e) => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
+      if (e.touches.length > 0) {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+      }
     };
 
     const onTouchMove = (e) => {
-      if (!e.touches[0]) return;
+      if (e.touches.length === 0) return;
       const dx = Math.abs(e.touches[0].clientX - startX);
       const dy = Math.abs(e.touches[0].clientY - startY);
 
-      // Edge se swipe (left/right edge ke 30px andar) = hard block
-      const fromLeftEdge  = startX < 30;
-      const fromRightEdge = startX > window.innerWidth - 30;
-
-      if ((fromLeftEdge || fromRightEdge) && dx > dy && dx > 5) {
-        e.preventDefault();
-        e.stopPropagation();
-        return;
-      }
-
-      // Kahin bhi horizontal swipe zyada ho toh block
-      if (dx > dy + 5 && dx > 10) {
-        e.preventDefault();
-        e.stopPropagation();
+      // Horizontal swipe ya edge swipe — hard block
+      const fromEdge = startX < 30 || startX > window.innerWidth - 30;
+      if (dx > dy || fromEdge) {
+        try { e.preventDefault(); } catch (_) {}
+        try { e.stopImmediatePropagation(); } catch (_) {}
       }
     };
 
-    document.addEventListener('touchstart', onTouchStart, { passive: true });
-    document.addEventListener('touchmove', onTouchMove, { passive: false });
+    // capture: true — browser ke native gesture se PEHLE catch karo
+    document.addEventListener('touchstart', onTouchStart, { passive: true, capture: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false, capture: true });
 
     return () => {
-      document.removeEventListener('touchstart', onTouchStart);
-      document.removeEventListener('touchmove', onTouchMove);
+      document.documentElement.style.overscrollBehavior = origHTMLOverscroll;
+      document.body.style.overscrollBehavior = origBodyOverscroll;
+      document.documentElement.style.touchAction = origHTMLTouch;
+      document.body.style.touchAction = origBodyTouch;
+      document.documentElement.style.overscrollBehaviorX = '';
+      document.body.style.overscrollBehaviorX = '';
+      if (existingMeta && origContent) existingMeta.content = origContent;
+      document.removeEventListener('touchstart', onTouchStart, { capture: true });
+      document.removeEventListener('touchmove', onTouchMove, { capture: true });
     };
   }, []);
 }
@@ -360,9 +355,36 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
         });
       } catch {}
     });
+
+    // ✅ Body fix — swipe back block
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    document.body.style.top = '0';
+    document.body.style.left = '0';
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.touchAction = 'pan-y';
+    document.documentElement.style.touchAction = 'pan-y';
+
     return () => {
       window.removeEventListener('resize', h);
       hidden.forEach(({ el, d, v }) => { if (el) { el.style.display = d||''; el.style.visibility = v||''; } });
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.margin = '';
+      document.body.style.padding = '';
+      document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overscrollBehavior = '';
+      document.body.style.touchAction = '';
+      document.documentElement.style.touchAction = '';
     };
   }, []);
 
@@ -388,7 +410,15 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
       WebkitOverflowScrolling: 'touch', zIndex: 999999,
       overscrollBehavior: 'none', touchAction: 'pan-y',
     }}>
-      <style>{`* { } input,select,textarea { font-size: 16px !important; }`}</style>
+      <style>{`
+        html, body {
+          overscroll-behavior: none !important;
+          overscroll-behavior-x: none !important;
+          touch-action: pan-y !important;
+        }
+        * { touch-action: pan-y !important; }
+        input, select, textarea { font-size: 16px !important; touch-action: auto !important; }
+      `}</style>
       <div style={{ width: '100%', maxWidth: '680px', padding: '1rem 0' }}>
         <div style={{ background: 'linear-gradient(135deg, #dc2626, #991b1b)', border: '2px solid #ef4444', borderRadius: '16px', padding: isMobile ? '0.85rem 1rem' : '1rem 1.5rem', marginBottom: '1rem', textAlign: 'center' }}>
           <div style={{ fontSize: isMobile ? '0.8rem' : '0.9rem', fontWeight: '900', color: '#fff', letterSpacing: '0.08em', marginBottom: '0.4rem' }}>🔴 LIVE MONITORING ACTIVE</div>
@@ -471,7 +501,36 @@ function NEETNameForm({ onSubmit, onCancel }) {
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', h);
-    return () => window.removeEventListener('resize', h);
+
+    // ✅ Body fix — swipe back block
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.width = '100%';
+    document.body.style.height = '100%';
+    document.body.style.top = '0';
+    document.body.style.left = '0';
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.touchAction = 'pan-y';
+    document.documentElement.style.touchAction = 'pan-y';
+
+    return () => {
+      window.removeEventListener('resize', h);
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
+      document.body.style.height = '';
+      document.body.style.top = '';
+      document.body.style.left = '';
+      document.body.style.margin = '';
+      document.body.style.padding = '';
+      document.body.style.overscrollBehavior = '';
+      document.documentElement.style.overscrollBehavior = '';
+      document.body.style.touchAction = '';
+      document.documentElement.style.touchAction = '';
+    };
   }, []);
 
   const handleSubmit = () => {
@@ -486,7 +545,15 @@ function NEETNameForm({ onSubmit, onCancel }) {
 
   return (
     <div ref={containerRef} style={{ position: 'fixed', inset: 0, background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', zIndex: 999999, overscrollBehavior: 'none', touchAction: 'pan-y' }}>
-      <style>{`input,select,textarea { font-size: 16px !important; }`}</style>
+      <style>{`
+        html, body {
+          overscroll-behavior: none !important;
+          overscroll-behavior-x: none !important;
+          touch-action: pan-y !important;
+        }
+        * { touch-action: pan-y !important; }
+        input, select, textarea { font-size: 16px !important; touch-action: auto !important; }
+      `}</style>
       <div style={{ background: '#fff', border: '3px solid #e2e8f0', borderRadius: '24px', padding: isMobile ? '1.75rem 1.5rem' : '2.5rem', maxWidth: '440px', width: '100%', boxShadow: '0 24px 60px rgba(0,0,0,0.12)' }}>
         <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
           <div style={{ width: '70px', height: '70px', margin: '0 auto 1rem', background: 'linear-gradient(135deg, #3b82f6, #6366f1)', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', boxShadow: '0 8px 24px rgba(59,130,246,0.35)' }}>🧬</div>
@@ -680,6 +747,11 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
     document.body.style.overflow = 'hidden'; document.documentElement.style.overflow = 'hidden';
     document.body.style.position = 'fixed'; document.body.style.width = '100%';
     document.body.style.height = '100%'; document.body.style.top = '0'; document.body.style.left = '0';
+    // ✅ STRONG swipe back block
+    document.body.style.overscrollBehavior = 'none';
+    document.documentElement.style.overscrollBehavior = 'none';
+    document.body.style.touchAction = 'pan-y';
+    document.documentElement.style.touchAction = 'pan-y';
     window.onbeforeunload = (e) => { if (!hasSubmittedRef.current) { e.preventDefault(); e.returnValue = ''; return ''; } };
     const goOnline  = () => { setIsOnline(true); showWarningMessage('✅ Connection restored!', 'normal'); };
     const goOffline = () => { setIsOnline(false); showWarningMessage('📵 Internet lost! Answers are safe.', 'critical'); };
@@ -691,6 +763,8 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
       document.body.style.overflow = ''; document.documentElement.style.overflow = '';
       document.body.style.position = ''; document.body.style.width = '';
       document.body.style.height = ''; document.body.style.top = ''; document.body.style.left = '';
+      document.body.style.overscrollBehavior = ''; document.documentElement.style.overscrollBehavior = '';
+      document.body.style.touchAction = ''; document.documentElement.style.touchAction = '';
       currentAudio?.destroy(); currentSecurity?.disable();
       window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline);
     };
@@ -800,9 +874,21 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   return (
     <div ref={containerRef} data-test-interface="true" style={{ position: 'fixed', inset: 0, background: '#f8fafc', zIndex: 999999, display: 'flex', flexDirection: 'column', width: '100vw', height: '100vh', overflow: 'hidden', pointerEvents: isDisqualified ? 'none' : 'auto', overscrollBehavior: 'none' }}>
       <style>{`
-        * { touch-action: pan-x pan-y !important; }
-        input, textarea, select { font-size: 16px !important; }
-        [data-test-interface] { overscroll-behavior: none; }
+        * { touch-action: pan-y !important; }
+        input, textarea, select { font-size: 16px !important; touch-action: auto !important; }
+        html, body {
+          overscroll-behavior: none !important;
+          overscroll-behavior-x: none !important;
+          touch-action: pan-y !important;
+        }
+        [data-test-interface] {
+          overscroll-behavior: none !important;
+          overscroll-behavior-x: none !important;
+          touch-action: pan-y !important;
+        }
+        [data-test-interface] * {
+          touch-action: pan-y !important;
+        }
         @keyframes slideIn { 0%{opacity:0;transform:translateY(30px) scale(0.95)} 100%{opacity:1;transform:translateY(0) scale(1)} }
         @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-4px)} 75%{transform:translateX(4px)} }
         @keyframes blink { 0%,49%,100%{opacity:1} 50%,99%{opacity:0.25} }
@@ -1015,6 +1101,71 @@ export default function NEETMockTestInterface({ questions, userEmail, userId, on
     window.onbeforeunload = null;
     return () => CleanupManager.performFullCleanup();
   }, [userEmail]);
+
+  // ✅ GLOBAL SWIPE BACK NUCLEAR FIX — root component level pe inject
+  useEffect(() => {
+    // 1. Inject global <style> tag
+    const styleEl = document.createElement('style');
+    styleEl.id = 'neet-swipe-block';
+    styleEl.textContent = `
+      html, body {
+        overscroll-behavior: none !important;
+        overscroll-behavior-x: none !important;
+        touch-action: pan-y !important;
+        -ms-touch-action: pan-y !important;
+      }
+      * {
+        -webkit-overflow-scrolling: auto !important;
+      }
+    `;
+    document.head.appendChild(styleEl);
+
+    // 2. Direct body/html CSS
+    const orig = {
+      htmlOverscroll: document.documentElement.style.overscrollBehavior,
+      bodyOverscroll: document.body.style.overscrollBehavior,
+      htmlTouch: document.documentElement.style.touchAction,
+      bodyTouch: document.body.style.touchAction,
+    };
+    document.documentElement.style.cssText += '; overscroll-behavior: none !important; touch-action: pan-y !important;';
+    document.body.style.cssText += '; overscroll-behavior: none !important; touch-action: pan-y !important;';
+
+    // 3. Meta viewport
+    let metaEl = document.querySelector('meta[name="viewport"]');
+    const origMeta = metaEl?.content;
+    if (!metaEl) {
+      metaEl = document.createElement('meta');
+      metaEl.name = 'viewport';
+      document.head.appendChild(metaEl);
+    }
+    metaEl.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+
+    // 4. Touch event block
+    let tx = 0, ty = 0;
+    const onTS = (e) => { tx = e.touches[0]?.clientX || 0; ty = e.touches[0]?.clientY || 0; };
+    const onTM = (e) => {
+      if (!e.touches[0]) return;
+      const dx = Math.abs(e.touches[0].clientX - tx);
+      const dy = Math.abs(e.touches[0].clientY - ty);
+      if (dx > dy || tx < 30 || tx > window.innerWidth - 30) {
+        try { e.preventDefault(); } catch(_) {}
+      }
+    };
+    document.addEventListener('touchstart', onTS, { passive: true, capture: true });
+    document.addEventListener('touchmove', onTM, { passive: false, capture: true });
+
+    return () => {
+      const old = document.getElementById('neet-swipe-block');
+      if (old) old.remove();
+      document.documentElement.style.overscrollBehavior = orig.htmlOverscroll;
+      document.body.style.overscrollBehavior = orig.bodyOverscroll;
+      document.documentElement.style.touchAction = orig.htmlTouch;
+      document.body.style.touchAction = orig.bodyTouch;
+      if (origMeta && metaEl) metaEl.content = origMeta;
+      document.removeEventListener('touchstart', onTS, { capture: true });
+      document.removeEventListener('touchmove', onTM, { capture: true });
+    };
+  }, []);
 
   useEffect(() => {
     const handlePop = (e) => { e.preventDefault(); window.history.pushState(null, '', window.location.href); };
