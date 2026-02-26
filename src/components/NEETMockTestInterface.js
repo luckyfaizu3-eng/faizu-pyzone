@@ -241,14 +241,63 @@ class NEETSecurityManager {
 }
 
 // ==========================================
-// ✅ SWIPE PREVENTION HOOK
-// Horizontal swipe se browser back nahi hoga
+// ✅ FIXED SWIPE PREVENTION HOOK
+// Horizontal swipe se browser back/forward BLOCK
+// Global level pe touchmove intercept karta hai
 // ==========================================
 function usePreventSwipeBack(ref) {
   useEffect(() => {
     const el = ref?.current;
     if (!el) return;
 
+    let startX = 0;
+    let startY = 0;
+    let isHorizontal = false;
+
+    const onTouchStart = (e) => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      isHorizontal = false;
+    };
+
+    const onTouchMove = (e) => {
+      if (!e.touches[0]) return;
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      const dy = Math.abs(e.touches[0].clientY - startY);
+
+      if (!isHorizontal && dx > 5 && dy > 5) {
+        isHorizontal = dx > dy;
+      }
+
+      // Horizontal swipe = browser back/forward prevent karo
+      if (isHorizontal || (dx > dy && dx > 8)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const onTouchEnd = () => {
+      isHorizontal = false;
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [ref]);
+}
+
+// ==========================================
+// ✅ GLOBAL SWIPE BLOCK HOOK (document level)
+// Poore page pe edge swipe block karta hai
+// ==========================================
+function useGlobalSwipeBlock() {
+  useEffect(() => {
     let startX = 0;
     let startY = 0;
 
@@ -258,23 +307,35 @@ function usePreventSwipeBack(ref) {
     };
 
     const onTouchMove = (e) => {
-      const dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
+      if (!e.touches[0]) return;
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      const dy = Math.abs(e.touches[0].clientY - startY);
 
-      // Agar horizontal swipe zyada hai vertical se
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
-        e.preventDefault(); // browser back/forward block
+      // Edge se swipe (left/right edge ke 30px andar) = hard block
+      const fromLeftEdge  = startX < 30;
+      const fromRightEdge = startX > window.innerWidth - 30;
+
+      if ((fromLeftEdge || fromRightEdge) && dx > dy && dx > 5) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
+      // Kahin bhi horizontal swipe zyada ho toh block
+      if (dx > dy + 5 && dx > 10) {
+        e.preventDefault();
         e.stopPropagation();
       }
     };
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false }); // passive: false zaroori hai
+    document.addEventListener('touchstart', onTouchStart, { passive: true });
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+
     return () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchstart', onTouchStart);
+      document.removeEventListener('touchmove', onTouchMove);
     };
-  }, [ref]);
+  }, []);
 }
 
 function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, sessionId }) {
@@ -282,6 +343,7 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, ses
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const containerRef = useRef(null);
   usePreventSwipeBack(containerRef);
+  useGlobalSwipeBlock();
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
@@ -404,6 +466,7 @@ function NEETNameForm({ onSubmit, onCancel }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const containerRef = useRef(null);
   usePreventSwipeBack(containerRef);
+  useGlobalSwipeBlock();
 
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
@@ -472,7 +535,7 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   const [isSubmitting, setIsSubmitting]     = useState(false);
 
   const containerRef     = useRef(null);
-  const sectionTabsRef   = useRef(null); // ✅ Section tabs ref for swipe prevention
+  const sectionTabsRef   = useRef(null);
   const hasSubmittedRef  = useRef(false);
   const startTimeRef     = useRef(Date.now());
   const audioRef         = useRef(new AudioManager());
@@ -482,9 +545,10 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   const violationsRef    = useRef(0);
   const answersRef       = useRef({});
 
-  // ✅ Swipe back prevention on main container AND section tabs
+  // ✅ Swipe prevention on container AND section tabs AND globally
   usePreventSwipeBack(containerRef);
   usePreventSwipeBack(sectionTabsRef);
+  useGlobalSwipeBlock();
 
   const admin = isAdminUser(userEmail);
 
@@ -819,7 +883,7 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
         </button>
       </div>
 
-      {/* ✅ SECTION TABS — ref lagaya swipe back rokne ke liye */}
+      {/* SECTION TABS */}
       <div ref={sectionTabsRef} style={{ background: '#fff', borderBottom: '2px solid #e2e8f0', padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', display: 'flex', gap: '0.4rem', flexShrink: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none', overscrollBehavior: 'contain' }}>
         {NEET_SECTIONS.map(s => {
           const qs = sectionQs[s.id] || [];

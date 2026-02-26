@@ -144,13 +144,24 @@ const markCouponUsed = async (couponId) => {
 };
 
 // ==========================================
-// COUPON MODAL COMPONENT
+// ✅ FIXED COUPON MODAL COMPONENT
+// Bug fix: input mein characters cut nahi honge
 // ==========================================
 function CouponModal({ plan, prices, isDark, onClose, onFreeAccess, onProceedPayment }) {
+  // ✅ FIX: couponCode state ko controlled rakhte hain, uppercase conversion onChange mein SAHI tarike se
   const [couponCode, setCouponCode] = useState('');
   const [couponResult, setCouponResult] = useState(null);
   const [checking, setChecking] = useState(false);
   const originalPrice = prices[plan.level] || plan.price;
+
+  // ✅ FIX: Input change handler — cursor position preserve karte hue uppercase
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    // Direct uppercase set karo — React controlled input ke saath yahi sahi hai
+    // toUpperCase() se cursor problem nahi aati agar value set karo input ke value pe directly
+    setCouponCode(val.toUpperCase());
+    setCouponResult(null);
+  };
 
   const handleCheck = async () => {
     if (!couponCode.trim()) return;
@@ -205,12 +216,18 @@ function CouponModal({ plan, prices, isDark, onClose, onFreeAccess, onProceedPay
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1rem' }}>
+          {/* ✅ FIX: input type="text" — NO spellCheck, NO autoCorrect, NO autocomplete
+              Value directly set hoti hai uppercase mein bina cursor jump ke */}
           <input
             type="text"
             placeholder="Enter coupon code..."
             value={couponCode}
-            onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponResult(null); }}
+            onChange={handleInputChange}
             onKeyDown={e => e.key === 'Enter' && handleCheck()}
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="characters"
+            spellCheck={false}
             style={{
               flex: 1, padding: '0.85rem 1rem',
               border: `2px solid ${couponResult?.valid ? '#10b981' : couponResult?.valid === false ? '#ef4444' : isDark ? 'rgba(255,255,255,0.15)' : '#e2e8f0'}`,
@@ -381,8 +398,19 @@ function MockTestPage() {
 
   // ==========================================
   // Calculate Test Status
+  // ✅ FIX: Admin ke liye hamesha 'available' return karo
   // ==========================================
-  const calculateTestStatus = (payment, level) => {
+  const calculateTestStatus = (payment, level, userEmail) => {
+    // ✅ Admin ke liye koi lock/restriction nahi — unlimited access
+    if (isAdmin(userEmail)) {
+      return {
+        canTake: true,
+        status: 'available',
+        message: 'Admin — Free & Unlimited Access',
+        color: '#10b981'
+      };
+    }
+
     if (!payment?.hasPaid) {
       return {
         canTake: true,
@@ -461,10 +489,21 @@ function MockTestPage() {
       const paymentData = {};
 
       for (const level of ['basic', 'advanced', 'pro', 'neet']) {
-        const payment = await getPaymentDetails(user.uid, level);
-        paymentData[level] = payment;
-        const status = calculateTestStatus(payment, level);
-        statusData[level] = status;
+        // ✅ Admin ke liye payment fetch nahi karte — unnecessary hai
+        if (isAdmin(user.email)) {
+          paymentData[level] = { hasPaid: false };
+          statusData[level] = {
+            canTake: true,
+            status: 'available',
+            message: 'Admin — Free & Unlimited Access',
+            color: '#10b981'
+          };
+        } else {
+          const payment = await getPaymentDetails(user.uid, level);
+          paymentData[level] = payment;
+          const status = calculateTestStatus(payment, level, user.email);
+          statusData[level] = status;
+        }
       }
 
       setPaymentDetails(paymentData);
@@ -476,6 +515,7 @@ function MockTestPage() {
     } finally {
       setLoading(false);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
@@ -631,10 +671,13 @@ function MockTestPage() {
     window.showToast?.('⏳ Loading questions...', 'info');
 
     try {
-      const now = new Date();
-      await updateTestAttempt(user.uid, plan.level, {
-        testStartedAt: now.toISOString()
-      });
+      // ✅ Admin ke liye testStartedAt update nahi karte — track nahi karna
+      if (!isAdmin(user.email)) {
+        const now = new Date();
+        await updateTestAttempt(user.uid, plan.level, {
+          testStartedAt: now.toISOString()
+        });
+      }
 
       const result = await getManualQuestions(plan.level);
 
@@ -662,6 +705,7 @@ function MockTestPage() {
 
   // ==========================================
   // handleTestComplete with NEET support
+  // ✅ FIX: Admin ke liye lock nahi lagata
   // ==========================================
   const handleTestComplete = useCallback(async (results) => {
     if (!selectedPlan) return;
@@ -671,10 +715,11 @@ function MockTestPage() {
 
     try {
       const now = new Date();
-      const lockStartsAt = now;
-      const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-      if (selectedPlan?.level !== 'neet') {
+      // ✅ Admin ke liye lock mat lagao — sirf normal users ke liye
+      if (selectedPlan?.level !== 'neet' && !isAdmin(user.email)) {
+        const lockStartsAt = now;
+        const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         await updateTestAttempt(user.uid, selectedPlan.level, {
           testSubmittedAt: now.toISOString(),
           resultsViewedAt: now.toISOString(),
@@ -717,11 +762,13 @@ function MockTestPage() {
       await saveTestResult(user.uid, testData);
 
       if (selectedPlan?.level !== 'neet') {
+        // ✅ Admin ke liye hamesha certificate issue karo
         const shouldIssueCert = isAdmin(user.email) || results.percentage >= 55;
 
         if (shouldIssueCert) {
           const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
 
+          // ✅ Admin baar baar certificate le sakta hai
           if (!certCheck.hasCertificate || isAdmin(user.email)) {
             const certificateData = {
               userName: results.studentInfo?.fullName || userDetails?.fullName || user.displayName || user.email,
@@ -775,7 +822,8 @@ function MockTestPage() {
   }, [selectedPlan, user, userDetails]);
 
   // ==========================================
-  // ✅ FIX 1: handleNeetTestComplete — standalone
+  // handleNeetTestComplete — standalone
+  // ✅ FIX: Admin ke liye lock nahi
   // ==========================================
   const handleNeetTestComplete = useCallback(async (neetResults) => {
     setLoading(true);
@@ -836,14 +884,17 @@ function MockTestPage() {
       });
       console.log('✅ NEET saved to leaderboard');
 
-      const lockStartsAt = now;
-      const lockEndsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-      await updateTestAttempt(user.uid, 'neet', {
-        testSubmittedAt: now.toISOString(),
-        resultsViewedAt: now.toISOString(),
-        lockStartsAt: lockStartsAt.toISOString(),
-        lockEndsAt: lockEndsAt.toISOString()
-      });
+      // ✅ Admin ke liye NEET mein bhi lock nahi
+      if (!isAdmin(user.email)) {
+        const lockStartsAt = now;
+        const lockEndsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+        await updateTestAttempt(user.uid, 'neet', {
+          testSubmittedAt: now.toISOString(),
+          resultsViewedAt: now.toISOString(),
+          lockStartsAt: lockStartsAt.toISOString(),
+          lockEndsAt: lockEndsAt.toISOString()
+        });
+      }
 
       setSelectedPlan({ id: 'neet', name: 'NEET Mock Test', level: 'neet', timeLimit: 180 });
       setTestResults(neetResults);
@@ -905,7 +956,8 @@ function MockTestPage() {
   };
 
   // ==========================================
-  // handleSelectPlan — coupon modal included
+  // handleSelectPlan — admin check improved
+  // ✅ FIX: Admin directly test start kare bina coupon modal ke
   // ==========================================
   const handleSelectPlan = async (plan) => {
     if (!user) {
@@ -915,8 +967,9 @@ function MockTestPage() {
 
     setSelectedPlan(plan);
 
+    // ✅ Admin ke liye hamesha direct test start — koi restriction nahi
     if (isAdmin(user.email)) {
-      window.showToast?.('🔓 Admin access — Free test!', 'success');
+      window.showToast?.('🔓 Admin access — Free & Unlimited test!', 'success');
 
       if (!userDetails) {
         setCurrentStep('form');
@@ -943,6 +996,7 @@ function MockTestPage() {
       return;
     }
 
+    // Normal user ke liye coupon modal
     setCouponPlan(plan);
     setShowCouponModal(true);
   };
@@ -1071,7 +1125,6 @@ function MockTestPage() {
     const oldIdx = TABS.findIndex(t => t.key === activeTab);
     setSlideDir(newIdx > oldIdx ? 'left' : 'right');
 
-    // ✅ FIX 2: NEET tab switch pe state reset karo
     if (key === 'neet') {
       setNeetStep('info');
       setNeetQuestions([]);
@@ -1215,7 +1268,7 @@ function MockTestPage() {
 
                   return (
                     <div key={plan.id} style={{ background: isDark ? '#1e293b' : '#fff', borderRadius: '24px', padding: 'clamp(1.5rem, 4vw, 2rem)', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', position: 'relative', overflow: 'hidden', animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`, border: plan.badge ? '3px solid #fbbf24' : userIsAdmin ? '3px solid #10b981' : 'none' }}>
-                      {userIsAdmin && (<div style={{ position: 'absolute', top: '1rem', left: '1rem', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: 'clamp(0.65rem, 2vw, 0.75rem)', fontWeight: '700', boxShadow: '0 4px 12px rgba(16,185,129,0.4)' }}>🔓 ADMIN FREE</div>)}
+                      {userIsAdmin && (<div style={{ position: 'absolute', top: '1rem', left: '1rem', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: 'clamp(0.65rem, 2vw, 0.75rem)', fontWeight: '700', boxShadow: '0 4px 12px rgba(16,185,129,0.4)' }}>🔓 ADMIN FREE & UNLIMITED</div>)}
                       {plan.badge && !userIsAdmin && (<div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: 'clamp(0.65rem, 2vw, 0.75rem)', fontWeight: '700', boxShadow: '0 4px 12px rgba(251,191,36,0.4)' }}>{plan.badge}</div>)}
                       <div style={{ textAlign: 'center', marginBottom: '1.5rem', marginTop: userIsAdmin || plan.badge ? '2.5rem' : '0' }}>
                         <div style={{ width: 'clamp(60px, 15vw, 80px)', height: 'clamp(60px, 15vw, 80px)', background: plan.level === 'basic' ? 'linear-gradient(135deg, #10b981, #059669)' : plan.level === 'advanced' ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'linear-gradient(135deg, #f59e0b, #d97706)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: 'clamp(1.5rem, 5vw, 2.5rem)', boxShadow: '0 8px 20px rgba(0,0,0,0.15)' }}>
@@ -1224,7 +1277,7 @@ function MockTestPage() {
                         <h2 style={{ fontSize: 'clamp(1.3rem, 4vw, 1.8rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{plan.level}</h2>
                         <p style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 'clamp(0.8rem, 2.5vw, 0.95rem)', marginBottom: '1rem' }}>{plan.description}</p>
                         <div style={{ fontSize: 'clamp(2rem, 6vw, 2.5rem)', fontWeight: '900', color: userIsAdmin ? '#10b981' : '#6366f1', marginBottom: '0.5rem' }}>{userIsAdmin ? 'FREE' : `₹${prices[plan.level] || plan.price}`}</div>
-                        {userIsAdmin && (<div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}>Admin Privilege</div>)}
+                        {userIsAdmin && (<div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}>Admin Privilege — Unlimited Access</div>)}
                       </div>
                       <div style={{ background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
                         {plan.features.map((feature, idx) => (
@@ -1233,7 +1286,7 @@ function MockTestPage() {
                           </div>
                         ))}
                       </div>
-                      {userIsAdmin && (<div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}><CheckCircle size={16} />🔓 Admin — Unlimited Access</div>)}
+                      {userIsAdmin && (<div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}><CheckCircle size={16} />🔓 Admin — Unlimited Free Access — No Lock</div>)}
                       {!userIsAdmin && status.status === 'grace_period' && (<div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}><Unlock size={16} />✅ Available — Grace Period: {timeRemainingDisplay}</div>)}
                       {!userIsAdmin && status.status === 'in_progress' && (<div style={{ padding: '0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#f59e0b', fontWeight: '600' }}><TrendingUp size={16} />📝 Test In Progress — Resume</div>)}
                       {hasCert && (<div style={{ padding: '0.75rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#6366f1', fontWeight: '600' }}><Award size={16} />Certificate Earned (One per level)</div>)}
@@ -1245,7 +1298,7 @@ function MockTestPage() {
                         onMouseEnter={(e) => { if (userIsAdmin || status.status !== 'locked') { e.currentTarget.style.transform = 'translateY(-2px)'; } }}
                         onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
                       >
-                        {userIsAdmin ? (<><Zap size={24} /> 🔓 Start Free Test</>) : status.status === 'grace_period' || status.status === 'in_progress' ? (<><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Test' : 'Start Test'}</>) : status.status === 'locked' ? (<><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</>) : (<><Zap size={24} /> Buy / Coupon (₹{prices[plan.level] || plan.price})</>)}
+                        {userIsAdmin ? (<><Zap size={24} /> 🔓 Start Free Test (Unlimited)</>) : status.status === 'grace_period' || status.status === 'in_progress' ? (<><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Test' : 'Start Test'}</>) : status.status === 'locked' ? (<><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</>) : (<><Zap size={24} /> Buy / Coupon (₹{prices[plan.level] || plan.price})</>)}
                       </button>
                     </div>
                   );
@@ -1269,7 +1322,7 @@ function MockTestPage() {
           </div>
         )}
 
-        {/* ✅ FIX 3: NEET Tab — wrapper div HATA DIYA, NEETTab directly render hoga */}
+        {/* NEET Tab */}
         {activeTab === 'neet' && (
           <NEETTab
             user={user}
@@ -1375,6 +1428,7 @@ function MockTestPage() {
 
 // ==========================================
 // NEET TAB COMPONENT
+// ✅ FIX: Admin ke liye unlimited NEET access
 // ==========================================
 function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQuestions, neetLoading, setNeetLoading, onNeetComplete }) {
   const [isMobile, setIsMobile] = React.useState(window.innerWidth <= 768);
@@ -1387,7 +1441,8 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
     const h = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', h);
     loadNeetSettings();
-    if (user) loadNeetPaymentStatus();
+    // ✅ Admin ke liye payment status fetch nahi karte
+    if (user && !isAdmin(user.email)) loadNeetPaymentStatus();
     return () => window.removeEventListener('resize', h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
@@ -1429,6 +1484,11 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
   const isSaleOn = () => neetSettings?.saleEnabled && neetSettings?.salePrice > 0;
 
   const getNeetStatus = () => {
+    // ✅ Admin ke liye hamesha available
+    if (isAdmin(user?.email)) {
+      return { status: 'available' };
+    }
+
     const payment = neetPaymentStatus;
     if (!payment?.hasPaid) return { status: 'available' };
     const now = new Date();
@@ -1485,7 +1545,8 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
       const { collection, getDocs } = await import('firebase/firestore');
       const { db } = await import('../firebase');
 
-      if (user && user.email !== 'luckyfaizu3@gmail.com') {
+      // ✅ Admin ke liye testStartedAt update nahi
+      if (user && !isAdmin(user.email)) {
         try {
           const { updateTestAttempt } = await import('../services/mockTestService');
           const now = new Date();
@@ -1530,7 +1591,8 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
       window.showToast?.('⚠️ Please login first!', 'warning');
       return;
     }
-    if (user.email === 'luckyfaizu3@gmail.com') {
+    // ✅ Admin ke liye direct start — koi check nahi
+    if (isAdmin(user.email)) {
       loadAllNeetQuestions();
       return;
     }
@@ -1585,7 +1647,6 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
     }
   };
 
-  // ✅ FIX 3: neetStep === 'test' ke liye direct render — koi state change render mein nahi
   if (neetStep === 'test' && neetQuestions && neetQuestions.length > 0) {
     return (
       <NEETMockTestInterface
@@ -1600,6 +1661,7 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
   const price = getPrice();
   const originalPrice = getOriginalPrice();
   const onSale = isSaleOn();
+  const userIsAdmin = isAdmin(user?.email);
 
   return (
     <div style={{ animation: 'fadeInUp 0.5s ease', maxWidth: '900px', margin: '0 auto' }}>
@@ -1642,19 +1704,24 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
 
         {/* Price Card */}
         <div style={{ background: isDark ? '#1e293b' : '#fff', border: `2px solid ${isDark ? '#334155' : '#fecaca'}`, borderRadius: '16px', padding: isMobile ? '1rem' : '1.5rem', maxWidth: '400px', margin: '0 auto 1.5rem', textAlign: 'center' }}>
-          {onSale && (
+          {userIsAdmin && (
+            <div style={{ display: 'inline-block', background: 'linear-gradient(135deg,#10b981,#059669)', color: '#fff', padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: '800', marginBottom: '0.75rem' }}>
+              🔓 ADMIN — FREE & UNLIMITED ACCESS
+            </div>
+          )}
+          {!userIsAdmin && onSale && (
             <div style={{ display: 'inline-block', background: '#10b981', color: '#fff', padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.72rem', fontWeight: '800', marginBottom: '0.75rem' }}>
               🔥 SALE — {Math.round(((originalPrice - price) / originalPrice) * 100)}% OFF
             </div>
           )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {onSale && (<span style={{ fontSize: isMobile ? '1.1rem' : '1.3rem', fontWeight: '700', color: '#94a3b8', textDecoration: 'line-through' }}>₹{originalPrice}</span>)}
-            <span style={{ fontSize: isMobile ? '2rem' : '2.5rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#dc2626' }}>
-              {user?.email === 'luckyfaizu3@gmail.com' ? '🆓 FREE' : `₹${price}`}
+            {!userIsAdmin && onSale && (<span style={{ fontSize: isMobile ? '1.1rem' : '1.3rem', fontWeight: '700', color: '#94a3b8', textDecoration: 'line-through' }}>₹{originalPrice}</span>)}
+            <span style={{ fontSize: isMobile ? '2rem' : '2.5rem', fontWeight: '900', color: userIsAdmin ? '#10b981' : (isDark ? '#e2e8f0' : '#dc2626') }}>
+              {userIsAdmin ? '🆓 FREE' : `₹${price}`}
             </span>
           </div>
-          {user?.email === 'luckyfaizu3@gmail.com' && (<div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: '700', marginTop: '0.3rem' }}>Admin Privilege — Free Access</div>)}
-          {user?.email !== 'luckyfaizu3@gmail.com' && (<div style={{ fontSize: '0.78rem', color: isDark ? '#64748b' : '#94a3b8', marginTop: '0.4rem' }}>One-time payment • Instant access • 🎟️ Coupons accepted</div>)}
+          {userIsAdmin && (<div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: '700', marginTop: '0.3rem' }}>Admin Privilege — No Lock, No Payment, Unlimited Tests</div>)}
+          {!userIsAdmin && (<div style={{ fontSize: '0.78rem', color: isDark ? '#64748b' : '#94a3b8', marginTop: '0.4rem' }}>One-time payment • Instant access • 🎟️ Coupons accepted</div>)}
         </div>
 
         {/* Features List */}
@@ -1682,32 +1749,36 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
           const isLocked = nStatus.status === 'locked';
           const isGrace = nStatus.status === 'grace_period';
           const isInProgress = nStatus.status === 'in_progress';
-          const isAdminUser = user.email === 'luckyfaizu3@gmail.com';
           const isDisabled = neetLoading || !settingsLoaded || isLocked;
 
           return (
             <>
-              {!isAdminUser && isGrace && (
+              {userIsAdmin && (
+                <div style={{ padding: '0.65rem 1rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: '10px', color: '#10b981', fontWeight: '700', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
+                  🔓 Admin Mode — No Lock, No Payment, Take Unlimited Tests
+                </div>
+              )}
+              {!userIsAdmin && isGrace && (
                 <div style={{ padding: '0.65rem 1rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: '10px', color: '#10b981', fontWeight: '700', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                   ✅ Purchased — Grace period: {formatTimeRemaining(nStatus.timeRemaining)}
                 </div>
               )}
-              {!isAdminUser && isInProgress && (
+              {!userIsAdmin && isInProgress && (
                 <div style={{ padding: '0.65rem 1rem', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: '10px', color: '#f59e0b', fontWeight: '700', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                   📝 Test In Progress — Resume
                 </div>
               )}
-              {!isAdminUser && isLocked && (
+              {!userIsAdmin && isLocked && (
                 <div style={{ padding: '0.65rem 1rem', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '10px', color: '#ef4444', fontWeight: '700', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>
                   🔒 Locked — Available in {formatTimeRemaining(nStatus.timeRemaining)}
                 </div>
               )}
               <button
                 onClick={handleStartClick}
-                disabled={isDisabled}
-                style={{ width: '100%', maxWidth: '420px', padding: isMobile ? '1rem' : '1.25rem', background: isDisabled ? (isLocked ? 'rgba(239,68,68,0.3)' : '#e2e8f0') : isAdminUser ? 'linear-gradient(135deg,#10b981,#059669)' : (isGrace || isInProgress) ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#dc2626,#b91c1c)', border: 'none', borderRadius: '16px', color: isDisabled && !isLocked ? '#94a3b8' : '#fff', fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '900', cursor: isDisabled ? 'not-allowed' : 'pointer', opacity: isLocked ? 0.7 : 1, boxShadow: isDisabled ? 'none' : isAdminUser ? '0 8px 24px rgba(16,185,129,0.4)' : (isGrace || isInProgress) ? '0 8px 24px rgba(16,185,129,0.4)' : '0 8px 24px rgba(220,38,38,0.4)', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', margin: '0 auto' }}
+                disabled={isDisabled && !userIsAdmin}
+                style={{ width: '100%', maxWidth: '420px', padding: isMobile ? '1rem' : '1.25rem', background: (isDisabled && !userIsAdmin) ? (isLocked ? 'rgba(239,68,68,0.3)' : '#e2e8f0') : userIsAdmin ? 'linear-gradient(135deg,#10b981,#059669)' : (isGrace || isInProgress) ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#dc2626,#b91c1c)', border: 'none', borderRadius: '16px', color: (isDisabled && !userIsAdmin) && !isLocked ? '#94a3b8' : '#fff', fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '900', cursor: (isDisabled && !userIsAdmin) ? 'not-allowed' : 'pointer', opacity: (isLocked && !userIsAdmin) ? 0.7 : 1, boxShadow: (isDisabled && !userIsAdmin) ? 'none' : userIsAdmin ? '0 8px 24px rgba(16,185,129,0.4)' : (isGrace || isInProgress) ? '0 8px 24px rgba(16,185,129,0.4)' : '0 8px 24px rgba(220,38,38,0.4)', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', margin: '0 auto' }}
               >
-                {neetLoading ? '⏳ Loading Questions...' : !settingsLoaded ? '⏳ Loading...' : isAdminUser ? '🔓 Start Free NEET Test' : isLocked ? `🔒 Locked — ${formatTimeRemaining(nStatus.timeRemaining)}` : (isGrace || isInProgress) ? `🚀 ${isInProgress ? 'Resume' : 'Start'} NEET Test` : `🚀 Start NEET Test — ₹${price}`}
+                {neetLoading ? '⏳ Loading Questions...' : !settingsLoaded && !userIsAdmin ? '⏳ Loading...' : userIsAdmin ? '🚀 Start Free NEET Test (Admin — Unlimited)' : isLocked ? `🔒 Locked — ${formatTimeRemaining(nStatus.timeRemaining)}` : (isGrace || isInProgress) ? `🚀 ${isInProgress ? 'Resume' : 'Start'} NEET Test` : `🚀 Start NEET Test — ₹${price}`}
               </button>
             </>
           );
