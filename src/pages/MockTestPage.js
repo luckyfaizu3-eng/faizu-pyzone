@@ -145,20 +145,15 @@ const markCouponUsed = async (couponId) => {
 
 // ==========================================
 // ✅ FIXED COUPON MODAL COMPONENT
-// Bug fix: input mein characters cut nahi honge
 // ==========================================
 function CouponModal({ plan, prices, isDark, onClose, onFreeAccess, onProceedPayment }) {
-  // ✅ FIX: couponCode state ko controlled rakhte hain, uppercase conversion onChange mein SAHI tarike se
   const [couponCode, setCouponCode] = useState('');
   const [couponResult, setCouponResult] = useState(null);
   const [checking, setChecking] = useState(false);
   const originalPrice = prices[plan.level] || plan.price;
 
-  // ✅ FIX: Input change handler — cursor position preserve karte hue uppercase
   const handleInputChange = (e) => {
     const val = e.target.value;
-    // Direct uppercase set karo — React controlled input ke saath yahi sahi hai
-    // toUpperCase() se cursor problem nahi aati agar value set karo input ke value pe directly
     setCouponCode(val.toUpperCase());
     setCouponResult(null);
   };
@@ -216,8 +211,6 @@ function CouponModal({ plan, prices, isDark, onClose, onFreeAccess, onProceedPay
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1rem' }}>
-          {/* ✅ FIX: input type="text" — NO spellCheck, NO autoCorrect, NO autocomplete
-              Value directly set hoti hai uppercase mein bina cursor jump ke */}
           <input
             type="text"
             placeholder="Enter coupon code..."
@@ -398,10 +391,8 @@ function MockTestPage() {
 
   // ==========================================
   // Calculate Test Status
-  // ✅ FIX: Admin ke liye hamesha 'available' return karo
   // ==========================================
   const calculateTestStatus = (payment, level, userEmail) => {
-    // ✅ Admin ke liye koi lock/restriction nahi — unlimited access
     if (isAdmin(userEmail)) {
       return {
         canTake: true,
@@ -489,7 +480,6 @@ function MockTestPage() {
       const paymentData = {};
 
       for (const level of ['basic', 'advanced', 'pro', 'neet']) {
-        // ✅ Admin ke liye payment fetch nahi karte — unnecessary hai
         if (isAdmin(user.email)) {
           paymentData[level] = { hasPaid: false };
           statusData[level] = {
@@ -671,7 +661,6 @@ function MockTestPage() {
     window.showToast?.('⏳ Loading questions...', 'info');
 
     try {
-      // ✅ Admin ke liye testStartedAt update nahi karte — track nahi karna
       if (!isAdmin(user.email)) {
         const now = new Date();
         await updateTestAttempt(user.uid, plan.level, {
@@ -704,8 +693,7 @@ function MockTestPage() {
   };
 
   // ==========================================
-  // handleTestComplete with NEET support
-  // ✅ FIX: Admin ke liye lock nahi lagata
+  // handleTestComplete
   // ==========================================
   const handleTestComplete = useCallback(async (results) => {
     if (!selectedPlan) return;
@@ -716,7 +704,6 @@ function MockTestPage() {
     try {
       const now = new Date();
 
-      // ✅ Admin ke liye lock mat lagao — sirf normal users ke liye
       if (selectedPlan?.level !== 'neet' && !isAdmin(user.email)) {
         const lockStartsAt = now;
         const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -762,13 +749,11 @@ function MockTestPage() {
       await saveTestResult(user.uid, testData);
 
       if (selectedPlan?.level !== 'neet') {
-        // ✅ Admin ke liye hamesha certificate issue karo
         const shouldIssueCert = isAdmin(user.email) || results.percentage >= 55;
 
         if (shouldIssueCert) {
           const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
 
-          // ✅ Admin baar baar certificate le sakta hai
           if (!certCheck.hasCertificate || isAdmin(user.email)) {
             const certificateData = {
               userName: results.studentInfo?.fullName || userDetails?.fullName || user.displayName || user.email,
@@ -822,8 +807,7 @@ function MockTestPage() {
   }, [selectedPlan, user, userDetails]);
 
   // ==========================================
-  // handleNeetTestComplete — standalone
-  // ✅ FIX: Admin ke liye lock nahi
+  // handleNeetTestComplete
   // ==========================================
   const handleNeetTestComplete = useCallback(async (neetResults) => {
     setLoading(true);
@@ -884,7 +868,6 @@ function MockTestPage() {
       });
       console.log('✅ NEET saved to leaderboard');
 
-      // ✅ Admin ke liye NEET mein bhi lock nahi
       if (!isAdmin(user.email)) {
         const lockStartsAt = now;
         const lockEndsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -956,8 +939,7 @@ function MockTestPage() {
   };
 
   // ==========================================
-  // handleSelectPlan — admin check improved
-  // ✅ FIX: Admin directly test start kare bina coupon modal ke
+  // handleSelectPlan
   // ==========================================
   const handleSelectPlan = async (plan) => {
     if (!user) {
@@ -967,7 +949,6 @@ function MockTestPage() {
 
     setSelectedPlan(plan);
 
-    // ✅ Admin ke liye hamesha direct test start — koi restriction nahi
     if (isAdmin(user.email)) {
       window.showToast?.('🔓 Admin access — Free & Unlimited test!', 'success');
 
@@ -996,7 +977,6 @@ function MockTestPage() {
       return;
     }
 
-    // Normal user ke liye coupon modal
     setCouponPlan(plan);
     setShowCouponModal(true);
   };
@@ -1133,8 +1113,14 @@ function MockTestPage() {
     setActiveTab(key);
   };
 
-  const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchStart = (e) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  // ✅ FIX: Sirf 'plans' currentStep pe swipe kaam karega
+  // Test, form, results screen pe swipe se tabs switch nahi honge
   const handleTouchEnd = (e) => {
+    if (currentStep !== 'plans') return;
     if (touchStartX.current === null) return;
     const diff = touchStartX.current - e.changedTouches[0].clientX;
     if (Math.abs(diff) < 50) return;
@@ -1428,7 +1414,6 @@ function MockTestPage() {
 
 // ==========================================
 // NEET TAB COMPONENT
-// ✅ FIX: Admin ke liye unlimited NEET access
 // ==========================================
 function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQuestions, neetLoading, setNeetLoading, onNeetComplete }) {
   const [isMobile, setIsMobile] = React.useState(window.innerWidth <= 768);
@@ -1441,7 +1426,6 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
     const h = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', h);
     loadNeetSettings();
-    // ✅ Admin ke liye payment status fetch nahi karte
     if (user && !isAdmin(user.email)) loadNeetPaymentStatus();
     return () => window.removeEventListener('resize', h);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1484,7 +1468,6 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
   const isSaleOn = () => neetSettings?.saleEnabled && neetSettings?.salePrice > 0;
 
   const getNeetStatus = () => {
-    // ✅ Admin ke liye hamesha available
     if (isAdmin(user?.email)) {
       return { status: 'available' };
     }
@@ -1545,7 +1528,6 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
       const { collection, getDocs } = await import('firebase/firestore');
       const { db } = await import('../firebase');
 
-      // ✅ Admin ke liye testStartedAt update nahi
       if (user && !isAdmin(user.email)) {
         try {
           const { updateTestAttempt } = await import('../services/mockTestService');
@@ -1591,7 +1573,6 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
       window.showToast?.('⚠️ Please login first!', 'warning');
       return;
     }
-    // ✅ Admin ke liye direct start — koi check nahi
     if (isAdmin(user.email)) {
       loadAllNeetQuestions();
       return;
