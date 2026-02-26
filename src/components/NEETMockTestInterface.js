@@ -459,12 +459,12 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
   const [answers, setAnswers]               = useState({});
   const [timeLeft, setTimeLeft]             = useState(timeLimit * 60);
   const [tabSwitches, setTabSwitches]       = useState(0);
-  const [violations, setViolations]         = useState(0);
+  const [violations, setViolations]         = useState(0); // eslint-disable-line no-unused-vars
   const [showWarning, setShowWarning]       = useState(false);
   const [warningMsg, setWarningMsg]         = useState('');
   const [warningType, setWarningType]       = useState('normal');
   const [isDisqualified, setIsDisqualified] = useState(false);
-  const [violationLogs, setViolationLogs]   = useState([]);
+  const [violationLogs, setViolationLogs]   = useState([]); // eslint-disable-line no-unused-vars
   const [isMobile, setIsMobile]             = useState(window.innerWidth <= 768);
   const [showQPanel, setShowQPanel]         = useState(window.innerWidth > 768);
   const [isOnline, setIsOnline]             = useState(navigator.onLine);
