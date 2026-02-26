@@ -6,8 +6,8 @@ import MockTestInterface from '../components/MockTestInterface';
 import NEETMockTestInterface from '../components/NEETMockTestInterface';
 import UserDetailsForm from '../components/UserDetailsForm';
 import CertificateViewer from '../components/CertificateViewer';
-import Resultsdisplay from '../components/Resultsdisplay';
 import Certificatesection from '../components/Certificatesection';
+import SubmissionOverlay from '../components/SubmissionOverlay';
 import { db } from '../firebase';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import {
@@ -350,6 +350,7 @@ function MockTestPage() {
   const [selectedCertificate, setSelectedCertificate] = useState(null);
 
   // Test Results
+  // eslint-disable-next-line no-unused-vars
   const [testResults, setTestResults] = useState(null);
 
   // Payment & Status Data
@@ -367,6 +368,11 @@ function MockTestPage() {
   // Coupon Modal State
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [couponPlan, setCouponPlan] = useState(null);
+
+  // Submission Overlay States
+  const [showSubmitOverlay, setShowSubmitOverlay] = useState(false);
+  const [submitOverlayData, setSubmitOverlayData] = useState({ isPassed: false, score: 0, testType: 'python' });
+  const [overlayCountdown, setOverlayCountdown] = useState(10);
 
   // Tab slide animation state
   const [slideDir, setSlideDir] = React.useState('none');
@@ -507,6 +513,24 @@ function MockTestPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
+
+  // ==========================================
+  // SUBMISSION OVERLAY TRIGGER
+  // ==========================================
+  const triggerSubmitOverlay = useCallback((isPassed, score, testType) => {
+    setSubmitOverlayData({ isPassed, score, testType });
+    setOverlayCountdown(10);
+    setShowSubmitOverlay(true);
+    let count = 10;
+    const interval = setInterval(() => {
+      count--;
+      setOverlayCountdown(count);
+      if (count <= 0) {
+        clearInterval(interval);
+        // ✅ Countdown stops — goodbye animation overlay khud handle karega
+      }
+    }, 1000);
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -794,17 +818,20 @@ function MockTestPage() {
       }
 
       setTestResults(results);
-      setCurrentStep('results');
-      await loadUserData();
+      loadUserData(); // background mein — await nahi, overlay instantly aaye
+      const isPassed = results.percentage >= 55;
+      setLoading(false);
+      setCurrentStep('plans');  // ✅ MockTestInterface hatao taaki overlay dikhay
+      setTestQuestions([]);     // ✅ Questions clear karo
+      triggerSubmitOverlay(isPassed, results.percentage, selectedPlan?.level || 'python');
 
     } catch (error) {
       console.error('❌ Error processing test completion:', error);
       window.showToast?.('❌ Error saving results', 'error');
-    } finally {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPlan, user, userDetails]);
+  }, [selectedPlan, user, userDetails, triggerSubmitOverlay]);
 
   // ==========================================
   // handleNeetTestComplete
@@ -881,15 +908,18 @@ function MockTestPage() {
 
       setSelectedPlan({ id: 'neet', name: 'NEET Mock Test', level: 'neet', timeLimit: 180 });
       setTestResults(neetResults);
-      setCurrentStep('results');
-      await loadUserData();
+      loadUserData(); // background mein — await nahi, overlay instantly aaye
+      const pctForOverlay = Math.round(Math.max(0, (neetResults.score / 720)) * 100);
+      setLoading(false);
+      setNeetStep('info');      // ✅ NEETMockTestInterface hatao taaki overlay dikhay
+      setNeetQuestions([]);     // ✅ Questions clear karo
+      triggerSubmitOverlay(pctForOverlay >= 55, neetResults.score, 'neet');
     } catch (error) {
       console.error('❌ NEET save error:', error);
       window.showToast?.('❌ Error: ' + error.message, 'error');
-    } finally {
       setLoading(false);
     }
-  }, [user, loadUserData]);
+  }, [user, loadUserData, triggerSubmitOverlay]);
 
   const handleExitTest = async () => {
     if (window.confirm('⚠️ Are you sure? Your progress will be lost!')) {
@@ -981,6 +1011,7 @@ function MockTestPage() {
     setShowCouponModal(true);
   };
 
+  // eslint-disable-next-line no-unused-vars
   const viewCertificate = async (level) => {
     const result = await getCertificate(user.uid, level);
     if (result.success) {
@@ -1080,19 +1111,6 @@ function MockTestPage() {
     );
   }
 
-  if (currentStep === 'results' && testResults) {
-    return (
-      <Resultsdisplay
-        testResults={testResults}
-        selectedPlan={selectedPlan}
-        userCertificates={userCertificates}
-        isDark={isDark}
-        onBackToPlans={backToPlans}
-        onViewCertificate={viewCertificate}
-      />
-    );
-  }
-
   const TABS = [
     { key: 'tests',        emoji: '🐍', label: 'Tests'   },
     { key: 'neet',         emoji: '🧬', label: 'NEET'    },
@@ -1170,6 +1188,22 @@ function MockTestPage() {
         paddingBottom: '3rem',
         padding: '100px 1rem 3rem'
       }}>
+
+      {/* Submission Overlay — very first child */}
+      {showSubmitOverlay && (
+        <SubmissionOverlay
+          isPassed={submitOverlayData.isPassed}
+          countdown={overlayCountdown}
+          score={submitOverlayData.score}
+          testType={submitOverlayData.testType}
+          onDone={() => {
+            setShowSubmitOverlay(false);
+            setActiveTab('results');
+            backToPlans();
+          }}
+        />
+      )}
+
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
 
         {/* Header */}

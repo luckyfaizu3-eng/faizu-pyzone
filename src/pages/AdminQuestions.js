@@ -49,8 +49,8 @@ const DEFAULT_NEET_SETTINGS = {
   price: 99,
   salePrice: 0,
   saleEnabled: false,
-  timeMinutes: 180,          // Default 180 min (real NEET duration)
-  maxQuestionsPerSubject: 45, // 45 per subject × 4 = 180 total
+  timeMinutes: 180,
+  maxQuestionsPerSubject: 45,
   markingCorrect: 4,
   markingWrong: -1,
 };
@@ -317,7 +317,6 @@ function GlobalCouponsTab({ isMobile }) {
 
   return (
     <div>
-      {/* Header */}
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', padding: isMobile ? '1rem' : '1.75rem', marginBottom: '1rem', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
           <div>
@@ -336,7 +335,6 @@ function GlobalCouponsTab({ isMobile }) {
           </button>
         </div>
 
-        {/* Scope legend */}
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
           {[
             { scope: 'global', desc: 'All tests' },
@@ -356,18 +354,15 @@ function GlobalCouponsTab({ isMobile }) {
         </div>
       </div>
 
-      {/* Create Form */}
       {showForm && (
         <div style={{ background: '#fff', border: '2px solid rgba(99,102,241,0.3)', borderRadius: '16px', padding: isMobile ? '1rem' : '1.75rem', marginBottom: '1rem', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
           <h3 style={{ margin: '0 0 1.25rem', fontWeight: '800', color: '#6366f1', fontSize: '1.1rem' }}>➕ Create New Coupon</h3>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-            
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>Coupon Code *</label>
               <input value={form.code} onChange={e => setForm(p => ({...p, code: e.target.value.toUpperCase()}))}
                 placeholder="e.g. FREE100" style={{ ...inp(), fontFamily: 'monospace', fontWeight: '800', letterSpacing: '2px', fontSize: '1rem' }} />
             </div>
-
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>Scope (Which test) *</label>
               <select value={form.scope} onChange={e => setForm(p => ({...p, scope: e.target.value}))} style={inp()}>
@@ -379,7 +374,6 @@ function GlobalCouponsTab({ isMobile }) {
                 <option value="Zoology">🐾 NEET Zoology only</option>
               </select>
             </div>
-
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>Discount Type *</label>
               <select value={form.type} onChange={e => setForm(p => ({...p, type: e.target.value}))} style={inp()}>
@@ -387,20 +381,17 @@ function GlobalCouponsTab({ isMobile }) {
                 <option value="flat">₹ Flat Amount</option>
               </select>
             </div>
-
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>
                 Discount Value * {form.type === 'percentage' ? '(%)' : '(₹)'} {form.type === 'percentage' && Number(form.discount) === 100 && <span style={{color:'#10b981'}}>— 100% = FREE!</span>}
               </label>
               <input type="number" min="1" max={form.type === 'percentage' ? 100 : undefined}
-                value={form.discount} onChange={e => setForm(p => ({...p, discount: e.target.value}))} style={inp({ borderColor: Number(form.discount) === 100 ? '#10b981' : '#e2e8f0', background: Number(form.discount) === 100 ? '#f0fdf4' : '#f8fafc' })} />
+                value={form.discount} onChange={e => setForm(p => ({...p, discount: e.target.value}))} style={{ ...inp({ borderColor: Number(form.discount) === 100 ? '#10b981' : '#e2e8f0', background: Number(form.discount) === 100 ? '#f0fdf4' : '#f8fafc' }) }} />
             </div>
-
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>Usage Limit</label>
               <input type="number" min="1" value={form.usageLimit} onChange={e => setForm(p => ({...p, usageLimit: e.target.value}))} style={inp()} />
             </div>
-
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.8rem', fontWeight: '700', color: '#475569' }}>Expiry Date (optional)</label>
               <input type="date" value={form.expiry} onChange={e => setForm(p => ({...p, expiry: e.target.value}))} style={inp()} />
@@ -432,7 +423,6 @@ function GlobalCouponsTab({ isMobile }) {
         </div>
       )}
 
-      {/* Coupons List */}
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
         <div style={{ padding: '1rem 1.25rem', borderBottom: '2px solid #f1f5f9', background: '#fafafa', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: '800', color: '#1e293b' }}>All Coupons ({coupons.length})</span>
@@ -467,7 +457,6 @@ function GlobalCouponsTab({ isMobile }) {
                     </span>
                   </div>
                 </div>
-
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                     <span style={{ padding: '0.2rem 0.6rem', background: '#f0fdf4', color: '#065f46', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '700' }}>
@@ -481,7 +470,6 @@ function GlobalCouponsTab({ isMobile }) {
                     {c.expiry && <span style={{ padding: '0.2rem 0.6rem', background: '#fef3c7', color: '#92400e', borderRadius: '6px', fontSize: '0.72rem', fontWeight: '600' }}>📅 {c.expiry}</span>}
                   </div>
                 </div>
-
                 <div style={{ display: 'flex', gap: '0.4rem', flexShrink: 0 }}>
                   <button onClick={() => handleToggle(c)} title={c.active ? 'Deactivate' : 'Activate'} style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: c.active ? 'rgba(16,185,129,0.1)' : 'rgba(100,116,139,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {c.active ? <ToggleRight size={15} color="#10b981" /> : <ToggleLeft size={15} color="#94a3b8" />}
@@ -547,13 +535,22 @@ function PythonQuestionsTab({ isMobile }) {
     finally { setSavingPrices(false); }
   };
 
+  // ✅ FIX: Sort by position first, then fallback to createdAt ascending
+  // This ensures Q1 stays Q1, Q2 stays Q2 always
   const fetchQuestions = async () => {
     setLoading(true);
     try {
       const q = query(collection(db, 'manualQuestions'), where('level', '==', level), where('source', '==', 'manual'));
       const snapshot = await getDocs(q);
       const qs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      qs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      // Sort by position field first; if no position, sort by createdAt ascending (oldest = first)
+      qs.sort((a, b) => {
+        if (a.position !== undefined && b.position !== undefined) {
+          return a.position - b.position;
+        }
+        // Fallback: oldest question first (ascending createdAt)
+        return new Date(a.createdAt) - new Date(b.createdAt);
+      });
       setQuestions(qs);
     } catch { window.showToast?.('Failed to load questions', 'error'); }
     finally { setLoading(false); }
@@ -573,9 +570,28 @@ function PythonQuestionsTab({ isMobile }) {
     if (!formData.option1 || !formData.option2 || !formData.option3 || !formData.option4) { window.showToast?.('All 4 options are required', 'error'); return; }
     setLoading(true);
     try {
-      const questionData = { question: formData.question.trim(), code: formData.code.trim(), options: [formData.option1.trim(), formData.option2.trim(), formData.option3.trim(), formData.option4.trim()], correct: parseInt(formData.correct), level, source: 'manual' };
-      if (editingId) { await updateDoc(doc(db, 'manualQuestions', editingId), { ...questionData, updatedAt: new Date().toISOString() }); window.showToast?.('✅ Question updated!', 'success'); }
-      else { await addDoc(collection(db, 'manualQuestions'), { ...questionData, createdAt: new Date().toISOString() }); window.showToast?.('✅ Question added!', 'success'); }
+      const questionData = {
+        question: formData.question.trim(),
+        code: formData.code.trim(),
+        options: [formData.option1.trim(), formData.option2.trim(), formData.option3.trim(), formData.option4.trim()],
+        correct: parseInt(formData.correct),
+        level,
+        source: 'manual'
+      };
+      if (editingId) {
+        // ✅ Edit: do NOT change position — keep original serial number
+        await updateDoc(doc(db, 'manualQuestions', editingId), { ...questionData, updatedAt: new Date().toISOString() });
+        window.showToast?.('✅ Question updated!', 'success');
+      } else {
+        // ✅ New question: assign next position so it always goes to the end
+        const nextPosition = questions.length + 1;
+        await addDoc(collection(db, 'manualQuestions'), {
+          ...questionData,
+          position: nextPosition,
+          createdAt: new Date().toISOString()
+        });
+        window.showToast?.('✅ Question added!', 'success');
+      }
       resetForm(); setShowForm(false); fetchQuestions();
     } catch { window.showToast?.('Failed to save question', 'error'); }
     finally { setLoading(false); }
@@ -584,7 +600,15 @@ function PythonQuestionsTab({ isMobile }) {
   const handleDeleteQuestion = async (id) => {
     if (!window.confirm('Delete this question?')) return;
     setDeletingIds(p => [...p, id]);
-    try { await deleteDoc(doc(db, 'manualQuestions', id)); window.showToast?.('✅ Deleted!', 'success'); setQuestions(prev => prev.filter(q => q.id !== id)); setSelectedIds(prev => prev.filter(sid => sid !== id)); }
+    try {
+      await deleteDoc(doc(db, 'manualQuestions', id));
+      window.showToast?.('✅ Deleted!', 'success');
+      // ✅ After delete, re-fetch and fix positions so sequence stays clean
+      const remaining = questions.filter(q => q.id !== id);
+      await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'manualQuestions', q.id), { position: idx + 1 })));
+      setQuestions(remaining);
+      setSelectedIds(prev => prev.filter(sid => sid !== id));
+    }
     catch { window.showToast?.('Delete failed', 'error'); }
     finally { setDeletingIds(p => p.filter(did => did !== id)); }
   };
@@ -592,7 +616,15 @@ function PythonQuestionsTab({ isMobile }) {
   const handleBulkDelete = async () => {
     if (!window.confirm(`Delete ${selectedIds.length} selected questions?`)) return;
     setLoading(true);
-    try { await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'manualQuestions', id)))); window.showToast?.(`✅ ${selectedIds.length} questions deleted!`, 'success'); setQuestions(prev => prev.filter(q => !selectedIds.includes(q.id))); setSelectedIds([]); setSelectAll(false); }
+    try {
+      await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'manualQuestions', id))));
+      window.showToast?.(`✅ ${selectedIds.length} questions deleted!`, 'success');
+      // ✅ Fix positions after bulk delete
+      const remaining = questions.filter(q => !selectedIds.includes(q.id));
+      await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'manualQuestions', q.id), { position: idx + 1 })));
+      setQuestions(remaining);
+      setSelectedIds([]); setSelectAll(false);
+    }
     catch { window.showToast?.('Bulk delete failed', 'error'); }
     finally { setLoading(false); }
   };
@@ -802,7 +834,6 @@ function PythonQuestionsTab({ isMobile }) {
 // 🧬 NEET QUESTIONS TAB
 // ==========================================
 function NEETQuestionsTab({ isMobile }) {
-  // Subject order follows actual NEET paper: Zoology → Botany → Physics → Chemistry
   const [subject, setSubject] = useState('Zoology');
   const [questions, setQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -814,7 +845,6 @@ function NEETQuestionsTab({ isMobile }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  // Single settings object — one price for all subjects
   const [neetSettings, setNeetSettings] = useState(DEFAULT_NEET_SETTINGS);
   const [savingSettings, setSavingSettings] = useState(false);
   const [showCoupons, setShowCoupons] = useState(false);
@@ -849,14 +879,19 @@ function NEETQuestionsTab({ isMobile }) {
     finally { setSavingSettings(false); }
   };
 
+  // ✅ FIX: Sort by position first, then fallback createdAt ascending
   const fetchQuestions = async () => {
     setLoading(true);
     try {
       const q = query(collection(db, 'neetQuestions'), where('subject', '==', subject));
       const snap = await getDocs(q);
       const qs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Sort by class then chapter number
       qs.sort((a, b) => {
+        // Primary: position field (guaranteed sequential)
+        if (a.position !== undefined && b.position !== undefined) {
+          return a.position - b.position;
+        }
+        // Secondary: class then chapter
         if (a.neetClass !== b.neetClass) return a.neetClass.localeCompare(b.neetClass);
         return (a.chapterNo || 0) - (b.chapterNo || 0);
       });
@@ -926,9 +961,29 @@ function NEETQuestionsTab({ isMobile }) {
     if (!editingId && questions.length >= maxQ) { window.showToast?.(`❌ Maximum ${maxQ} questions per subject reached!`, 'error'); return; }
     setLoading(true);
     try {
-      const data = { question: form.question.trim(), code: form.code.trim(), subject: form.subject, neetClass: form.neetClass, chapterNo: parseInt(form.chapterNo), chapterName: form.chapterName, topic: form.topic.trim(), options: [form.option1.trim(), form.option2.trim(), form.option3.trim(), form.option4.trim()], correct: parseInt(form.correct), explanation: form.explanation.trim(), type: 'neet' };
-      if (editingId) { await updateDoc(doc(db, 'neetQuestions', editingId), { ...data, updatedAt: new Date().toISOString() }); window.showToast?.('✅ Question updated!', 'success'); }
-      else { await addDoc(collection(db, 'neetQuestions'), { ...data, createdAt: new Date().toISOString() }); window.showToast?.('✅ Question added!', 'success'); }
+      const data = {
+        question: form.question.trim(),
+        code: form.code.trim(),
+        subject: form.subject,
+        neetClass: form.neetClass,
+        chapterNo: parseInt(form.chapterNo),
+        chapterName: form.chapterName,
+        topic: form.topic.trim(),
+        options: [form.option1.trim(), form.option2.trim(), form.option3.trim(), form.option4.trim()],
+        correct: parseInt(form.correct),
+        explanation: form.explanation.trim(),
+        type: 'neet'
+      };
+      if (editingId) {
+        // ✅ Edit: keep original position
+        await updateDoc(doc(db, 'neetQuestions', editingId), { ...data, updatedAt: new Date().toISOString() });
+        window.showToast?.('✅ Question updated!', 'success');
+      } else {
+        // ✅ New: assign sequential position
+        const nextPosition = questions.length + 1;
+        await addDoc(collection(db, 'neetQuestions'), { ...data, position: nextPosition, createdAt: new Date().toISOString() });
+        window.showToast?.('✅ Question added!', 'success');
+      }
       resetForm(); setShowForm(false); fetchQuestions();
     } catch { window.showToast?.('Failed to save question', 'error'); }
     finally { setLoading(false); }
@@ -937,7 +992,14 @@ function NEETQuestionsTab({ isMobile }) {
   const handleDeleteQuestion = async (id) => {
     if (!window.confirm('Delete this question?')) return;
     setDeletingIds(p => [...p, id]);
-    try { await deleteDoc(doc(db, 'neetQuestions', id)); window.showToast?.('✅ Deleted!', 'success'); setQuestions(prev => prev.filter(q => q.id !== id)); }
+    try {
+      await deleteDoc(doc(db, 'neetQuestions', id));
+      window.showToast?.('✅ Deleted!', 'success');
+      // ✅ Re-assign positions after delete
+      const remaining = questions.filter(q => q.id !== id);
+      await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'neetQuestions', q.id), { position: idx + 1 })));
+      setQuestions(remaining);
+    }
     catch { window.showToast?.('Delete failed', 'error'); }
     finally { setDeletingIds(p => p.filter(d => d !== id)); }
   };
@@ -945,7 +1007,15 @@ function NEETQuestionsTab({ isMobile }) {
   const handleBulkDelete = async () => {
     if (!window.confirm(`Delete ${selectedIds.length} selected questions?`)) return;
     setLoading(true);
-    try { await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'neetQuestions', id)))); window.showToast?.(`✅ ${selectedIds.length} questions deleted!`, 'success'); setQuestions(prev => prev.filter(q => !selectedIds.includes(q.id))); setSelectedIds([]); setSelectAll(false); }
+    try {
+      await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'neetQuestions', id))));
+      window.showToast?.(`✅ ${selectedIds.length} questions deleted!`, 'success');
+      // ✅ Re-assign positions after bulk delete
+      const remaining = questions.filter(q => !selectedIds.includes(q.id));
+      await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'neetQuestions', q.id), { position: idx + 1 })));
+      setQuestions(remaining);
+      setSelectedIds([]); setSelectAll(false);
+    }
     catch { window.showToast?.('Bulk delete failed', 'error'); }
     finally { setLoading(false); }
   };
@@ -987,57 +1057,33 @@ function NEETQuestionsTab({ isMobile }) {
           </div>
         </div>
 
-        {/* ── NEET SETTINGS PANEL — Single price for all subjects ── */}
         {showSettings && (
           <div style={{ background: 'linear-gradient(135deg,rgba(99,102,241,0.05),rgba(139,92,246,0.05))', border: '2px solid rgba(99,102,241,0.2)', borderRadius: '14px', padding: isMobile ? '1rem' : '1.5rem', marginBottom: '1.25rem' }}>
             <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', fontWeight: '800', color: '#6366f1', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><Settings size={18} /> NEET Exam Settings</h3>
             <p style={{ margin: '0 0 1.25rem', fontSize: '0.8rem', color: '#64748b' }}>
               One price applies to the full NEET mock test (all 4 subjects combined). Set 180 minutes to match the real exam.
             </p>
-
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap: '1rem', marginBottom: '1rem' }}>
-
-              {/* Price */}
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>💰 Test Price (₹)</label>
-                <input type="number" min="0" value={neetSettings.price}
-                  onChange={e => setNeetSettings(p => ({ ...p, price: parseInt(e.target.value) || 0 }))}
-                  style={{ ...inp(), borderColor: '#6366f1', background: 'rgba(99,102,241,0.04)' }} />
+                <input type="number" min="0" value={neetSettings.price} onChange={e => setNeetSettings(p => ({ ...p, price: parseInt(e.target.value) || 0 }))} style={{ ...inp(), borderColor: '#6366f1', background: 'rgba(99,102,241,0.04)' }} />
               </div>
-
-              {/* Time */}
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>⏱️ Duration (minutes)</label>
-                <input type="number" min="60" max="300" value={neetSettings.timeMinutes}
-                  onChange={e => setNeetSettings(p => ({ ...p, timeMinutes: parseInt(e.target.value) || 180 }))}
-                  style={inp()} />
+                <input type="number" min="60" max="300" value={neetSettings.timeMinutes} onChange={e => setNeetSettings(p => ({ ...p, timeMinutes: parseInt(e.target.value) || 180 }))} style={inp()} />
               </div>
-
-              {/* Max questions per subject */}
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>📝 Questions / Subject</label>
-                <input type="number" min="5" max="100" value={neetSettings.maxQuestionsPerSubject}
-                  onChange={e => setNeetSettings(p => ({ ...p, maxQuestionsPerSubject: parseInt(e.target.value) || 45 }))}
-                  style={inp()} />
+                <input type="number" min="5" max="100" value={neetSettings.maxQuestionsPerSubject} onChange={e => setNeetSettings(p => ({ ...p, maxQuestionsPerSubject: parseInt(e.target.value) || 45 }))} style={inp()} />
               </div>
-
-              {/* Marking — correct */}
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>✅ Correct (+marks)</label>
-                <input type="number" min="1" value={neetSettings.markingCorrect}
-                  onChange={e => setNeetSettings(p => ({ ...p, markingCorrect: parseInt(e.target.value) || 4 }))}
-                  style={inp()} />
+                <input type="number" min="1" value={neetSettings.markingCorrect} onChange={e => setNeetSettings(p => ({ ...p, markingCorrect: parseInt(e.target.value) || 4 }))} style={inp()} />
               </div>
-
-              {/* Marking — wrong */}
               <div>
                 <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>❌ Wrong (−marks)</label>
-                <input type="number" max="0" value={neetSettings.markingWrong}
-                  onChange={e => setNeetSettings(p => ({ ...p, markingWrong: parseInt(e.target.value) || -1 }))}
-                  style={inp()} />
+                <input type="number" max="0" value={neetSettings.markingWrong} onChange={e => setNeetSettings(p => ({ ...p, markingWrong: parseInt(e.target.value) || -1 }))} style={inp()} />
               </div>
-
-              {/* Sale Price */}
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                   <label style={{ fontSize: '0.78rem', fontWeight: '700', color: '#475569' }}>🔥 Sale Price (₹)</label>
@@ -1045,48 +1091,31 @@ function NEETQuestionsTab({ isMobile }) {
                     {neetSettings.saleEnabled ? '🔥 ON' : 'OFF'}
                   </button>
                 </div>
-                <input type="number" min="0" value={neetSettings.salePrice}
-                  onChange={e => setNeetSettings(p => ({ ...p, salePrice: parseInt(e.target.value) || 0 }))}
-                  disabled={!neetSettings.saleEnabled}
-                  placeholder={neetSettings.saleEnabled ? 'Sale price...' : 'Enable sale first'}
-                  style={{ ...inp(), opacity: neetSettings.saleEnabled ? 1 : 0.5 }} />
+                <input type="number" min="0" value={neetSettings.salePrice} onChange={e => setNeetSettings(p => ({ ...p, salePrice: parseInt(e.target.value) || 0 }))} disabled={!neetSettings.saleEnabled} placeholder={neetSettings.saleEnabled ? 'Sale price...' : 'Enable sale first'} style={{ ...inp(), opacity: neetSettings.saleEnabled ? 1 : 0.5 }} />
               </div>
             </div>
-
-            {/* Summary preview */}
             <div style={{ padding: '1rem', background: '#fff', border: '2px solid rgba(99,102,241,0.2)', borderRadius: '12px', marginBottom: '1rem' }}>
               <div style={{ fontWeight: '800', color: '#1e293b', marginBottom: '0.6rem', fontSize: '0.9rem' }}>📋 Exam Preview</div>
               <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
                 <span style={{ padding: '0.25rem 0.7rem', background: '#eff6ff', color: '#1d4ed8', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700' }}>
-                  💰 {neetSettings.saleEnabled && neetSettings.salePrice > 0
-                    ? <><span style={{ textDecoration: 'line-through', opacity: 0.6 }}>₹{neetSettings.price}</span> → ₹{neetSettings.salePrice}</>
-                    : `₹${neetSettings.price}`}
+                  💰 {neetSettings.saleEnabled && neetSettings.salePrice > 0 ? <><span style={{ textDecoration: 'line-through', opacity: 0.6 }}>₹{neetSettings.price}</span> → ₹{neetSettings.salePrice}</> : `₹${neetSettings.price}`}
                 </span>
-                <span style={{ padding: '0.25rem 0.7rem', background: '#f0fdf4', color: '#065f46', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700' }}>
-                  ⏱️ {neetSettings.timeMinutes} min {neetSettings.timeMinutes === 180 && '(real NEET duration ✓)'}
-                </span>
-                <span style={{ padding: '0.25rem 0.7rem', background: '#fff7ed', color: '#c2410c', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700' }}>
-                  📝 {neetSettings.maxQuestionsPerSubject} × 4 subjects = {neetSettings.maxQuestionsPerSubject * 4} total questions
-                </span>
-                <span style={{ padding: '0.25rem 0.7rem', background: '#fdf4ff', color: '#7e22ce', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700' }}>
-                  ✅ +{neetSettings.markingCorrect} / ❌ {neetSettings.markingWrong}
-                </span>
+                <span style={{ padding: '0.25rem 0.7rem', background: '#f0fdf4', color: '#065f46', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700' }}>⏱️ {neetSettings.timeMinutes} min {neetSettings.timeMinutes === 180 && '(real NEET duration ✓)'}</span>
+                <span style={{ padding: '0.25rem 0.7rem', background: '#fff7ed', color: '#c2410c', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700' }}>📝 {neetSettings.maxQuestionsPerSubject} × 4 subjects = {neetSettings.maxQuestionsPerSubject * 4} total questions</span>
+                <span style={{ padding: '0.25rem 0.7rem', background: '#fdf4ff', color: '#7e22ce', borderRadius: '8px', fontSize: '0.78rem', fontWeight: '700' }}>✅ +{neetSettings.markingCorrect} / ❌ {neetSettings.markingWrong}</span>
               </div>
             </div>
-
             {neetSettings.saleEnabled && neetSettings.salePrice > 0 && neetSettings.price > 0 && (
               <div style={{ padding: '0.65rem', background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: '8px', fontSize: '0.8rem', color: '#92400e', fontWeight: '600', marginBottom: '1rem' }}>
                 🔥 Sale Active: <span style={{ textDecoration: 'line-through' }}>₹{neetSettings.price}</span> → <strong>₹{neetSettings.salePrice}</strong> — Save ₹{neetSettings.price - neetSettings.salePrice} ({Math.round(((neetSettings.price - neetSettings.salePrice) / neetSettings.price) * 100)}% off)
               </div>
             )}
-
             <button onClick={handleSaveNEETSettings} disabled={savingSettings} style={{ width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none', background: savingSettings ? '#e2e8f0' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', color: savingSettings ? '#94a3b8' : '#fff', fontWeight: '800', cursor: savingSettings ? 'not-allowed' : 'pointer', fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
               <Save size={16} /> {savingSettings ? 'Saving...' : '✅ Save NEET Settings'}
             </button>
           </div>
         )}
 
-        {/* ── COUPON PANEL — applies to full NEET test ── */}
         {showCoupons && (
           <div style={{ background: 'linear-gradient(135deg,rgba(16,185,129,0.04),rgba(5,150,105,0.04))', border: '2px solid rgba(16,185,129,0.2)', borderRadius: '14px', padding: isMobile ? '1rem' : '1.5rem', marginBottom: '1.25rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
@@ -1133,11 +1162,8 @@ function NEETQuestionsTab({ isMobile }) {
           </div>
         )}
 
-        {/* 4 Subject Tabs — in NEET order */}
         <div style={{ marginBottom: '0.5rem' }}>
-          <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', marginBottom: '0.5rem', letterSpacing: '0.5px' }}>
-            NEET SUBJECT ORDER →
-          </div>
+          <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', marginBottom: '0.5rem', letterSpacing: '0.5px' }}>NEET SUBJECT ORDER →</div>
           <div style={{ display: 'flex', gap: isMobile ? '0.35rem' : '0.5rem', flexWrap: 'wrap' }}>
             {NEET_SUBJECTS.map((s, idx) => {
               const m = NEET_SUBJECT_META[s];
@@ -1152,7 +1178,6 @@ function NEETQuestionsTab({ isMobile }) {
           </div>
         </div>
 
-        {/* ── INLINE PRICE EDITOR — always visible ── */}
         <div style={{ marginTop: '1rem', padding: '1rem', background: 'linear-gradient(135deg,rgba(99,102,241,0.06),rgba(139,92,246,0.06))', border: '2px solid rgba(99,102,241,0.2)', borderRadius: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.85rem' }}>
             <IndianRupee size={16} color="#6366f1" />
@@ -1160,71 +1185,43 @@ function NEETQuestionsTab({ isMobile }) {
             <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: '500' }}>— edit and save directly</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : '1fr 1fr 1fr auto', gap: '0.75rem', alignItems: 'end' }}>
-
-            {/* Original price */}
             <div>
               <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.75rem', fontWeight: '700', color: '#475569' }}>💰 Original Price (₹)</label>
               <div style={{ position: 'relative' }}>
                 <span style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '800', color: '#6366f1', fontSize: '0.9rem' }}>₹</span>
-                <input
-                  type="number" min="0"
-                  value={neetSettings.price}
-                  onChange={e => setNeetSettings(p => ({ ...p, price: parseInt(e.target.value) || 0 }))}
-                  style={{ width: '100%', padding: '0.7rem 0.7rem 0.7rem 1.8rem', border: '2px solid rgba(99,102,241,0.4)', borderRadius: '10px', fontSize: '1.05rem', fontWeight: '800', outline: 'none', boxSizing: 'border-box', background: '#fff', color: '#1e293b' }}
-                />
+                <input type="number" min="0" value={neetSettings.price} onChange={e => setNeetSettings(p => ({ ...p, price: parseInt(e.target.value) || 0 }))} style={{ width: '100%', padding: '0.7rem 0.7rem 0.7rem 1.8rem', border: '2px solid rgba(99,102,241,0.4)', borderRadius: '10px', fontSize: '1.05rem', fontWeight: '800', outline: 'none', boxSizing: 'border-box', background: '#fff', color: '#1e293b' }} />
               </div>
             </div>
-
-            {/* Sale price */}
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
                 <label style={{ fontSize: '0.75rem', fontWeight: '700', color: '#475569' }}>🔥 Sale Price (₹)</label>
-                <button
-                  onClick={() => setNeetSettings(p => ({ ...p, saleEnabled: !p.saleEnabled }))}
-                  style={{ padding: '0.1rem 0.5rem', borderRadius: '20px', border: 'none', background: neetSettings.saleEnabled ? '#10b981' : '#e2e8f0', color: neetSettings.saleEnabled ? '#fff' : '#64748b', fontSize: '0.62rem', fontWeight: '700', cursor: 'pointer' }}>
+                <button onClick={() => setNeetSettings(p => ({ ...p, saleEnabled: !p.saleEnabled }))} style={{ padding: '0.1rem 0.5rem', borderRadius: '20px', border: 'none', background: neetSettings.saleEnabled ? '#10b981' : '#e2e8f0', color: neetSettings.saleEnabled ? '#fff' : '#64748b', fontSize: '0.62rem', fontWeight: '700', cursor: 'pointer' }}>
                   {neetSettings.saleEnabled ? '🔥 ON' : 'OFF'}
                 </button>
               </div>
               <div style={{ position: 'relative' }}>
                 <span style={{ position: 'absolute', left: '0.65rem', top: '50%', transform: 'translateY(-50%)', fontWeight: '800', color: neetSettings.saleEnabled ? '#10b981' : '#94a3b8', fontSize: '0.9rem' }}>₹</span>
-                <input
-                  type="number" min="0"
-                  value={neetSettings.salePrice}
-                  onChange={e => setNeetSettings(p => ({ ...p, salePrice: parseInt(e.target.value) || 0 }))}
-                  disabled={!neetSettings.saleEnabled}
-                  placeholder={neetSettings.saleEnabled ? 'Enter sale price' : 'Enable sale first'}
-                  style={{ width: '100%', padding: '0.7rem 0.7rem 0.7rem 1.8rem', border: `2px solid ${neetSettings.saleEnabled ? '#10b981' : '#e2e8f0'}`, borderRadius: '10px', fontSize: '1.05rem', fontWeight: '800', outline: 'none', boxSizing: 'border-box', background: neetSettings.saleEnabled ? '#f0fdf4' : '#f8fafc', color: '#1e293b', opacity: neetSettings.saleEnabled ? 1 : 0.5 }}
-                />
+                <input type="number" min="0" value={neetSettings.salePrice} onChange={e => setNeetSettings(p => ({ ...p, salePrice: parseInt(e.target.value) || 0 }))} disabled={!neetSettings.saleEnabled} placeholder={neetSettings.saleEnabled ? 'Enter sale price' : 'Enable sale first'} style={{ width: '100%', padding: '0.7rem 0.7rem 0.7rem 1.8rem', border: `2px solid ${neetSettings.saleEnabled ? '#10b981' : '#e2e8f0'}`, borderRadius: '10px', fontSize: '1.05rem', fontWeight: '800', outline: 'none', boxSizing: 'border-box', background: neetSettings.saleEnabled ? '#f0fdf4' : '#f8fafc', color: '#1e293b', opacity: neetSettings.saleEnabled ? 1 : 0.5 }} />
               </div>
             </div>
-
-            {/* Live preview */}
             <div style={{ padding: '0.7rem 0.85rem', background: '#fff', border: '2px solid #e2e8f0', borderRadius: '10px', textAlign: 'center' }}>
               <div style={{ fontSize: '0.68rem', fontWeight: '700', color: '#94a3b8', marginBottom: '0.3rem' }}>STUDENTS SEE</div>
               {neetSettings.saleEnabled && neetSettings.salePrice > 0 ? (
                 <>
                   <div style={{ fontSize: '0.78rem', textDecoration: 'line-through', color: '#94a3b8', fontWeight: '600' }}>₹{neetSettings.price}</div>
                   <div style={{ fontSize: '1.15rem', fontWeight: '900', color: '#10b981' }}>₹{neetSettings.salePrice}</div>
-                  <div style={{ fontSize: '0.62rem', color: '#10b981', fontWeight: '700' }}>
-                    {neetSettings.price > 0 ? `${Math.round(((neetSettings.price - neetSettings.salePrice) / neetSettings.price) * 100)}% OFF` : ''}
-                  </div>
+                  <div style={{ fontSize: '0.62rem', color: '#10b981', fontWeight: '700' }}>{neetSettings.price > 0 ? `${Math.round(((neetSettings.price - neetSettings.salePrice) / neetSettings.price) * 100)}% OFF` : ''}</div>
                 </>
               ) : (
                 <div style={{ fontSize: '1.3rem', fontWeight: '900', color: '#6366f1' }}>₹{neetSettings.price}</div>
               )}
             </div>
-
-            {/* Save button */}
-            <button
-              onClick={handleSaveNEETSettings}
-              disabled={savingSettings}
-              style={{ padding: '0.7rem 1.25rem', background: savingSettings ? '#e2e8f0' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', borderRadius: '10px', color: savingSettings ? '#94a3b8' : '#fff', fontWeight: '800', cursor: savingSettings ? 'not-allowed' : 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
+            <button onClick={handleSaveNEETSettings} disabled={savingSettings} style={{ padding: '0.7rem 1.25rem', background: savingSettings ? '#e2e8f0' : 'linear-gradient(135deg,#6366f1,#8b5cf6)', border: 'none', borderRadius: '10px', color: savingSettings ? '#94a3b8' : '#fff', fontWeight: '800', cursor: savingSettings ? 'not-allowed' : 'pointer', fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.4rem', whiteSpace: 'nowrap' }}>
               <Save size={15} /> {savingSettings ? 'Saving...' : 'Save Price'}
             </button>
           </div>
         </div>
 
-        {/* Stats bar */}
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
           <div style={{ flex: 1, minWidth: '80px', padding: '0.6rem', background: '#f0fdf4', borderRadius: '10px', border: '1px solid #bbf7d0', textAlign: 'center' }}>
             <div style={{ fontSize: '1.1rem', fontWeight: '900', color: '#10b981' }}>{neetSettings.timeMinutes}m</div>
@@ -1614,13 +1611,20 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
 
   useEffect(() => { fetchQuestions(); }, []); // eslint-disable-line
 
+  // ✅ FIX: Sort by position ascending — guarantees Q1=first, Q2=second always
   const fetchQuestions = async () => {
     setLoading(true);
     try {
       const q = query(collection(db, 'customQuestions'), where('examId', '==', exam.id));
       const snap = await getDocs(q);
       const qs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      qs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      qs.sort((a, b) => {
+        if (a.position !== undefined && b.position !== undefined) {
+          return a.position - b.position;
+        }
+        // Fallback: ascending createdAt (oldest first)
+        return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+      });
       setQuestions(qs);
       await updateDoc(doc(db, 'customExams', exam.id), { questionCount: qs.length });
     } catch { window.showToast?.('Failed to load questions', 'error'); }
@@ -1636,9 +1640,25 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
     if (!formData.question.trim() || !formData.option1 || !formData.option2 || !formData.option3 || !formData.option4) { window.showToast?.('Please fill in all required fields!', 'error'); return; }
     setLoading(true);
     try {
-      const qData = { question: formData.question.trim(), code: formData.code.trim(), subject: formData.subject, options: [formData.option1.trim(), formData.option2.trim(), formData.option3.trim(), formData.option4.trim()], correct: parseInt(formData.correct), examId: exam.id, examName: exam.name };
-      if (editingId) { await updateDoc(doc(db, 'customQuestions', editingId), { ...qData, updatedAt: new Date().toISOString() }); window.showToast?.('✅ Question updated!', 'success'); }
-      else { await addDoc(collection(db, 'customQuestions'), { ...qData, createdAt: new Date().toISOString() }); window.showToast?.('✅ Question added!', 'success'); }
+      const qData = {
+        question: formData.question.trim(),
+        code: formData.code.trim(),
+        subject: formData.subject,
+        options: [formData.option1.trim(), formData.option2.trim(), formData.option3.trim(), formData.option4.trim()],
+        correct: parseInt(formData.correct),
+        examId: exam.id,
+        examName: exam.name
+      };
+      if (editingId) {
+        // ✅ Edit: keep original position unchanged
+        await updateDoc(doc(db, 'customQuestions', editingId), { ...qData, updatedAt: new Date().toISOString() });
+        window.showToast?.('✅ Question updated!', 'success');
+      } else {
+        // ✅ New: assign next sequential position
+        const nextPosition = questions.length + 1;
+        await addDoc(collection(db, 'customQuestions'), { ...qData, position: nextPosition, createdAt: new Date().toISOString() });
+        window.showToast?.('✅ Question added!', 'success');
+      }
       resetForm(); setShowForm(false); fetchQuestions();
     } catch { window.showToast?.('Failed to save question', 'error'); }
     finally { setLoading(false); }
@@ -1646,7 +1666,14 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
 
   const handleDeleteQuestion = async (id) => {
     if (!window.confirm('Delete this question?')) return;
-    try { await deleteDoc(doc(db, 'customQuestions', id)); window.showToast?.('✅ Deleted!', 'success'); setQuestions(prev => prev.filter(q => q.id !== id)); }
+    try {
+      await deleteDoc(doc(db, 'customQuestions', id));
+      window.showToast?.('✅ Deleted!', 'success');
+      // ✅ Re-assign positions so sequence stays clean after delete
+      const remaining = questions.filter(q => q.id !== id);
+      await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'customQuestions', q.id), { position: idx + 1 })));
+      setQuestions(remaining);
+    }
     catch { window.showToast?.('Failed to delete', 'error'); }
   };
 
@@ -1670,7 +1697,9 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
       if (parsed.length > 0) {
         const remaining = exam.maxQuestions - questions.length;
         const toAdd = parsed.slice(0, remaining);
-        await Promise.all(toAdd.map(q => addDoc(collection(db, 'customQuestions'), q)));
+        const startPosition = questions.length + 1;
+        // ✅ CSV upload: each question gets correct sequential position
+        await Promise.all(toAdd.map((q, idx) => addDoc(collection(db, 'customQuestions'), { ...q, position: startPosition + idx })));
         window.showToast?.(`✅ ${toAdd.length} questions uploaded!`, 'success');
         fetchQuestions();
       }
