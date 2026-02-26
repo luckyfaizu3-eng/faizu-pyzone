@@ -938,7 +938,7 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
       </div>
 
       {/* SECTION TABS */}
-      <div ref={sectionTabsRef} style={{ background: '#fff', borderBottom: '2px solid #e2e8f0', padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', display: 'flex', gap: '0.4rem', flexShrink: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none', overscrollBehavior: 'contain' }}>
+      <div ref={sectionTabsRef} style={{ background: '#fff', borderBottom: '2px solid #e2e8f0', padding: isMobile ? '0.4rem 0.6rem' : '0.5rem 1rem', display: 'flex', gap: '0.4rem', flexShrink: 0, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none', overscrollBehavior: 'contain', touchAction: 'pan-x' }}>
         {NEET_SECTIONS.map(s => {
           const qs       = sectionQs[s.id] || [];
           const answered = qs.filter((_, li) => answers[getGlobalIdx(s.id, li)] !== undefined).length;
@@ -961,7 +961,7 @@ function NEETTestInterface({ questions, onComplete, testTitle, timeLimit, userEm
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
         {/* Question Area */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '1rem' : '1.5rem', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '1rem' : '1.5rem', WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain', touchAction: 'pan-y' }}>
           {currentQ ? (
             <div style={{ maxWidth: '800px', margin: '0 auto', opacity: isDisqualified ? 0.3 : 1, pointerEvents: isDisqualified ? 'none' : 'auto' }}>
               {/* Q Header */}
