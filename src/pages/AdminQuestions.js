@@ -15,6 +15,7 @@ import {
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
+import { neetSeedData } from '../data/neetSeedData';
 
 const MAX_QUESTIONS = 60;
 
@@ -186,6 +187,47 @@ const NEET_CHAPTERS = {
   Botany: BOTANY_CHAPTERS,
   Zoology: ZOOLOGY_CHAPTERS,
 };
+
+// ==========================================
+// 💬 BEAUTIFUL CONFIRM MODAL
+// ==========================================
+function ConfirmModal({ isOpen, onConfirm, onCancel, title, message, confirmLabel = 'Confirm', confirmColor = '#ef4444', icon = '⚠️' }) {
+  if (!isOpen) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 9999,
+      background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+    }}>
+      <div style={{
+        background: '#fff', borderRadius: '20px', padding: '2rem',
+        maxWidth: '420px', width: '100%',
+        boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+        animation: 'modalPop 0.2s ease',
+      }}>
+        <style>{`@keyframes modalPop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }`}</style>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '0.75rem', lineHeight: 1 }}>{icon}</div>
+          <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.2rem', fontWeight: '800', color: '#1e293b' }}>{title}</h3>
+          <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', lineHeight: 1.6 }}>{message}</p>
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button onClick={onCancel} style={{
+            flex: 1, padding: '0.85rem', borderRadius: '12px',
+            border: '2px solid #e2e8f0', background: '#f8fafc',
+            color: '#475569', fontWeight: '700', cursor: 'pointer', fontSize: '0.95rem'
+          }}>Cancel</button>
+          <button onClick={onConfirm} style={{
+            flex: 1, padding: '0.85rem', borderRadius: '12px',
+            border: 'none', background: confirmColor,
+            color: '#fff', fontWeight: '800', cursor: 'pointer', fontSize: '0.95rem',
+            boxShadow: `0 4px 14px ${confirmColor}55`
+          }}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ==========================================
 // 🏠 MAIN COMPONENT
@@ -851,6 +893,9 @@ function NEETQuestionsTab({ isMobile }) {
   const [coupons, setCoupons] = useState([]);
   const [showCouponForm, setShowCouponForm] = useState(false);
   const [couponForm, setCouponForm] = useState({ code: '', discount: 10, type: 'percentage', expiry: '', usageLimit: 100 });
+  // CHANGE 2: New seeding state
+  const [seeding, setSeeding] = useState(false);
+  const [confirmModal, setConfirmModal] = useState({ open: false, onConfirm: null, title: '', message: '', confirmLabel: 'Confirm', confirmColor: '#ef4444', icon: '⚠️' });
   const [form, setForm] = useState({ question: '', code: '', subject: 'Zoology', neetClass: '11', chapterNo: '', chapterName: '', topic: '', option1: '', option2: '', option3: '', option4: '', correct: 0, explanation: '' });
 
   useEffect(() => {
@@ -898,6 +943,51 @@ function NEETQuestionsTab({ isMobile }) {
       setQuestions(qs);
     } catch { window.showToast?.('Failed to load questions', 'error'); }
     finally { setLoading(false); }
+  };
+
+  // CHANGE 3: Auto-seed function
+  const handleAutoSeed = () => {
+    setConfirmModal({
+      open: true,
+      icon: '🌱',
+      title: 'Load 180 NEET Questions?',
+      message: 'This will DELETE all existing NEET questions across all 4 subjects and replace them with 180 fresh default questions. This cannot be undone.',
+      confirmLabel: '✅ Yes, Load Questions',
+      confirmColor: '#16a34a',
+      onConfirm: async () => {
+        setConfirmModal(p => ({ ...p, open: false }));
+        // Guard: neetSeedData must be a non-empty array
+        if (!Array.isArray(neetSeedData) || neetSeedData.length === 0) {
+          window.showToast?.('❌ neetSeedData is missing or empty. Check src/data/neetSeedData.js exports.', 'error');
+          return;
+        }
+        setSeeding(true);
+        try {
+          for (const subj of ['Chemistry','Physics','Botany','Zoology']) {
+            const snap = await getDocs(query(collection(db,'neetQuestions'), where('subject','==',subj)));
+            await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+          }
+          for (const subj of ['Chemistry','Physics','Botany','Zoology']) {
+            const subjQs = neetSeedData.filter(q => q.subject === subj);
+            for (let i = 0; i < subjQs.length; i++) {
+              await addDoc(collection(db,'neetQuestions'), {
+                ...subjQs[i],
+                position: i + 1,
+                type: 'neet',
+                code: '',
+                createdAt: new Date().toISOString()
+              });
+            }
+          }
+          window.showToast?.(`✅ ${neetSeedData.length} NEET questions loaded!`, 'success');
+          fetchQuestions();
+        } catch(e) {
+          window.showToast?.('❌ Failed: ' + e.message, 'error');
+        } finally {
+          setSeeding(false);
+        }
+      }
+    });
   };
 
   const fetchCoupons = async () => {
@@ -1038,6 +1128,16 @@ function NEETQuestionsTab({ isMobile }) {
 
   return (
     <div>
+      <ConfirmModal
+        isOpen={confirmModal.open}
+        icon={confirmModal.icon}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmLabel={confirmModal.confirmLabel}
+        confirmColor={confirmModal.confirmColor}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(p => ({ ...p, open: false }))}
+      />
       {/* Header */}
       <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: isMobile ? '12px' : '16px', padding: isMobile ? '1rem' : '1.75rem', marginBottom: '1rem', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
@@ -1048,6 +1148,26 @@ function NEETQuestionsTab({ isMobile }) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {/* CHANGE 4: New seed button added BEFORE the Settings button */}
+            <button
+              onClick={handleAutoSeed}
+              disabled={seeding}
+              style={{
+                padding: '0.6rem 1.1rem',
+                borderRadius: '10px',
+                border: '2px solid rgba(34,197,94,0.3)',
+                background: seeding ? '#e2e8f0' : 'rgba(34,197,94,0.08)',
+                color: seeding ? '#94a3b8' : '#16a34a',
+                fontWeight: '700',
+                cursor: seeding ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                fontSize: '0.85rem'
+              }}
+            >
+              {seeding ? '⏳ Loading...' : '🌱 Load 180 Qs'}
+            </button>
             <button onClick={() => { setShowSettings(!showSettings); setShowCoupons(false); }} style={{ padding: '0.6rem 1.1rem', borderRadius: '10px', border: '2px solid rgba(99,102,241,0.3)', background: showSettings ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)', color: '#6366f1', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
               <Settings size={15} /> {showSettings ? 'Hide Settings' : 'NEET Settings'}
             </button>
