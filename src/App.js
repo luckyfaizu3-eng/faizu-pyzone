@@ -42,6 +42,9 @@ import DailyPractice from './pages/DailyPractice';
 import StreakResult from './pages/StreakResult';
 import AdminStreak from './pages/AdminStreak';
 
+// ✅ Streak price service
+import { getStreakPrice } from './streakService';
+
 // Contexts
 export const CartContext = React.createContext();
 export const AuthContext = React.createContext();
@@ -92,6 +95,9 @@ function App() {
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [razorpayError, setRazorpayError] = useState(false);
   const [compilerInitialCode, setCompilerInitialCode] = useState('');
+
+  // ✅ Dynamic streak price from Firestore
+  const [streakPrice, setStreakPrice] = useState(99);
 
   // ✅ Browser back button fix
   useEffect(() => {
@@ -202,7 +208,13 @@ function App() {
     }
   }, []);
 
-  useEffect(() => { loadProducts(); }, [loadProducts]);
+  // ✅ Load products + streak price together on mount
+  useEffect(() => {
+    loadProducts();
+    getStreakPrice().then(p => {
+      if (p) setStreakPrice(p);
+    });
+  }, [loadProducts]);
 
   const loadOrders = useCallback(async () => {
     if (user?.uid) {
@@ -420,10 +432,10 @@ function App() {
     setCurrentPage('compiler');
   }, []);
 
-  // ✅ Streak payment handler
+  // ✅ Streak payment handler — ab dynamic price use hogi (Firestore se)
   const handleStreakPayment = () => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); setCurrentPage('login'); return; }
-    initiatePayment(99, [], async (response) => {
+    initiatePayment(streakPrice, [], async (response) => {
       localStorage.setItem(`streak_purchased_${user.uid}`, 'true');
       localStorage.setItem(`streak_start_${user.uid}`, new Date().toISOString());
       localStorage.setItem(`streak_count_${user.uid}`, '0');
@@ -536,6 +548,7 @@ function App() {
                   isMobile={window.innerWidth <= 768}
                   isDark={isDark}
                   user={user}
+                  setCurrentPage={setCurrentPage}
                 />
               )}
               {/* ✅ Admin Streak — sirf luckyfaizu3@gmail.com ke liye */}

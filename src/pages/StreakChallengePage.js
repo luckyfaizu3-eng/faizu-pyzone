@@ -140,7 +140,7 @@ const StreakChallengePage = ({ isDark, user, setCurrentPage, onBuy }) => {
   ];
 
   return (
-    <div style={{ minHeight:'100vh', background:isDark?'linear-gradient(160deg,#060b14 0%,#0d1117 50%,#0a0f1e 100%)':'linear-gradient(160deg,#f5f7ff 0%,#ffffff 50%,#fffaf5 100%)', fontFamily:"'Syne',sans-serif", color:textPrimary, paddingTop:mobile?'72px':'80px', paddingBottom:'60px', paddingLeft:mobile?'14px':'24px', paddingRight:mobile?'14px':'24px', boxSizing:'border-box', overflowX:'hidden' }}>
+    <div style={{ minHeight:'100vh', background:isDark?'linear-gradient(160deg,#060b14 0%,#0d1117 50%,#0a0f1e 100%)':'linear-gradient(160deg,#f5f7ff 0%,#ffffff 50%,#fffaf5 100%)', fontFamily:"'Syne',sans-serif", color:textPrimary, paddingTop:mobile?'100px':'80px', paddingBottom:'60px', paddingLeft:mobile?'14px':'24px', paddingRight:mobile?'14px':'24px', boxSizing:'border-box', overflowX:'hidden' }}>
       <div style={{ maxWidth:'900px', margin:'0 auto', width:'100%' }}>
 
         {/* BADGE */}
