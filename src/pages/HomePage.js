@@ -4,9 +4,6 @@ import { useTheme, useAuth } from '../App';
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
-/* ─────────────────────────────────────────
-   PERF: Single shared IntersectionObserver
-───────────────────────────────────────── */
 function useScrollReveal(threshold = 0.08) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
@@ -22,9 +19,6 @@ function useScrollReveal(threshold = 0.08) {
   return [ref, visible];
 }
 
-/* ─────────────────────────────────────────
-   LIVE STUDENT COUNT
-───────────────────────────────────────── */
 function useLiveStudentCount() {
   const [count, setCount] = useState(213);
   const target = useRef(213);
@@ -52,9 +46,6 @@ function useLiveStudentCount() {
   return count;
 }
 
-/* ─────────────────────────────────────────
-   SCROLL PROGRESS BAR — lightweight
-───────────────────────────────────────── */
 function ScrollProgressBar({ isDark }) {
   const [p, setP] = useState(0);
   useEffect(() => {
@@ -73,9 +64,6 @@ function ScrollProgressBar({ isDark }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   CARD BASE — no blur, simple border
-───────────────────────────────────────── */
 const card = (isDark, extra = {}) => ({
   background: isDark ? 'rgba(15,23,42,0.95)' : '#ffffff',
   border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e8eaf0',
@@ -84,9 +72,6 @@ const card = (isDark, extra = {}) => ({
   ...extra,
 });
 
-/* ─────────────────────────────────────────
-   TOP 3 RANKERS
-───────────────────────────────────────── */
 function TopRankersSection({ isDark, isMobile }) {
   const [rankers, setRankers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -120,7 +105,6 @@ function TopRankersSection({ isDark, isMobile }) {
     <section ref={ref} style={{ padding: isMobile?'0 16px 36px':'0 24px 56px', maxWidth:'1000px', margin:'0 auto',
       opacity: visible?1:0, transform: visible?'translateY(0)':'translateY(20px)',
       transition:'opacity 0.5s ease, transform 0.5s ease' }}>
-
       <div style={{ textAlign:'center', marginBottom: isMobile?'20px':'32px' }}>
         <div style={{ display:'inline-flex', alignItems:'center', gap:'7px', background: isDark?'rgba(245,158,11,0.1)':'rgba(245,158,11,0.07)', border:'1px solid rgba(245,158,11,0.28)', borderRadius:'50px', padding:'4px 14px', marginBottom:'10px', fontSize:'0.7rem', fontWeight:'800', color:'#f59e0b', letterSpacing:'0.1em' }}>
           <span style={{ width:6, height:6, borderRadius:'50%', background:'#f59e0b', display:'inline-block', animation:'dot 1.4s ease-in-out infinite' }} />
@@ -129,7 +113,6 @@ function TopRankersSection({ isDark, isMobile }) {
         <h2 style={{ fontSize: isMobile?'1.45rem':'2.2rem', fontWeight:'900', background:'linear-gradient(135deg,#f59e0b,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', margin:'0 0 6px', letterSpacing:'-0.02em' }}>Top Python Performers 🏆</h2>
         <p style={{ fontSize:'0.85rem', color: isDark?'#64748b':'#94a3b8', margin:0 }}>Real students, real scores — updated live</p>
       </div>
-
       {loading ? <div style={{ textAlign:'center', padding:'32px', color: isDark?'#475569':'#94a3b8' }}>Loading...</div> : (
         <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap: isMobile?'10px':'16px' }}>
           {rankers.map((r,i) => (
@@ -163,9 +146,6 @@ function TopRankersSection({ isDark, isMobile }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   STUDENT REVIEWS
-───────────────────────────────────────── */
 const MAX_REVIEWS = 200;
 
 function DeleteReviewModal({ review, isDark, onConfirm, onCancel }) {
@@ -202,12 +182,10 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
 
   useEffect(() => { fetchReviews(); }, [fetchReviews]);
 
-  // No auto-scroll needed — vertical layout
-
   const handleDelete = async () => {
     if (!deleteTarget) return;
     await deleteDoc(doc(db, 'studentReviews', deleteTarget.id));
-    window.showToast?.(`✅ Deleted!`, 'success');
+    window.showToast?.('✅ Deleted!', 'success');
     setDeleteTarget(null);
     await fetchReviews();
   };
@@ -220,7 +198,6 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
       opacity: visible?1:0, transform: visible?'translateY(0)':'translateY(20px)',
       transition:'opacity 0.5s ease, transform 0.5s ease' }}>
       {deleteTarget && <DeleteReviewModal review={deleteTarget} isDark={isDark} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
-
       <div style={{ textAlign:'center', marginBottom: isMobile?'20px':'32px' }}>
         <div style={{ display:'inline-flex', alignItems:'center', gap:'7px', background: isDark?'rgba(16,185,129,0.1)':'rgba(16,185,129,0.07)', border:'1px solid rgba(16,185,129,0.28)', borderRadius:'50px', padding:'4px 14px', marginBottom:'10px', fontSize:'0.7rem', fontWeight:'800', color:'#10b981', letterSpacing:'0.1em' }}>
           <span style={{ width:6, height:6, borderRadius:'50%', background:'#10b981', display:'inline-block', animation:'dot 1.4s ease-in-out infinite' }} />
@@ -232,31 +209,17 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
           {isAdmin && <span style={{ marginLeft:'8px', color:'#6366f1', fontWeight:'700' }}>({reviews.length}/{MAX_REVIEWS})</span>}
         </p>
       </div>
-
       {loading ? (
         <div style={{ textAlign:'center', padding:'32px', color: isDark?'#475569':'#94a3b8' }}>Loading...</div>
       ) : reviews.length === 0 ? (
         canAdd && <div style={{ textAlign:'center', padding:'32px', background: isDark?'rgba(255,255,255,0.03)':'#f8fafc', borderRadius:'16px', border: isDark?'1px dashed rgba(255,255,255,0.1)':'1px dashed #e2e8f0', color: isDark?'#475569':'#94a3b8', fontSize:'0.88rem' }}>No reviews yet. Be the first! 👇</div>
       ) : (
-        <div>
-          {/* Vertical stack — all reviews one below other */}
-          <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-            {reviews.map((rev) => (
-              <ReviewCard
-                key={rev.id}
-                review={rev}
-                isDark={isDark}
-                isMobile={isMobile}
-                isAdmin={isAdmin}
-                user={user}
-                onDeleteClick={() => setDeleteTarget(rev)}
-              />
-            ))}
-          </div>
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {reviews.map((rev) => (
+            <ReviewCard key={rev.id} review={rev} isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} onDeleteClick={() => setDeleteTarget(rev)} />
+          ))}
         </div>
       )}
-
-      {/* Write Review button — any logged-in user */}
       {canAdd && canAddMore && (
         <div style={{ textAlign:'center', marginTop:'20px' }}>
           <button onClick={() => setShowForm(!showForm)} style={{ background: showForm?'transparent':'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm? isDark?'2px solid rgba(255,255,255,0.12)':'2px solid #e2e8f0':'none', color: showForm? isDark?'#94a3b8':'#64748b':'#fff', padding:'9px 26px', borderRadius:'50px', fontWeight:'700', fontSize:'0.86rem', cursor:'pointer', boxShadow: showForm?'none':'0 4px 16px rgba(99,102,241,0.3)', transition:'all 0.2s ease' }}>
@@ -264,19 +227,11 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
           </button>
         </div>
       )}
-
       {!user && reviews.length > 0 && (
         <div style={{ textAlign:'center', marginTop:'14px' }}>
           <span style={{ fontSize:'0.78rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>🔐 Login to write your own review</span>
         </div>
       )}
-
-      {isAdmin && !canAddMore && (
-        <div style={{ textAlign:'center', marginTop:'16px' }}>
-          <span style={{ fontSize:'0.8rem', fontWeight:'700', color:'#10b981' }}>✅ Max reviews reached</span>
-        </div>
-      )}
-
       {canAdd && showForm && canAddMore && (
         <AddReviewForm isDark={isDark} isMobile={isMobile} user={user}
           onSave={async (data) => {
@@ -297,10 +252,8 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-
   const h = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
   const inp = { width:'100%', padding:'9px 12px', border: isDark?'1px solid rgba(255,255,255,0.1)':'1px solid #e2e8f0', borderRadius:'10px', fontSize:'0.86rem', fontWeight:'600', background: isDark?'rgba(255,255,255,0.04)':'#f8fafc', color: isDark?'#e2e8f0':'#1e293b', outline:'none', boxSizing:'border-box' };
-
   const handleSave = async () => {
     if (!form.name.trim() || !form.text.trim()) { window.showToast?.('⚠️ Name and review required!', 'warning'); return; }
     if (!photoFile) { window.showToast?.('⚠️ Please add your photo!', 'warning'); return; }
@@ -319,20 +272,16 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
     await onSave({ ...form, photo: photoUrl, userEmail: user?.email||'' });
     setSaving(false);
   };
-
   return (
     <div style={{ marginTop:'20px', ...card(isDark), padding: isMobile?'18px 14px':'24px 20px', borderColor: isDark?'rgba(99,102,241,0.2)':'rgba(99,102,241,0.15)' }}>
       <div style={{ height:'2px', background:'linear-gradient(90deg,#6366f1,#ec4899)', borderRadius:'18px 18px 0 0', margin: isMobile?'-18px -14px 18px':'-24px -20px 20px' }} />
       <h3 style={{ fontSize:'0.95rem', fontWeight:'900', color: isDark?'#e2e8f0':'#1e293b', margin:'0 0 16px' }}>✍️ Write Your Review</h3>
-
-      {/* Photo upload */}
       <label style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 12px', borderRadius:'10px', cursor:'pointer', border: isDark?'1.5px dashed rgba(255,255,255,0.12)':'1.5px dashed rgba(99,102,241,0.25)', marginBottom:'12px', background:'transparent' }}>
         {photoPreview
           ? <><img src={photoPreview} alt="" style={{ width:'42px', height:'42px', borderRadius:'50%', objectFit:'cover', flexShrink:0 }} /><span style={{ fontSize:'0.82rem', fontWeight:'700', color: isDark?'#e2e8f0':'#1e293b' }}>✅ Photo selected</span></>
           : <><div style={{ width:'42px', height:'42px', borderRadius:'50%', background: isDark?'rgba(255,255,255,0.05)':'rgba(99,102,241,0.07)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.3rem', flexShrink:0 }}>📷</div><span style={{ fontSize:'0.82rem', fontWeight:'700', color: isDark?'#94a3b8':'#6366f1' }}>Add Your Photo *</span></>}
         <input type="file" accept="image/*" onChange={e => { const f=e.target.files[0]; if(!f) return; setPhotoFile(f); const r=new FileReader(); r.onloadend=()=>setPhotoPreview(r.result); r.readAsDataURL(f); }} style={{ display:'none' }} />
       </label>
-
       <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'1fr 1fr', gap:'8px', marginBottom:'8px' }}>
         <input placeholder="Your Name *" value={form.name} onChange={h('name')} style={inp} />
         <input placeholder="City / Address" value={form.address} onChange={h('address')} style={inp} />
@@ -340,13 +289,11 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
         <input placeholder="Instagram (e.g. @yourhandle)" value={form.instagram||''} onChange={h('instagram')} style={inp} />
       </div>
       <textarea placeholder="Share your experience *" value={form.text} onChange={h('text')} rows={3} style={{ ...inp, resize:'vertical', marginBottom:'10px' }} />
-
       <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'16px' }}>
         <span style={{ fontSize:'0.8rem', fontWeight:'700', color: isDark?'#94a3b8':'#64748b' }}>Rating:</span>
         {[1,2,3,4,5].map(s => <button key={s} onClick={() => setForm(f=>({...f,stars:s}))} style={{ background:'none', border:'none', cursor:'pointer', padding:'1px' }}><Star size={20} fill={s<=form.stars?'#f59e0b':'none'} color={s<=form.stars?'#f59e0b':'#cbd5e1'} /></button>)}
         <span style={{ fontSize:'0.78rem', color:'#f59e0b', fontWeight:'700' }}>{form.stars}/5</span>
       </div>
-
       <div style={{ display:'flex', gap:'8px' }}>
         <button onClick={handleSave} disabled={saving} style={{ flex:1, padding:'11px', background: saving?'rgba(99,102,241,0.5)':'linear-gradient(135deg,#6366f1,#ec4899)', border:'none', borderRadius:'10px', color:'#fff', fontWeight:'800', fontSize:'0.88rem', cursor: saving?'not-allowed':'pointer' }}>
           {uploading?'📤 Uploading...':saving?'⏳ Saving...':'✅ Submit Review'}
@@ -357,10 +304,6 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
   );
 }
 
-
-/* ─────────────────────────────────────────
-   REVIEW CARD — Instagram style
-───────────────────────────────────────── */
 function BlueTick() {
   return (
     <span style={{ display:'inline-flex', alignItems:'center', flexShrink:0, marginLeft:'3px', lineHeight:1 }}>
@@ -394,9 +337,7 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
 
   const fetchComments = useCallback(async () => {
     try {
-      const snap = await getDocs(
-        query(collection(db, 'studentReviews', review.id, 'comments'), orderBy('createdAt', 'asc'))
-      );
+      const snap = await getDocs(query(collection(db, 'studentReviews', review.id, 'comments'), orderBy('createdAt', 'asc')));
       setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch(e) { console.error(e); }
     finally { setLoadingCmts(false); }
@@ -422,55 +363,27 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
     finally { setPosting(false); }
   };
 
-  const inp = {
-    flex:1, padding:'8px 12px',
-    border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
-    borderRadius:'20px', fontSize:'0.82rem', fontWeight:'500',
-    background: isDark ? 'rgba(255,255,255,0.05)' : '#f8fafc',
-    color: isDark ? '#e2e8f0' : '#1e293b', outline:'none',
-  };
+  const inp = { flex:1, padding:'8px 12px', border: isDark?'1px solid rgba(255,255,255,0.1)':'1px solid #e2e8f0', borderRadius:'20px', fontSize:'0.82rem', fontWeight:'500', background: isDark?'rgba(255,255,255,0.05)':'#f8fafc', color: isDark?'#e2e8f0':'#1e293b', outline:'none' };
 
   return (
-    <div style={{
-      position: 'relative',
-      overflow: 'hidden',
-      borderRadius: '20px',
-      background: isDark
-        ? 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)'
-        : 'linear-gradient(135deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.6) 100%)',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
-      border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.9)',
-      boxShadow: isDark
-        ? '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)'
-        : '0 8px 32px rgba(99,102,241,0.12), inset 0 1px 0 rgba(255,255,255,0.9)',
-      transition: 'transform 0.25s ease, box-shadow 0.25s ease',
-    }}
-    onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow= isDark?'0 16px 48px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)':'0 16px 48px rgba(99,102,241,0.18), inset 0 1px 0 rgba(255,255,255,1)'; }}
-    onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow= isDark?'0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)':'0 8px 32px rgba(99,102,241,0.12), inset 0 1px 0 rgba(255,255,255,0.9)'; }}
-    >
+    <div style={{ position:'relative', overflow:'hidden', borderRadius:'20px', background: isDark?'linear-gradient(135deg,rgba(255,255,255,0.06),rgba(255,255,255,0.02))':'linear-gradient(135deg,rgba(255,255,255,0.85),rgba(255,255,255,0.6))', backdropFilter:'blur(20px)', WebkitBackdropFilter:'blur(20px)', border: isDark?'1px solid rgba(255,255,255,0.1)':'1px solid rgba(255,255,255,0.9)', boxShadow: isDark?'0 8px 32px rgba(0,0,0,0.4)':'0 8px 32px rgba(99,102,241,0.12)', transition:'transform 0.25s ease, box-shadow 0.25s ease' }}
+      onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; }}>
       <div style={{ position:'absolute', top:0, left:0, right:0, height:'2.5px', background:'linear-gradient(90deg,#6366f1,#a855f7,#ec4899)', pointerEvents:'none', borderRadius:'20px 20px 0 0' }} />
       <div style={{ padding: isMobile?'18px 16px':'26px 28px' }}>
-
-        {/* ── Header: pic + name + tick + instagram + date ── */}
-        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px', paddingTop: isAdmin ? '22px' : '0', position:'relative' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px', paddingTop: isAdmin?'22px':'0', position:'relative' }}>
           {isAdmin && (
             <button onClick={onDeleteClick} style={{ position:'absolute', top:'-22px', right:0, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', borderRadius:'8px', padding:'3px 9px', fontSize:'0.68rem', fontWeight:'800', color:'#ef4444', cursor:'pointer' }}>🗑️ Delete</button>
           )}
-          {/* Profile pic */}
           <div style={{ width: isMobile?'44px':'50px', height: isMobile?'44px':'50px', borderRadius:'50%', overflow:'hidden', border: isDark?'2px solid rgba(255,255,255,0.15)':'2px solid rgba(99,102,241,0.25)', flexShrink:0, background:'linear-gradient(135deg,#6366f120,#ec489920)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.25rem' }}>
-            {review.photo
-              ? <img src={review.photo} alt={review.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e => { e.target.style.display='none'; }} />
-              : '👤'}
+            {review.photo ? <img src={review.photo} alt={review.name} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e => { e.target.style.display='none'; }} /> : '👤'}
           </div>
-          {/* Name + tick + insta + time */}
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:'4px', flexWrap:'wrap' }}>
               <span style={{ fontSize: isMobile?'0.9rem':'0.96rem', fontWeight:'800', color: isDark?'#e2e8f0':'#0f172a' }}>{review.name}</span>
               <BlueTick />
               {review.instagram && (
-                <a href={`https://instagram.com/${review.instagram.replace('@','')}`} target="_blank" rel="noopener noreferrer"
-                  style={{ fontSize:'0.72rem', fontWeight:'700', color:'#3897f0', textDecoration:'none', marginLeft:'2px' }}>
+                <a href={`https://instagram.com/${review.instagram.replace('@','')}`} target="_blank" rel="noopener noreferrer" style={{ fontSize:'0.72rem', fontWeight:'700', color:'#3897f0', textDecoration:'none', marginLeft:'2px' }}>
                   @{review.instagram.replace('@','')}
                 </a>
               )}
@@ -481,29 +394,20 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
               </div>
               <span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>·</span>
               <span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>{timeAgo(review.createdAt)}</span>
-              {(review.address || review.course) && <span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>·</span>}
-              {review.address && <span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>📍 {review.address}</span>}
-              {review.address && review.course && <span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8' }}>·</span>}
-              {review.course && <span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>🎓 {review.course}</span>}
+              {review.address && <><span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>·</span><span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>📍 {review.address}</span></>}
+              {review.course && <><span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8' }}>·</span><span style={{ fontSize:'0.68rem', color: isDark?'#475569':'#94a3b8', fontWeight:'600' }}>🎓 {review.course}</span></>}
             </div>
           </div>
         </div>
-
-        {/* ── Review text ── */}
         <p style={{ fontSize: isMobile?'0.88rem':'0.98rem', color: isDark?'#cbd5e1':'#334155', lineHeight:1.7, fontWeight:'500', margin:0, fontStyle:'italic' }}>"{review.text}"</p>
       </div>
-
-      {/* ── Comments divider ── */}
       <div style={{ borderTop: isDark?'1px solid rgba(255,255,255,0.08)':'1px solid rgba(99,102,241,0.08)', padding: isMobile?'12px 16px':'14px 28px' }}>
-        {/* Toggle comments */}
         {!loadingCmts && comments.length > 0 && (
-          <button onClick={() => setShowCmts(s => !s)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'0.78rem', fontWeight:'700', color: isDark?'#6366f1':'#6366f1', padding:0, marginBottom: showCmts?'12px':'0' }}>
-            💬 {showCmts ? 'Hide' : 'View'} {comments.length} comment{comments.length!==1?'s':''}
+          <button onClick={() => setShowCmts(s => !s)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'0.78rem', fontWeight:'700', color:'#6366f1', padding:0, marginBottom: showCmts?'12px':'0' }}>
+            💬 {showCmts?'Hide':'View'} {comments.length} comment{comments.length!==1?'s':''}
           </button>
         )}
-        {loadingCmts && <span style={{ fontSize:'0.72rem', color: isDark?'#475569':'#94a3b8' }}>Loading comments...</span>}
-
-        {/* Comments list */}
+        {loadingCmts && <span style={{ fontSize:'0.72rem', color: isDark?'#475569':'#94a3b8' }}>Loading...</span>}
         {showCmts && (
           <div style={{ display:'flex', flexDirection:'column', gap:'10px', marginBottom:'12px' }}>
             {comments.map(c => (
@@ -522,21 +426,13 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
             ))}
           </div>
         )}
-
-        {/* Comment input */}
         {user ? (
           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
             <div style={{ width:'28px', height:'28px', borderRadius:'50%', overflow:'hidden', flexShrink:0, background:'linear-gradient(135deg,#6366f115,#ec489915)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'0.85rem' }}>
               {user.photoURL ? <img src={user.photoURL} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : '👤'}
             </div>
-            <input
-              value={commentText}
-              onChange={e => setCommentText(e.target.value)}
-              onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); postComment(); } }}
-              placeholder="Write a comment..."
-              style={inp}
-            />
-            <button onClick={postComment} disabled={posting || !commentText.trim()} style={{ padding:'7px 14px', borderRadius:'20px', background: commentText.trim() ? 'linear-gradient(135deg,#6366f1,#ec4899)' : isDark?'rgba(255,255,255,0.06)':'#e2e8f0', border:'none', color: commentText.trim() ? '#fff' : isDark?'#475569':'#94a3b8', fontWeight:'700', fontSize:'0.78rem', cursor: commentText.trim()?'pointer':'default', transition:'all 0.2s ease' }}>
+            <input value={commentText} onChange={e => setCommentText(e.target.value)} onKeyDown={e => { if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); postComment(); } }} placeholder="Write a comment..." style={inp} />
+            <button onClick={postComment} disabled={posting || !commentText.trim()} style={{ padding:'7px 14px', borderRadius:'20px', background: commentText.trim()?'linear-gradient(135deg,#6366f1,#ec4899)': isDark?'rgba(255,255,255,0.06)':'#e2e8f0', border:'none', color: commentText.trim()?'#fff': isDark?'#475569':'#94a3b8', fontWeight:'700', fontSize:'0.78rem', cursor: commentText.trim()?'pointer':'default', transition:'all 0.2s ease' }}>
               {posting ? '...' : 'Post'}
             </button>
           </div>
@@ -548,9 +444,6 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
   );
 }
 
-/* ─────────────────────────────────────────
-   TIMELINE — clean, no heavy effects
-───────────────────────────────────────── */
 function Timeline({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
   const events = [
@@ -560,63 +453,26 @@ function Timeline({ isDark, isMobile }) {
   ];
   const DOT = isMobile ? 44 : 48;
   const HALF = DOT / 2;
-
   return (
     <section ref={ref} style={{ padding: isMobile?'0 16px 56px':'0 24px 72px', maxWidth:'860px', margin:'0 auto' }}>
-      <div style={{ textAlign:'center', marginBottom: isMobile?'28px':'48px',
-        opacity: visible?1:0, transform: visible?'translateY(0)':'translateY(16px)',
-        transition:'opacity 0.5s ease, transform 0.5s ease' }}>
+      <div style={{ textAlign:'center', marginBottom: isMobile?'28px':'48px', opacity: visible?1:0, transform: visible?'translateY(0)':'translateY(16px)', transition:'opacity 0.5s ease, transform 0.5s ease' }}>
         <div style={{ display:'inline-flex', alignItems:'center', gap:'7px', background: isDark?'rgba(99,102,241,0.1)':'rgba(99,102,241,0.06)', border:'1px solid rgba(99,102,241,0.22)', borderRadius:'40px', padding:'5px 14px', marginBottom:'12px' }}>
           <span style={{ fontSize:'0.7rem', fontWeight:'800', color:'#6366f1', letterSpacing:'0.1em' }}>OUR STORY · 2026</span>
         </div>
         <h2 style={{ fontSize: isMobile?'1.55rem':'2.4rem', fontWeight:'900', background:'linear-gradient(135deg,#1e40af,#6366f1,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', margin:'0 0 6px', letterSpacing:'-0.02em' }}>From Idea to Reality</h2>
         <p style={{ color: isDark?'#64748b':'#94a3b8', fontSize:'0.85rem', margin:0 }}>Every milestone that brought PySkill to life</p>
       </div>
-
       <div style={{ position:'relative' }}>
-        {/* Vertical line */}
-        <div style={{
-          position:'absolute',
-          left: isMobile?`${HALF-1}px`:'50%',
-          transform: isMobile?'none':'translateX(-50%)',
-          top:`${HALF}px`, bottom:`${HALF}px`,
-          width:'2px',
-          background: isDark
-            ? 'linear-gradient(180deg,rgba(167,139,250,0.7),rgba(99,102,241,0.8),rgba(236,72,153,0.7))'
-            : 'linear-gradient(180deg,rgba(167,139,250,0.45),rgba(99,102,241,0.5),rgba(236,72,153,0.45))',
-          opacity: visible?1:0, transition:'opacity 0.8s ease 0.4s', borderRadius:'2px', zIndex:0,
-        }} />
-
+        <div style={{ position:'absolute', left: isMobile?`${HALF-1}px`:'50%', transform: isMobile?'none':'translateX(-50%)', top:`${HALF}px`, bottom:`${HALF}px`, width:'2px', background: isDark?'linear-gradient(180deg,rgba(167,139,250,0.7),rgba(99,102,241,0.8),rgba(236,72,153,0.7))':'linear-gradient(180deg,rgba(167,139,250,0.45),rgba(99,102,241,0.5),rgba(236,72,153,0.45))', opacity: visible?1:0, transition:'opacity 0.8s ease 0.4s', borderRadius:'2px', zIndex:0 }} />
         {events.map((evt, i) => {
           const isLeft = !isMobile && i % 2 === 0;
           const delay = `${0.25 + i * 0.15}s`;
           return (
-            <div key={i} style={{
-              display:'flex',
-              flexDirection: isMobile?'row': isLeft?'row':'row-reverse',
-              alignItems:'flex-start',
-              marginBottom: i < events.length-1 ? (isMobile?'24px':'40px') : 0,
-              opacity: visible?1:0,
-              transform: visible?'translateY(0)':'translateY(20px)',
-              transition:`opacity 0.45s ease ${delay}, transform 0.45s ease ${delay}`,
-            }}>
+            <div key={i} style={{ display:'flex', flexDirection: isMobile?'row': isLeft?'row':'row-reverse', alignItems:'flex-start', marginBottom: i < events.length-1 ? (isMobile?'24px':'40px') : 0, opacity: visible?1:0, transform: visible?'translateY(0)':'translateY(20px)', transition:`opacity 0.45s ease ${delay}, transform 0.45s ease ${delay}` }}>
               {!isMobile && <div style={{ flex:1 }} />}
-
-              {/* Dot */}
-              <div style={{
-                flexShrink:0, width:`${DOT}px`, height:`${DOT}px`,
-                margin: isMobile?`3px 14px 0 0`:`8px ${-HALF}px 0`,
-                zIndex:2, position:'relative',
-                background:`linear-gradient(135deg,${evt.color},${i===2?'#f472b6':'#a78bfa'})`,
-                borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center',
-                fontSize: isMobile?'1.2rem':'1.35rem',
-                boxShadow:`0 0 0 ${isMobile?3:4}px ${isDark?'#0f172a':'#eef1ff'}, 0 0 0 ${isMobile?5:6}px ${evt.color}35`,
-              }}>{evt.icon}</div>
-
-              {/* Card */}
+              <div style={{ flexShrink:0, width:`${DOT}px`, height:`${DOT}px`, margin: isMobile?`3px 14px 0 0`:`8px ${-HALF}px 0`, zIndex:2, position:'relative', background:`linear-gradient(135deg,${evt.color},${i===2?'#f472b6':'#a78bfa'})`, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile?'1.2rem':'1.35rem', boxShadow:`0 0 0 ${isMobile?3:4}px ${isDark?'#0f172a':'#eef1ff'}, 0 0 0 ${isMobile?5:6}px ${evt.color}35` }}>{evt.icon}</div>
               <div style={{ flex:1, maxWidth: isMobile?`calc(100% - ${DOT+14}px)`:'44%' }}>
-                <div style={{ ...card(isDark), padding: isMobile?'16px 14px':'20px 22px', position:'relative', overflow:'hidden',
-                  boxShadow: isDark?'0 4px 20px rgba(0,0,0,0.3)':'0 4px 20px rgba(99,102,241,0.08)' }}>
+                <div style={{ ...card(isDark), padding: isMobile?'16px 14px':'20px 22px', position:'relative', overflow:'hidden', boxShadow: isDark?'0 4px 20px rgba(0,0,0,0.3)':'0 4px 20px rgba(99,102,241,0.08)' }}>
                   <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:`linear-gradient(90deg,transparent,${evt.color},transparent)` }} />
                   <div style={{ display:'inline-flex', alignItems:'center', gap:'5px', background:`${evt.color}18`, border:`1px solid ${evt.color}35`, borderRadius:'20px', padding:'3px 10px', marginBottom:'8px' }}>
                     <span style={{ width:4, height:4, borderRadius:'50%', background:evt.color, display:'inline-block', animation:'dot 1.6s ease-in-out infinite' }} />
@@ -628,7 +484,6 @@ function Timeline({ isDark, isMobile }) {
                   <p style={{ fontSize: isMobile?'0.76rem':'0.82rem', color: isDark?'#94a3b8':'#475569', margin:0, lineHeight:1.6 }}>{evt.desc}</p>
                 </div>
               </div>
-
               {!isMobile && <div style={{ flex:1 }} />}
             </div>
           );
@@ -638,9 +493,6 @@ function Timeline({ isDark, isMobile }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   MAIN HOME PAGE
-───────────────────────────────────────── */
 export default function HomePage({ setCurrentPage }) {
   const [txt, setTxt] = useState('');
   const [idx, setIdx] = useState(0);
@@ -690,18 +542,26 @@ export default function HomePage({ setCurrentPage }) {
     ...extra,
   });
 
+  // ✅ ACTION CARDS — Game button added!
+  const actionCards = [
+    { icon:'📚', label:'Browse Notes',    page:'products',    g:'linear-gradient(135deg,#6366f1,#8b5cf6)', glow:'rgba(99,102,241,0.3)',  c:'#6366f1' },
+    { icon:'🐍', label:'Mock Tests',      page:'mocktests',   g:'linear-gradient(135deg,#10b981,#34d399)', glow:'rgba(16,185,129,0.3)',  c:'#10b981' },
+    { icon:'🔥', label:'30-Day Streak',   page:'streak',      g:'linear-gradient(135deg,#ff6b00,#ff3d00)', glow:'rgba(255,107,0,0.35)', c:'#ff6b00' },
+    { icon:'🎮', label:'Brain Trap',      page:'braintrap',   g:'linear-gradient(135deg,#f59e0b,#ef4444)', glow:'rgba(245,158,11,0.35)', c:'#f59e0b' },
+    { icon:'📦', label:'My Orders',       page:'orders',      g:'linear-gradient(135deg,#f59e0b,#fbbf24)', glow:'rgba(245,158,11,0.3)',  c:'#f59e0b' },
+    { icon:'🏆', label:'Leaderboard',     page:'leaderboard', g:'linear-gradient(135deg,#8b5cf6,#d946ef)', glow:'rgba(139,92,246,0.3)',  c:'#8b5cf6' },
+    user
+      ? { icon:'👤', label:'Logout', page:null, g:'linear-gradient(135deg,#ef4444,#dc2626)', glow:'rgba(239,68,68,0.3)', c:'#ef4444', action:logout }
+      : { icon:'🔐', label:'Login',  page:'login', g:'linear-gradient(135deg,#ec4899,#f472b6)', glow:'rgba(236,72,153,0.3)', c:'#ec4899' },
+  ];
+
   return (
     <div style={{ paddingTop: isMobile?'62px':'70px', minHeight:'100vh', overflowX:'hidden' }}>
       <ScrollProgressBar isDark={isDark} />
 
       {/* ═══ HERO ═══ */}
-      <section style={{ padding: isMobile?'36px 16px 28px':'80px 24px 60px', textAlign:'center', position:'relative',
-        background: isDark?'linear-gradient(180deg,rgba(15,10,60,0.7) 0%,transparent 100%)':'linear-gradient(180deg,#eef1ff 0%,transparent 100%)',
-        borderRadius:'0 0 32px 32px' }}>
-
-        {/* Badge */}
-        <div style={{ display:'inline-flex', alignItems:'center', gap:'8px', background: isDark?'rgba(99,102,241,0.08)':'rgba(99,102,241,0.05)', border:'1px solid rgba(99,102,241,0.2)', borderRadius:'50px', padding:'6px 16px 6px 8px', marginBottom: isMobile?'18px':'24px',
-          opacity: mounted?1:0, transform: mounted?'translateY(0)':'translateY(-16px)', transition:'opacity 0.5s ease, transform 0.5s ease' }}>
+      <section style={{ padding: isMobile?'36px 16px 28px':'80px 24px 60px', textAlign:'center', position:'relative', background: isDark?'linear-gradient(180deg,rgba(15,10,60,0.7) 0%,transparent 100%)':'linear-gradient(180deg,#eef1ff 0%,transparent 100%)', borderRadius:'0 0 32px 32px' }}>
+        <div style={{ display:'inline-flex', alignItems:'center', gap:'8px', background: isDark?'rgba(99,102,241,0.08)':'rgba(99,102,241,0.05)', border:'1px solid rgba(99,102,241,0.2)', borderRadius:'50px', padding:'6px 16px 6px 8px', marginBottom: isMobile?'18px':'24px', opacity: mounted?1:0, transform: mounted?'translateY(0)':'translateY(-16px)', transition:'opacity 0.5s ease, transform 0.5s ease' }}>
           <div style={{ width:'28px', height:'28px', background:'linear-gradient(135deg,#6366f1,#ec4899)', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px' }}>🎓</div>
           <span style={{ fontSize:'0.8rem', fontWeight:'800', color:'#6366f1' }}>PySkill</span>
           <div style={{ width:'1px', height:'12px', background:'rgba(99,102,241,0.2)' }} />
@@ -709,23 +569,15 @@ export default function HomePage({ setCurrentPage }) {
           <span style={{ width:'6px', height:'6px', borderRadius:'50%', background:'#10b981', display:'inline-block', animation:'dot 1.4s ease-in-out infinite' }} />
         </div>
 
-        {/* Typing H1 */}
-        <h1 style={{ fontSize: isMobile?'1.9rem':'3.6rem', fontWeight:'900', marginBottom:'10px',
-          background:'linear-gradient(135deg,#1e40af,#6366f1 45%,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
-          lineHeight:1.15, minHeight: isMobile?'50px':'90px', display:'flex', alignItems:'center', justifyContent:'center',
-          padding:'0 8px', letterSpacing:'-0.02em',
-          opacity: mounted?1:0, transform: mounted?'translateY(0)':'translateY(20px)', transition:'opacity 0.5s ease 0.15s, transform 0.5s ease 0.15s' }}>
+        <h1 style={{ fontSize: isMobile?'1.9rem':'3.6rem', fontWeight:'900', marginBottom:'10px', background:'linear-gradient(135deg,#1e40af,#6366f1 45%,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', lineHeight:1.15, minHeight: isMobile?'50px':'90px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 8px', letterSpacing:'-0.02em', opacity: mounted?1:0, transform: mounted?'translateY(0)':'translateY(20px)', transition:'opacity 0.5s ease 0.15s, transform 0.5s ease 0.15s' }}>
           {txt}<span style={{ borderRight:'3px solid #6366f1', animation:'blink 0.7s infinite', marginLeft:'3px', height: isMobile?'28px':'52px', display:'inline-block', verticalAlign:'middle' }} />
         </h1>
 
-        <p style={{ fontSize: isMobile?'0.88rem':'1.1rem', color: isDark?'#94a3b8':'#64748b', maxWidth:'520px', margin:'0 auto 20px', lineHeight:1.65, fontWeight:'500',
-          opacity: mounted?1:0, transform: mounted?'translateY(0)':'translateY(14px)', transition:'opacity 0.5s ease 0.28s, transform 0.5s ease 0.28s' }}>
+        <p style={{ fontSize: isMobile?'0.88rem':'1.1rem', color: isDark?'#94a3b8':'#64748b', maxWidth:'520px', margin:'0 auto 20px', lineHeight:1.65, fontWeight:'500', opacity: mounted?1:0, transform: mounted?'translateY(0)':'translateY(14px)', transition:'opacity 0.5s ease 0.28s, transform 0.5s ease 0.28s' }}>
           Quality study materials for Python & Job Prep — delivered instantly after payment.
         </p>
 
-        {/* Trust badges */}
-        <div style={{ display:'flex', gap:'7px', justifyContent:'center', flexWrap:'wrap', marginBottom:'24px',
-          opacity: mounted?1:0, transition:'opacity 0.5s ease 0.38s' }}>
+        <div style={{ display:'flex', gap:'7px', justifyContent:'center', flexWrap:'wrap', marginBottom:'24px', opacity: mounted?1:0, transition:'opacity 0.5s ease 0.38s' }}>
           {[
             { icon:Shield, color:'#10b981', text:'Secure Payment' },
             { icon:Zap,    color:'#6366f1', text:'Instant Access' },
@@ -738,7 +590,6 @@ export default function HomePage({ setCurrentPage }) {
           ))}
         </div>
 
-        {/* CTA */}
         <div style={{ opacity: mounted?1:0, transition:'opacity 0.5s ease 0.48s' }}>
           <button onClick={() => setCurrentPage('products')} style={{ background:'linear-gradient(135deg,#6366f1,#ec4899)', border:'none', color:'#fff', padding: isMobile?'12px 28px':'15px 40px', fontSize: isMobile?'0.92rem':'1.05rem', borderRadius:'50px', cursor:'pointer', fontWeight:'800', display:'inline-flex', alignItems:'center', gap:'8px', boxShadow:'0 6px 24px rgba(99,102,241,0.35)', transition:'transform 0.2s ease, box-shadow 0.2s ease' }}
             onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 10px 28px rgba(99,102,241,0.4)'; }}
@@ -748,26 +599,19 @@ export default function HomePage({ setCurrentPage }) {
         </div>
       </section>
 
-      {/* ═══ ACTION CARDS ═══ */}
-      <section style={{ padding: isMobile?'24px 16px':'40px 24px', maxWidth:'1000px', margin:'0 auto' }}>
-        <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr 1fr':'repeat(5,1fr)', gap: isMobile?'9px':'12px' }}>
-          {[
-            { icon:'📚', label:'Browse Notes', page:'products',    g:'linear-gradient(135deg,#6366f1,#8b5cf6)', glow:'rgba(99,102,241,0.3)',  c:'#6366f1' },
-            { icon:'🐍', label:'Mock Tests',   page:'mocktests',   g:'linear-gradient(135deg,#10b981,#34d399)', glow:'rgba(16,185,129,0.3)',  c:'#10b981' },
-            { icon:'📦', label:'My Orders',    page:'orders',      g:'linear-gradient(135deg,#f59e0b,#fbbf24)', glow:'rgba(245,158,11,0.3)',  c:'#f59e0b' },
-            { icon:'🏆', label:'Leaderboard',  page:'leaderboard', g:'linear-gradient(135deg,#8b5cf6,#d946ef)', glow:'rgba(139,92,246,0.3)',  c:'#8b5cf6' },
-            user
-              ? { icon:'👤', label:'Logout', page:null, g:'linear-gradient(135deg,#ef4444,#dc2626)', glow:'rgba(239,68,68,0.3)', c:'#ef4444', action:logout }
-              : { icon:'🔐', label:'Login',  page:'login', g:'linear-gradient(135deg,#ec4899,#f472b6)', glow:'rgba(236,72,153,0.3)', c:'#ec4899' },
-          ].map((card,i) => <ActionCard key={i} card={card} isDark={isDark} isMobile={isMobile} onClick={() => { if (card.action) card.action(); else setCurrentPage(card.page); }} />)}
+      {/* ═══ ACTION CARDS — 6 cards with Game button ═══ */}
+      <section style={{ padding: isMobile?'24px 16px':'40px 24px', maxWidth:'1100px', margin:'0 auto' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobile?'repeat(3, 1fr)':'repeat(7, 1fr)', gap: isMobile?'8px':'12px' }}>
+          {actionCards.map((c, i) => (
+            <ActionCard key={i} card={c} isDark={isDark} isMobile={isMobile}
+              onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
+          ))}
         </div>
       </section>
 
       {/* ═══ MOCK TEST ═══ */}
-      <section ref={mockRef} style={{ padding: isMobile?'0 16px 28px':'0 24px 40px', maxWidth:'1000px', margin:'0 auto',
-        opacity: mockVis?1:0, transform: mockVis?'translateY(0)':'translateY(18px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>
-        <div style={{ ...C(), padding: isMobile?'18px 14px':'24px 28px', position:'relative', overflow:'hidden',
-          boxShadow: isDark?'0 4px 20px rgba(0,0,0,0.25)':'0 4px 20px rgba(99,102,241,0.07)' }}>
+      <section ref={mockRef} style={{ padding: isMobile?'0 16px 28px':'0 24px 40px', maxWidth:'1000px', margin:'0 auto', opacity: mockVis?1:0, transform: mockVis?'translateY(0)':'translateY(18px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>
+        <div style={{ ...C(), padding: isMobile?'18px 14px':'24px 28px', position:'relative', overflow:'hidden', boxShadow: isDark?'0 4px 20px rgba(0,0,0,0.25)':'0 4px 20px rgba(99,102,241,0.07)' }}>
           <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:'linear-gradient(90deg,#10b981,#6366f1,#ec4899)' }} />
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'7px', marginBottom: isMobile?'14px':'18px' }}>
             <span>🐍</span>
@@ -809,20 +653,16 @@ export default function HomePage({ setCurrentPage }) {
 
       {/* ═══ FEATURES ═══ */}
       <section ref={featRef} style={{ padding: isMobile?'0 16px 28px':'0 24px 40px', maxWidth:'1000px', margin:'0 auto' }}>
-        <h2 style={{ fontSize: isMobile?'1.35rem':'1.85rem', fontWeight:'900', textAlign:'center', marginBottom: isMobile?'18px':'28px', color: isDark?'#e2e8f0':'#1e293b', letterSpacing:'-0.02em',
-          opacity: featVis?1:0, transform: featVis?'translateY(0)':'translateY(16px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>Why Students Love Us</h2>
+        <h2 style={{ fontSize: isMobile?'1.35rem':'1.85rem', fontWeight:'900', textAlign:'center', marginBottom: isMobile?'18px':'28px', color: isDark?'#e2e8f0':'#1e293b', letterSpacing:'-0.02em', opacity: featVis?1:0, transform: featVis?'translateY(0)':'translateY(16px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>Why Students Love Us</h2>
         <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(3,1fr)', gap: isMobile?'10px':'14px' }}>
           {[
             { icon:'📚', title:'Quality Content', desc:'Expert-curated notes & filtered important questions.', color:'#6366f1' },
             { icon:'🔒', title:'Secure & Safe',   desc:'Razorpay protected payments — UPI, Cards & more.',   color:'#10b981' },
             { icon:'⚡', title:'Instant Download', desc:'Get your PDFs the second payment is done.',           color:'#ec4899' },
           ].map((f,i) => (
-            <div key={i} style={{ ...C({ padding: isMobile?'16px':'22px', display:'flex', alignItems:'flex-start', gap:'13px',
-              boxShadow: isDark?'0 3px 16px rgba(0,0,0,0.2)':'0 3px 16px rgba(99,102,241,0.06)',
-              opacity: featVis?1:0, transform: featVis?'translateY(0)':'translateY(14px)',
-              transition:`opacity 0.4s ease ${i*0.07}s, transform 0.4s ease ${i*0.07}s` }) }}
-              onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; e.currentTarget.style.boxShadow= isDark?`0 8px 24px rgba(0,0,0,0.3)`:`0 8px 24px ${f.color}20`; }}
-              onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow= isDark?'0 3px 16px rgba(0,0,0,0.2)':'0 3px 16px rgba(99,102,241,0.06)'; }}>
+            <div key={i} style={{ ...C({ padding: isMobile?'16px':'22px', display:'flex', alignItems:'flex-start', gap:'13px', boxShadow: isDark?'0 3px 16px rgba(0,0,0,0.2)':'0 3px 16px rgba(99,102,241,0.06)', opacity: featVis?1:0, transform: featVis?'translateY(0)':'translateY(14px)', transition:`opacity 0.4s ease ${i*0.07}s, transform 0.4s ease ${i*0.07}s` }) }}
+              onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; }}
+              onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; }}>
               <div style={{ width: isMobile?'38px':'42px', height: isMobile?'38px':'42px', flexShrink:0, background:`${f.color}${isDark?'1a':'0f'}`, borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'1.2rem', border:`1px solid ${f.color}22` }}>{f.icon}</div>
               <div>
                 <div style={{ fontSize: isMobile?'0.88rem':'0.94rem', fontWeight:'800', color: isDark?'#e2e8f0':'#0f172a', marginBottom:'4px' }}>{f.title}</div>
@@ -835,9 +675,7 @@ export default function HomePage({ setCurrentPage }) {
 
       {/* ═══ INFO CARDS ═══ */}
       <section ref={infoRef} style={{ padding: isMobile?'0 16px 28px':'0 24px 40px', maxWidth:'1000px', margin:'0 auto' }}>
-        <h2 style={{ fontSize: isMobile?'1.35rem':'1.85rem', fontWeight:'900', textAlign:'center', marginBottom: isMobile?'18px':'28px',
-          background:'linear-gradient(135deg,#6366f1,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', letterSpacing:'-0.02em',
-          opacity: infoVis?1:0, transform: infoVis?'translateY(0)':'translateY(16px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>Why PySkill?</h2>
+        <h2 style={{ fontSize: isMobile?'1.35rem':'1.85rem', fontWeight:'900', textAlign:'center', marginBottom: isMobile?'18px':'28px', background:'linear-gradient(135deg,#6366f1,#ec4899)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', letterSpacing:'-0.02em', opacity: infoVis?1:0, transform: infoVis?'translateY(0)':'translateY(16px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>Why PySkill?</h2>
         <div style={{ display:'grid', gridTemplateColumns: isMobile?'1fr':'repeat(2,1fr)', gap: isMobile?'10px':'14px' }}>
           {[
             { icon:'📜', title:'Our Policy',          desc:'Genuine, quality-checked materials. No refund after download, but satisfaction guaranteed with preview.', color:'#6366f1' },
@@ -845,10 +683,7 @@ export default function HomePage({ setCurrentPage }) {
             { icon:'🎯', title:'Why Choose Us',       desc:'Instant access, lifetime downloads, mobile-friendly PDFs, expert content & 24/7 WhatsApp support.',        color:'#f59e0b' },
             { icon:'⭐', title:'What Makes Us Better', desc:'No outdated content. Every note filtered for importance. Real reviews, no hidden charges.',                 color:'#8b5cf6' },
           ].map((c,i) => (
-            <div key={i} style={{ ...C({ padding: isMobile?'16px':'20px', position:'relative', overflow:'hidden',
-              boxShadow: isDark?'0 3px 16px rgba(0,0,0,0.2)':'0 3px 16px rgba(99,102,241,0.06)',
-              opacity: infoVis?1:0, transform: infoVis?'translateY(0)':'translateY(14px)',
-              transition:`opacity 0.4s ease ${i*0.07}s, transform 0.4s ease ${i*0.07}s` }) }}
+            <div key={i} style={{ ...C({ padding: isMobile?'16px':'20px', position:'relative', overflow:'hidden', boxShadow: isDark?'0 3px 16px rgba(0,0,0,0.2)':'0 3px 16px rgba(99,102,241,0.06)', opacity: infoVis?1:0, transform: infoVis?'translateY(0)':'translateY(14px)', transition:`opacity 0.4s ease ${i*0.07}s, transform 0.4s ease ${i*0.07}s` }) }}
               onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; }}
               onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; }}>
               <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:`linear-gradient(90deg,transparent,${c.color}70,transparent)` }} />
@@ -863,10 +698,8 @@ export default function HomePage({ setCurrentPage }) {
       </section>
 
       {/* ═══ FOUNDER ═══ */}
-      <section ref={founderRef} style={{ padding: isMobile?'0 16px 44px':'0 24px 64px', maxWidth:'660px', margin:'0 auto',
-        opacity: founderVis?1:0, transform: founderVis?'translateY(0)':'translateY(16px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>
-        <div style={{ ...C({ padding: isMobile?'20px 16px':'32px', display:'flex', flexDirection: isMobile?'column':'row', alignItems: isMobile?'center':'flex-start', gap: isMobile?'16px':'22px', textAlign: isMobile?'center':'left', position:'relative', overflow:'hidden',
-          boxShadow: isDark?'0 4px 24px rgba(0,0,0,0.3)':'0 4px 24px rgba(99,102,241,0.1)' }) }}
+      <section ref={founderRef} style={{ padding: isMobile?'0 16px 44px':'0 24px 64px', maxWidth:'660px', margin:'0 auto', opacity: founderVis?1:0, transform: founderVis?'translateY(0)':'translateY(16px)', transition:'opacity 0.45s ease, transform 0.45s ease' }}>
+        <div style={{ ...C({ padding: isMobile?'20px 16px':'32px', display:'flex', flexDirection: isMobile?'column':'row', alignItems: isMobile?'center':'flex-start', gap: isMobile?'16px':'22px', textAlign: isMobile?'center':'left', position:'relative', overflow:'hidden', boxShadow: isDark?'0 4px 24px rgba(0,0,0,0.3)':'0 4px 24px rgba(99,102,241,0.1)' }) }}
           onMouseEnter={e => { e.currentTarget.style.transform='translateY(-3px)'; }}
           onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; }}>
           <div style={{ position:'absolute', top:0, left:0, right:0, height:'2px', background:'linear-gradient(90deg,#6366f1,#ec4899,#a78bfa)', backgroundSize:'200% 100%', animation:'shimmer 3s ease-in-out infinite' }} />
@@ -899,9 +732,6 @@ export default function HomePage({ setCurrentPage }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   ACTION CARD
-───────────────────────────────────────── */
 function ActionCard({ card, isDark, isMobile, onClick }) {
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -922,7 +752,6 @@ function ActionCard({ card, isDark, isMobile, onClick }) {
         boxShadow: hovered ? `0 8px 22px ${card.glow}` : isDark?'0 2px 10px rgba(0,0,0,0.2)':'0 2px 10px rgba(99,102,241,0.05)',
         animation:'rise 0.4s ease both', outline:'none',
       }}>
-      {/* Subtle pulse ring — only desktop, no blur */}
       {!isMobile && hovered && <div style={{ position:'absolute', inset:0, borderRadius:'inherit', border:`1.5px solid ${card.c}`, opacity:0, animation:'ping 1.6s ease infinite', pointerEvents:'none' }} />}
       <div style={{ width: isMobile?'38px':'42px', height: isMobile?'38px':'42px', background:card.g, borderRadius:'11px', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile?'1.15rem':'1.3rem', boxShadow:`0 3px 12px ${card.glow}`, transform: hovered?'scale(1.1)':'scale(1)', transition:'transform 0.15s ease' }}>{card.icon}</div>
       <span style={{ fontSize: isMobile?'0.68rem':'0.78rem', fontWeight:'800', color: hovered?card.c: isDark?'#e2e8f0':'#1e293b', transition:'color 0.15s ease' }}>{card.label}</span>

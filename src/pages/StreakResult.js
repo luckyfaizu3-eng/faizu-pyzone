@@ -1,0 +1,279 @@
+import React, { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
+
+const StreakResult = ({ isMobile, isDark, user, setCurrentPage }) => {
+  const uid = user?.uid;
+  const [results, setResults] = useState([]);
+  const [generating, setGenerating] = useState(false);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!uid) { setCurrentPage('login'); return; }
+    const r = JSON.parse(localStorage.getItem(`streak_results_${uid}`) || '[]');
+    setResults(r);
+  }, []); // eslint-disable-line
+
+  const totalScore = results.reduce((acc, r) => acc + r.score, 0);
+  const totalQ = results.reduce((acc, r) => acc + r.total, 0);
+  const percentage = totalQ ? Math.round((totalScore / totalQ) * 100) : 0;
+  const streakDays = parseInt(localStorage.getItem(`streak_count_${uid}`) || results.length);
+  const strong = results.filter(r => (r.score / r.total) >= 0.7).map(r => r.topic);
+  const weak = results.filter(r => (r.score / r.total) < 0.5).map(r => r.topic);
+
+  const textPrimary = isDark ? '#f0f2ff' : '#111827';
+  const textSec = isDark ? '#8b93a8' : '#6b7280';
+  const cardBg = isDark ? 'rgba(255,255,255,0.04)' : '#ffffff';
+  const border = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)';
+
+  const handleDownloadPDF = async () => {
+    setGenerating(true);
+    try {
+      const doc = new jsPDF();
+      const orange = [255, 107, 0];
+      const dark = [17, 24, 39];
+      const gray = [107, 114, 128];
+
+      doc.setFillColor(...orange);
+      doc.rect(0, 0, 210, 40, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(22);
+      doc.setFont('helvetica', 'bold');
+      doc.text('30-Day Python Streak — Result Report', 15, 20);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.text(`Student: ${user?.displayName || user?.email || 'Challenger'}`, 15, 32);
+
+      doc.setTextColor(...dark);
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Summary', 15, 58);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...gray);
+      doc.text(`Total Score: ${totalScore} / ${totalQ}`, 15, 70);
+      doc.text(`Overall Percentage: ${percentage}%`, 15, 80);
+      doc.text(`Streak Days Completed: ${streakDays} / 30`, 15, 90);
+
+      doc.setFillColor(229, 231, 235);
+      doc.rect(15, 98, 180, 8, 'F');
+      doc.setFillColor(...orange);
+      doc.rect(15, 98, (180 * percentage) / 100, 8, 'F');
+      doc.setTextColor(...dark);
+      doc.setFontSize(10);
+      doc.text(`${percentage}%`, 200, 104, { align: 'right' });
+
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...dark);
+      doc.text('Day-wise Performance', 15, 120);
+
+      let y = 132;
+      doc.setFontSize(10);
+      doc.setFillColor(...orange);
+      doc.rect(15, y - 7, 180, 10, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.text('Day', 18, y);
+      doc.text('Topic', 40, y);
+      doc.text('Score', 155, y);
+      doc.text('%', 180, y);
+      y += 8;
+
+      results.forEach((r, i) => {
+        if (y > 270) { doc.addPage(); y = 20; }
+        const rowBg = i % 2 === 0 ? [249, 250, 251] : [255, 255, 255];
+        doc.setFillColor(...rowBg);
+        doc.rect(15, y - 5, 180, 9, 'F');
+        const pct = Math.round((r.score / r.total) * 100);
+        const scoreColor = pct >= 70 ? [34, 197, 94] : pct >= 50 ? [245, 158, 11] : [239, 68, 68];
+        doc.setTextColor(...dark);
+        doc.text(`${r.day}`, 18, y);
+        doc.text(r.topic.substring(0, 30), 40, y);
+        doc.text(`${r.score}/${r.total}`, 155, y);
+        doc.setTextColor(...scoreColor);
+        doc.text(`${pct}%`, 180, y);
+        y += 9;
+      });
+
+      doc.addPage();
+      doc.setFillColor(...orange);
+      doc.rect(0, 0, 210, 20, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Topic Analysis', 15, 13);
+
+      y = 35;
+      doc.setTextColor(...dark);
+      doc.setFontSize(13);
+      doc.text('Strong Topics (Score >= 70%)', 15, y); y += 10;
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(34, 197, 94);
+      strong.forEach(t => { doc.text(`• ${t}`, 20, y); y += 8; });
+      if (!strong.length) { doc.setTextColor(...gray); doc.text('None yet — keep practicing!', 20, y); y += 8; }
+
+      y += 6;
+      doc.setFontSize(13);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...dark);
+      doc.text('Needs Improvement (Score < 50%)', 15, y); y += 10;
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(239, 68, 68);
+      weak.forEach(t => { doc.text(`• ${t}`, 20, y); y += 8; });
+      if (!weak.length) { doc.setTextColor(34, 197, 94); doc.text('No weak topics! Great job!', 20, y); }
+
+      doc.setTextColor(...gray);
+      doc.setFontSize(9);
+      doc.text('Generated by faizupyzone.shop — Python Study Platform', 105, 285, { align: 'center' });
+
+      doc.save(`Python_Streak_Result_${user?.displayName || 'Student'}.pdf`);
+    } catch (e) {
+      alert('Error generating PDF. Please try again.');
+    }
+    setGenerating(false);
+  };
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: isDark ? 'linear-gradient(160deg, #060b14, #0d1117)' : 'linear-gradient(160deg, #f5f7ff, #ffffff)',
+      fontFamily: "'Syne', sans-serif",
+      color: textPrimary,
+      padding: isMobile ? '24px 16px 60px' : '48px 60px 80px',
+    }}>
+      <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+
+        {/* Title */}
+        <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '12px' }}>
+            {percentage >= 80 ? '🏆' : percentage >= 60 ? '🥈' : '💪'}
+          </div>
+          <h1 style={{
+            fontSize: isMobile ? '1.8rem' : '2.5rem', fontWeight: '900',
+            background: 'linear-gradient(135deg, #ff6b00, #f59e0b)',
+            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+          }}>Your 30-Day Report</h1>
+          <p style={{ color: textSec, marginTop: '8px' }}>
+            {user?.displayName || user?.email || 'Challenger'} — Python Streak Challenge
+          </p>
+        </div>
+
+        {/* Stats Row */}
+        <div style={{
+          display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)',
+          gap: '16px', marginBottom: '32px',
+        }}>
+          {[
+            { label: 'Total Score', value: `${totalScore}/${totalQ}`, color: '#ff6b00' },
+            { label: 'Percentage', value: `${percentage}%`, color: '#f59e0b' },
+            { label: 'Streak Days', value: `${streakDays}/30`, color: '#6366f1' },
+            { label: 'Strong Topics', value: strong.length, color: '#22c55e' },
+          ].map((s, i) => (
+            <div key={i} style={{
+              background: cardBg, border: `1px solid ${border}`,
+              borderRadius: '16px', padding: '20px', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: '1.8rem', fontWeight: '900', color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: '0.78rem', color: textSec, marginTop: '4px' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Progress Bar */}
+        <div style={{
+          background: cardBg, border: `1px solid ${border}`,
+          borderRadius: '16px', padding: '24px', marginBottom: '24px',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <span style={{ fontWeight: '700', fontSize: '0.9rem' }}>Overall Performance</span>
+            <span style={{ color: '#ff6b00', fontWeight: '800' }}>{percentage}%</span>
+          </div>
+          <div style={{ height: '10px', background: isDark ? 'rgba(255,255,255,0.08)' : '#e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+            <div style={{
+              height: '100%', width: `${percentage}%`,
+              background: percentage >= 70 ? 'linear-gradient(90deg, #22c55e, #16a34a)'
+                : percentage >= 50 ? 'linear-gradient(90deg, #f59e0b, #d97706)'
+                : 'linear-gradient(90deg, #ef4444, #dc2626)',
+              borderRadius: '10px', transition: 'width 1s ease',
+            }} />
+          </div>
+        </div>
+
+        {/* Strong / Weak Topics */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
+          <div style={{ background: cardBg, border: '1px solid rgba(34,197,94,0.2)', borderRadius: '16px', padding: '20px' }}>
+            <h3 style={{ fontWeight: '800', fontSize: '0.95rem', color: '#22c55e', marginBottom: '14px' }}>✅ Strong Topics</h3>
+            {strong.length ? strong.map((t, i) => (
+              <div key={i} style={{ fontSize: '0.85rem', color: textSec, padding: '6px 0', borderBottom: `1px solid ${border}` }}>{t}</div>
+            )) : <div style={{ color: textSec, fontSize: '0.85rem' }}>Complete 30 days to see analysis</div>}
+          </div>
+          <div style={{ background: cardBg, border: '1px solid rgba(239,68,68,0.2)', borderRadius: '16px', padding: '20px' }}>
+            <h3 style={{ fontWeight: '800', fontSize: '0.95rem', color: '#ef4444', marginBottom: '14px' }}>⚠️ Needs Work</h3>
+            {weak.length ? weak.map((t, i) => (
+              <div key={i} style={{ fontSize: '0.85rem', color: textSec, padding: '6px 0', borderBottom: `1px solid ${border}` }}>{t}</div>
+            )) : <div style={{ color: '#22c55e', fontSize: '0.85rem' }}>No weak topics! Excellent! 🎉</div>}
+          </div>
+        </div>
+
+        {/* Day-wise table */}
+        {results.length > 0 && (
+          <div style={{ background: cardBg, border: `1px solid ${border}`, borderRadius: '16px', overflow: 'hidden', marginBottom: '32px' }}>
+            <div style={{ padding: '18px 20px', borderBottom: `1px solid ${border}`, fontWeight: '800' }}>
+              📅 Day-wise Scores
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                <thead>
+                  <tr style={{ background: isDark ? 'rgba(255,107,0,0.1)' : 'rgba(255,107,0,0.06)' }}>
+                    {['Day', 'Topic', 'Score', '%'].map(h => (
+                      <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontWeight: '700', color: '#ff6b00' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((r, i) => {
+                    const pct = Math.round((r.score / r.total) * 100);
+                    return (
+                      <tr key={i} style={{ borderBottom: `1px solid ${border}` }}>
+                        <td style={{ padding: '10px 16px', color: textPrimary, fontWeight: '700' }}>Day {r.day}</td>
+                        <td style={{ padding: '10px 16px', color: textSec }}>{r.topic}</td>
+                        <td style={{ padding: '10px 16px', color: textPrimary }}>{r.score}/{r.total}</td>
+                        <td style={{ padding: '10px 16px', fontWeight: '700',
+                          color: pct >= 70 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444' }}>{pct}%</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div style={{ textAlign: 'center', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+          <button onClick={() => setCurrentPage('streak')} style={{
+            background: 'transparent',
+            border: `1px solid ${border}`,
+            color: textSec, borderRadius: '14px',
+            padding: isMobile ? '12px 24px' : '14px 32px',
+            fontSize: '0.95rem', fontWeight: '700', cursor: 'pointer',
+          }}>
+            ← Back
+          </button>
+          <button onClick={handleDownloadPDF} disabled={generating} style={{
+            background: generating ? '#6b7280' : 'linear-gradient(135deg, #ff6b00, #ff3d00)',
+            color: '#fff', border: 'none', borderRadius: '14px',
+            padding: isMobile ? '12px 28px' : '14px 40px',
+            fontSize: '0.95rem', fontWeight: '800', cursor: generating ? 'wait' : 'pointer',
+            boxShadow: '0 8px 25px rgba(255,107,0,0.35)',
+          }}>
+            {generating ? '⏳ Generating...' : '📥 Download PDF'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default StreakResult;

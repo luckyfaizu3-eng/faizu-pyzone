@@ -23,6 +23,7 @@ import AIChatBot from './components/AIChatBot';
 import ToastContainer from './components/ToastContainer';
 import SplashScreen from './components/SplashScreen';
 import Leaderboard from './components/Leaderboard';
+import BrainTrapGame from './components/BrainTrapGame';
 
 // Import Pages
 import HomePage from './pages/HomePage';
@@ -34,6 +35,12 @@ import LoginPage from './pages/LoginPage';
 import MockTestPage from './pages/MockTestPage';
 import AIChatPage from './pages/AIChatPage';
 import PythonCompiler from './pages/PythonCompiler';
+
+// ✅ Streak Challenge Imports
+import StreakChallengePage from './pages/StreakChallengePage';
+import DailyPractice from './pages/DailyPractice';
+import StreakResult from './pages/StreakResult';
+import AdminStreak from './pages/AdminStreak';
 
 // Contexts
 export const CartContext = React.createContext();
@@ -58,18 +65,17 @@ export const CATEGORIES = [
   { id: 'marketing', name: 'Digital Marketing', icon: '📱', color: '#06b6d4' }
 ];
 
+// ✅ Admin email for free access
+const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
+
 function App() {
-  // ✅ Google Analytics Tracking
   useEffect(() => {
     ReactGA.initialize('G-4677K2HY57');
     ReactGA.send('pageview');
-    console.log('✅ Google Analytics tracking started!');
   }, []);
 
-  // ✅ Custom Analytics Tracking (IP, Location, Device)
   useEffect(() => {
     trackPageView(window.location.pathname);
-    console.log('✅ Custom analytics tracking started!');
   }, []);
 
   const [cart, setCart] = useState(() => {
@@ -83,19 +89,21 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [razorpayError, setRazorpayError] = useState(false);
-
   const [compilerInitialCode, setCompilerInitialCode] = useState('');
-  
-  // ✅ COMPLETE BROWSER BACK BUTTON FIX
+
+  // ✅ Browser back button fix
   useEffect(() => {
     const getInitialPage = () => {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
       if (hash.startsWith('products/')) return 'products';
-      const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login', 'mocktests', 'leaderboard'];
+      const validPages = [
+        'home', 'products', 'cart', 'orders', 'admin', 'login',
+        'mocktests', 'leaderboard', 'braintrap', 'aichat', 'compiler',
+        'streak', 'streak-practice', 'streak-result', 'admin-streak'
+      ];
       return validPages.includes(hash) ? hash : 'home';
     };
 
@@ -106,9 +114,7 @@ function App() {
     const handlePopState = (event) => {
       if (event.state && event.state.page) {
         setCurrentPage(event.state.page);
-        if (event.state.page !== 'products') {
-          setSelectedCategory('all');
-        }
+        if (event.state.page !== 'products') setSelectedCategory('all');
       } else {
         setCurrentPage('home');
       }
@@ -118,7 +124,6 @@ function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // ✅ Update browser history when page changes
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('products/')) return;
@@ -127,19 +132,17 @@ function App() {
     }
     trackPageView(`/${currentPage}`);
   }, [currentPage]);
-  
-  // ✅ Dark mode
+
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('pyskill_theme');
     return saved === 'dark';
   });
 
-  // ✅ Background theme
   const [backgroundTheme, setBackgroundTheme] = useState(() => {
     const saved = localStorage.getItem('pyskill_background');
     return saved ? parseInt(saved) : 0;
   });
-  
+
   const [showSplash, setShowSplash] = useState(() => {
     const splashShown = sessionStorage.getItem('splashShown');
     return !splashShown;
@@ -170,39 +173,22 @@ function App() {
     localStorage.setItem('pyskill_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // ✅ Razorpay Script Loading
+  // ✅ Razorpay
   useEffect(() => {
-    if (window.Razorpay) {
-      setRazorpayLoaded(true);
-      return;
-    }
-
+    if (window.Razorpay) { setRazorpayLoaded(true); return; }
     const existingScript = document.querySelector('script[src*="razorpay"]');
     if (existingScript) {
       const checkLoaded = setInterval(() => {
-        if (window.Razorpay) {
-          setRazorpayLoaded(true);
-          clearInterval(checkLoaded);
-        }
+        if (window.Razorpay) { setRazorpayLoaded(true); clearInterval(checkLoaded); }
       }, 100);
-      setTimeout(() => {
-        clearInterval(checkLoaded);
-        if (!window.Razorpay) setRazorpayError(true);
-      }, 10000);
+      setTimeout(() => { clearInterval(checkLoaded); if (!window.Razorpay) setRazorpayError(true); }, 10000);
       return;
     }
-
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    script.onload = () => {
-      setRazorpayLoaded(true);
-      setRazorpayError(false);
-    };
-    script.onerror = () => {
-      setRazorpayError(true);
-      window.showToast?.('⚠️ Payment system failed to load. Please refresh!', 'error');
-    };
+    script.onload = () => { setRazorpayLoaded(true); setRazorpayError(false); };
+    script.onerror = () => { setRazorpayError(true); window.showToast?.('⚠️ Payment system failed to load. Please refresh!', 'error'); };
     document.body.appendChild(script);
   }, []);
 
@@ -216,19 +202,14 @@ function App() {
     }
   }, []);
 
-  useEffect(() => {
-    loadProducts();
-  }, [loadProducts]);
+  useEffect(() => { loadProducts(); }, [loadProducts]);
 
   const loadOrders = useCallback(async () => {
     if (user?.uid) {
       try {
         const result = await getUserOrders(user.uid);
-        if (result.success) {
-          setOrders(result.orders);
-        } else {
-          setOrders([]);
-        }
+        if (result.success) setOrders(result.orders);
+        else setOrders([]);
       } catch (error) {
         console.error('❌ Error loading orders:', error);
         setOrders([]);
@@ -238,9 +219,7 @@ function App() {
     }
   }, [user?.uid]);
 
-  useEffect(() => {
-    loadOrders();
-  }, [loadOrders]);
+  useEffect(() => { loadOrders(); }, [loadOrders]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -251,6 +230,16 @@ function App() {
           uid: firebaseUser.uid,
           isAdmin: isAdminAuth(firebaseUser.email)
         });
+
+        // ✅ Admin ko streak free access
+        if (firebaseUser.email === ADMIN_EMAIL) {
+          localStorage.setItem(`streak_purchased_${firebaseUser.uid}`, 'true');
+          if (!localStorage.getItem(`streak_start_${firebaseUser.uid}`)) {
+            localStorage.setItem(`streak_start_${firebaseUser.uid}`, new Date().toISOString());
+            localStorage.setItem(`streak_count_${firebaseUser.uid}`, '0');
+          }
+        }
+
       } else {
         setUser(null);
       }
@@ -258,34 +247,29 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  // ✅ Payment initiation function
   const initiatePayment = (amount, items, onSuccess) => {
-    if (razorpayError) {
-      window.showToast?.('❌ Payment system failed to load. Please refresh!', 'error');
-      return;
-    }
-    
+    if (razorpayError) { window.showToast?.('❌ Payment system failed to load. Please refresh!', 'error'); return; }
     if (!window.Razorpay || !razorpayLoaded) {
       window.showToast?.('⏳ Payment system loading... Please wait!', 'warning');
       setTimeout(() => {
-        if (window.Razorpay && razorpayLoaded) {
-          setTimeout(() => initiatePayment(amount, items, onSuccess), 500);
-        } else {
-          window.showToast?.('❌ Payment system not ready. Please refresh!', 'error');
-        }
+        if (window.Razorpay && razorpayLoaded) { setTimeout(() => initiatePayment(amount, items, onSuccess), 500); }
+        else { window.showToast?.('❌ Payment system not ready. Please refresh!', 'error'); }
       }, 2000);
       return;
     }
-
     const options = {
       key: RAZORPAY_KEY_ID,
       amount: amount * 100,
       currency: "INR",
       name: "PySkill",
-      description: "Premium Study Materials",
+      description: items.length === 0
+        ? `Brain Trap Game — ₹${amount}/month Unlimited Access`
+        : items.length === 1
+          ? items[0].title || "Premium Study Material"
+          : `${items.length} Study Materials Bundle`,
       image: "https://img.icons8.com/fluency/96/000000/graduation-cap.png",
       handler: async function (response) {
-        window.showToast?.('🎉 Payment Successful! Processing order...', 'success');
+        window.showToast?.('🎉 Payment Successful! Processing...', 'success');
         setTimeout(async () => { await onSuccess(response); }, 1000);
       },
       prefill: {
@@ -294,18 +278,11 @@ function App() {
         contact: ""
       },
       theme: { color: isDark ? "#8b5cf6" : "#6366f1" },
-      modal: {
-        ondismiss: function() {
-          window.showToast?.('❌ Payment cancelled', 'info');
-        }
-      }
+      modal: { ondismiss: function() { window.showToast?.('❌ Payment cancelled', 'info'); } }
     };
-
     try {
       const rzp = new window.Razorpay(options);
-      rzp.on('payment.failed', function (response) {
-        window.showToast?.('❌ Payment Failed! Please try again.', 'error');
-      });
+      rzp.on('payment.failed', function () { window.showToast?.('❌ Payment Failed! Please try again.', 'error'); });
       rzp.open();
     } catch (error) {
       console.error('❌ Error opening Razorpay:', error);
@@ -322,66 +299,25 @@ function App() {
       setCart([...cart, {...product, quantity: 1}]);
       window.showToast?.('✅ Added to cart!', 'success');
     }
-    trackAction(ACTIONS.ADD_TO_CART, {
-      productId: product.id,
-      productName: product.title,
-      price: product.price,
-      category: product.category
-    });
+    trackAction(ACTIONS.ADD_TO_CART, { productId: product.id, productName: product.title, price: product.price, category: product.category });
   };
 
   const removeFromCart = (productId) => {
     const product = cart.find(item => item.id === productId);
     setCart(cart.filter(item => item.id !== productId));
     window.showToast?.('🗑️ Removed from cart', 'info');
-    if (product) {
-      trackAction(ACTIONS.REMOVE_FROM_CART, {
-        productId: product.id,
-        productName: product.title
-      });
-    }
+    if (product) trackAction(ACTIONS.REMOVE_FROM_CART, { productId: product.id, productName: product.title });
   };
 
   const buyNow = async (product) => {
-    if (!user) {
-      window.showToast?.('⚠️ Please login first to purchase!', 'warning');
-      setCurrentPage('login');
-      return;
-    }
-    trackAction(ACTIONS.PURCHASE_INITIATED, {
-      productId: product.id,
-      productName: product.title,
-      price: product.price,
-      isBundle: product.isBundle || false
-    });
-
-    const itemData = {
-      id: product.id,
-      title: product.title,
-      price: product.price,
-      isBundle: product.isBundle || false,
-      pdfFiles: product.pdfFiles || [],
-      bundledProducts: product.bundledProducts || []
-    };
+    if (!user) { window.showToast?.('⚠️ Please login first to purchase!', 'warning'); setCurrentPage('login'); return; }
+    trackAction(ACTIONS.PURCHASE_INITIATED, { productId: product.id, productName: product.title, price: product.price, isBundle: product.isBundle || false });
+    const itemData = { id: product.id, title: product.title, price: product.price, isBundle: product.isBundle || false, pdfFiles: product.pdfFiles || [], bundledProducts: product.bundledProducts || [] };
     if (product.thumbnail) itemData.thumbnail = product.thumbnail;
-
     initiatePayment(product.price, [product], async (response) => {
       try {
-        const orderResult = await addOrder({
-          userEmail: user.email,
-          userId: user.uid,
-          items: [itemData],
-          total: product.price,
-          date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-          paymentId: response.razorpay_payment_id,
-          status: 'completed'
-        }, user.uid);
-
-        if (!orderResult.success) {
-          window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error');
-          return;
-        }
-
+        const orderResult = await addOrder({ userEmail: user.email, userId: user.uid, items: [itemData], total: product.price, date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), paymentId: response.razorpay_payment_id, status: 'completed' }, user.uid);
+        if (!orderResult.success) { window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error'); return; }
         await new Promise(resolve => setTimeout(resolve, 1000));
         await loadOrders();
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -401,92 +337,39 @@ function App() {
 
   const login = async (email, password) => {
     const result = await loginUser(email, password);
-    if (result.success) {
-      window.showToast?.('🎉 Welcome back!', 'success');
-      setCurrentPage('home');
-      trackAction(ACTIONS.LOGIN, { email: email });
-      return { success: true };
-    } else {
-      window.showToast?.('❌ ' + result.error, 'error');
-      return { success: false };
-    }
+    if (result.success) { window.showToast?.('🎉 Welcome back!', 'success'); setCurrentPage('home'); trackAction(ACTIONS.LOGIN, { email }); return { success: true }; }
+    else { window.showToast?.('❌ ' + result.error, 'error'); return { success: false }; }
   };
 
   const register = async (email, password, name) => {
     const result = await registerUser(email, password, name);
-    if (result.success) {
-      window.showToast?.('🎊 Account created successfully!', 'success');
-      setCurrentPage('home');
-      trackAction(ACTIONS.REGISTER, { email: email, name: name });
-      return { success: true };
-    } else {
-      window.showToast?.('❌ ' + result.error, 'error');
-      return { success: false };
-    }
+    if (result.success) { window.showToast?.('🎊 Account created successfully!', 'success'); setCurrentPage('home'); trackAction(ACTIONS.REGISTER, { email, name }); return { success: true }; }
+    else { window.showToast?.('❌ ' + result.error, 'error'); return { success: false }; }
   };
 
   const logout = async () => {
     const result = await logoutUser();
-    if (result.success) {
-      trackAction(ACTIONS.LOGOUT, { email: user?.email });
-      setUser(null);
-      setOrders([]);
-      setCurrentPage('home');
-      window.showToast?.('👋 Logged out successfully!', 'info');
-    }
+    if (result.success) { trackAction(ACTIONS.LOGOUT, { email: user?.email }); setUser(null); setOrders([]); setCurrentPage('home'); window.showToast?.('👋 Logged out successfully!', 'info'); }
   };
 
   const isProductPurchased = (productId) => {
     if (!user || !orders || orders.length === 0) return false;
-    return orders.some(order => 
-      order.status === 'completed' &&
-      order.items && order.items.some(item => item.id === productId)
-    );
+    return orders.some(order => order.status === 'completed' && order.items && order.items.some(item => item.id === productId));
   };
 
   const completeOrder = async () => {
-    if (!user) {
-      window.showToast?.('⚠️ Please login first!', 'warning');
-      setCurrentPage('login');
-      return;
-    }
-    if (cart.length === 0) {
-      window.showToast?.('⚠️ Your cart is empty!', 'warning');
-      return;
-    }
-
+    if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); setCurrentPage('login'); return; }
+    if (cart.length === 0) { window.showToast?.('⚠️ Your cart is empty!', 'warning'); return; }
     const orderItems = cart.map(item => {
-      const itemData = {
-        id: item.id,
-        title: item.title,
-        price: item.price,
-        isBundle: item.isBundle || false,
-        pdfFiles: item.pdfFiles || [],
-        bundledProducts: item.bundledProducts || []
-      };
+      const itemData = { id: item.id, title: item.title, price: item.price, isBundle: item.isBundle || false, pdfFiles: item.pdfFiles || [], bundledProducts: item.bundledProducts || [] };
       if (item.thumbnail) itemData.thumbnail = item.thumbnail;
       return itemData;
     });
-
     initiatePayment(cartTotal, cart, async (response) => {
       try {
-        const orderResult = await addOrder({
-          userEmail: user.email,
-          userId: user.uid,
-          items: orderItems,
-          total: cartTotal,
-          date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-          paymentId: response.razorpay_payment_id,
-          status: 'completed'
-        }, user.uid);
-
-        if (!orderResult.success) {
-          window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error');
-          return;
-        }
-
-        setCart([]);
-        localStorage.removeItem('pyskill_cart');
+        const orderResult = await addOrder({ userEmail: user.email, userId: user.uid, items: orderItems, total: cartTotal, date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), paymentId: response.razorpay_payment_id, status: 'completed' }, user.uid);
+        if (!orderResult.success) { window.showToast?.('⚠️ Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error'); return; }
+        setCart([]); localStorage.removeItem('pyskill_cart');
         await new Promise(resolve => setTimeout(resolve, 1000));
         await loadOrders();
         await new Promise(resolve => setTimeout(resolve, 500));
@@ -495,8 +378,7 @@ function App() {
       } catch (error) {
         console.error('❌ Payment handler error:', error);
         window.showToast?.('⚠️ Payment successful but error occurred. Check orders!', 'warning');
-        setCart([]);
-        localStorage.removeItem('pyskill_cart');
+        setCart([]); localStorage.removeItem('pyskill_cart');
         await loadOrders();
         setCurrentPage('orders');
       }
@@ -504,63 +386,29 @@ function App() {
   };
 
   const addProduct = async (product) => {
-    if (!user) {
-      window.showToast?.('❌ Please login first!', 'error');
-      return;
-    }
-    const productData = { 
-      ...product,
-      userId: user.uid,
-      userEmail: user.email,
-      uploadDate: new Date().toISOString(),
-      totalDownloads: 0,
-      totalRevenue: 0,
-      reviews: []
-    };
+    if (!user) { window.showToast?.('❌ Please login first!', 'error'); return; }
+    const productData = { ...product, userId: user.uid, userEmail: user.email, uploadDate: new Date().toISOString(), totalDownloads: 0, totalRevenue: 0, reviews: [] };
     const result = await addProductDB(productData, user.uid);
-    if (result.success) {
-      await loadProducts();
-      window.showToast?.('✅ Product uploaded successfully!', 'success');
-    } else {
-      window.showToast?.('❌ Upload failed: ' + result.error, 'error');
-    }
+    if (result.success) { await loadProducts(); window.showToast?.('✅ Product uploaded successfully!', 'success'); }
+    else { window.showToast?.('❌ Upload failed: ' + result.error, 'error'); }
   };
 
   const deleteProduct = async (id) => {
     const result = await deleteProductDB(id);
-    if (result.success) {
-      await loadProducts();
-      window.showToast?.('✅ Product deleted!', 'success');
-    } else {
-      window.showToast?.('❌ Delete failed: ' + result.error, 'error');
-    }
+    if (result.success) { await loadProducts(); window.showToast?.('✅ Product deleted!', 'success'); }
+    else { window.showToast?.('❌ Delete failed: ' + result.error, 'error'); }
   };
 
   const handleAddReview = async (productId, reviewData) => {
-    if (!user) {
-      window.showToast?.('⚠️ Please login to add review!', 'error');
-      return;
-    }
+    if (!user) { window.showToast?.('⚠️ Please login to add review!', 'error'); return; }
     try {
       const product = products.find(p => p.id === productId);
       if (!product) { window.showToast?.('❌ Product not found!', 'error'); return; }
-
-      const newReview = {
-        ...reviewData,
-        id: Date.now(),
-        date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
-        likes: 0
-      };
-
+      const newReview = { ...reviewData, id: Date.now(), date: new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }), likes: 0 };
       const updatedProduct = { ...product, reviews: [...(product.reviews || []), newReview] };
       const result = await updateProductDB(productId, updatedProduct);
-
-      if (result.success) {
-        setProducts(prev => prev.map(p => p.id === productId ? updatedProduct : p));
-        window.showToast?.('✅ Review added!', 'success');
-      } else {
-        window.showToast?.('❌ Failed to add review: ' + result.error, 'error');
-      }
+      if (result.success) { setProducts(prev => prev.map(p => p.id === productId ? updatedProduct : p)); window.showToast?.('✅ Review added!', 'success'); }
+      else { window.showToast?.('❌ Failed to add review: ' + result.error, 'error'); }
     } catch (error) {
       console.error('Error adding review:', error);
       window.showToast?.('❌ Failed to add review!', 'error');
@@ -572,6 +420,18 @@ function App() {
     setCurrentPage('compiler');
   }, []);
 
+  // ✅ Streak payment handler
+  const handleStreakPayment = () => {
+    if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); setCurrentPage('login'); return; }
+    initiatePayment(99, [], async (response) => {
+      localStorage.setItem(`streak_purchased_${user.uid}`, 'true');
+      localStorage.setItem(`streak_start_${user.uid}`, new Date().toISOString());
+      localStorage.setItem(`streak_count_${user.uid}`, '0');
+      window.showToast?.('🔥 Streak Challenge unlocked! Let\'s go!', 'success');
+      setCurrentPage('streak-practice');
+    });
+  };
+
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
@@ -581,9 +441,7 @@ function App() {
           ) : (
           <div style={{
             minHeight: '100vh',
-            background: isDark 
-              ? 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)'
-              : '#ffffff',
+            background: isDark ? 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' : '#ffffff',
             color: isDark ? '#e2e8f0' : '#1e293b',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
             position: 'relative',
@@ -595,19 +453,8 @@ function App() {
             <AIChatBot setCurrentPage={setCurrentPage} currentPage={currentPage} />
             
             {!razorpayLoaded && !razorpayError && (
-              <div style={{
-                position: 'fixed', bottom: '20px', right: '20px',
-                background: 'rgba(99, 102, 241, 0.9)', color: '#fff',
-                padding: '8px 16px', borderRadius: '20px',
-                fontSize: '0.75rem', fontWeight: '600', zIndex: 9999,
-                display: 'flex', alignItems: 'center', gap: '8px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
-              }}>
-                <div style={{
-                  width: '12px', height: '12px',
-                  border: '2px solid #fff', borderTopColor: 'transparent',
-                  borderRadius: '50%', animation: 'spin 0.8s linear infinite'
-                }}></div>
+              <div style={{ position: 'fixed', bottom: '20px', right: '20px', background: 'rgba(99, 102, 241, 0.9)', color: '#fff', padding: '8px 16px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
+                <div style={{ width: '12px', height: '12px', border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
                 Loading payment system...
               </div>
             )}
@@ -625,8 +472,8 @@ function App() {
             />
             
             <main style={{ position: 'relative', zIndex: 1 }}>
-              {currentPage === 'home' && <HomePage setCurrentPage={setCurrentPage} />}
-              {currentPage === 'products' && (
+              {currentPage === 'home'       && <HomePage setCurrentPage={setCurrentPage} />}
+              {currentPage === 'products'   && (
                 <ProductsPage 
                   products={products}
                   setProducts={setProducts}
@@ -640,34 +487,62 @@ function App() {
                   onAddReview={handleAddReview}
                 />
               )}
-              {currentPage === 'cart' && (
-                <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />
-              )}
-              {currentPage === 'login'  && <LoginPage />}
-              {currentPage === 'orders' && (
-                <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />
-              )}
-              {currentPage === 'admin' && user?.isAdmin && (
-                <AdminPanel 
-                  products={products} 
-                  addProduct={addProduct} 
-                  deleteProduct={deleteProduct} 
-                  orders={orders} 
-                />
+              {currentPage === 'cart'       && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
+              {currentPage === 'login'      && <LoginPage />}
+              {currentPage === 'orders'     && <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />}
+              {currentPage === 'admin'      && user?.isAdmin && (
+                <AdminPanel products={products} addProduct={addProduct} deleteProduct={deleteProduct} orders={orders} />
               )}
               {currentPage === 'mocktests'   && <MockTestPage />}
               {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
-              {currentPage === 'aichat' && (
-                <AIChatPage
-                  setCurrentPage={setCurrentPage}
+              {currentPage === 'aichat'      && (
+                <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />
+              )}
+              {currentPage === 'compiler'    && (
+                <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />
+              )}
+
+              {/* ✅ Brain Trap Game — onPayment prop added for real Razorpay */}
+              {currentPage === 'braintrap'   && (
+                <BrainTrapGame
+                  isDark={isDark}
+                  isMobile={window.innerWidth <= 768}
                   user={user}
-                  openCompiler={openCompiler}
+                  onPayment={initiatePayment}
+                  RAZORPAY_KEY_ID={RAZORPAY_KEY_ID}
                 />
               )}
-              {currentPage === 'compiler' && (
-                <PythonCompiler
-                  initialCode={compilerInitialCode}
-                  onClose={() => setCurrentPage('aichat')}
+
+              {/* ✅ Streak Challenge Pages */}
+              {currentPage === 'streak' && (
+                <StreakChallengePage
+                  isMobile={window.innerWidth <= 768}
+                  isDark={isDark}
+                  user={user}
+                  setCurrentPage={setCurrentPage}
+                  onBuy={handleStreakPayment}
+                />
+              )}
+              {currentPage === 'streak-practice' && (
+                <DailyPractice
+                  isMobile={window.innerWidth <= 768}
+                  isDark={isDark}
+                  user={user}
+                  setCurrentPage={setCurrentPage}
+                />
+              )}
+              {currentPage === 'streak-result' && (
+                <StreakResult
+                  isMobile={window.innerWidth <= 768}
+                  isDark={isDark}
+                  user={user}
+                />
+              )}
+              {/* ✅ Admin Streak — sirf luckyfaizu3@gmail.com ke liye */}
+              {currentPage === 'admin-streak' && user?.email === ADMIN_EMAIL && (
+                <AdminStreak
+                  isMobile={window.innerWidth <= 768}
+                  isDark={isDark}
                 />
               )}
             </main>
@@ -675,9 +550,7 @@ function App() {
             {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
             
             <style>{`
-              @keyframes spin {
-                to { transform: rotate(360deg); }
-              }
+              @keyframes spin { to { transform: rotate(360deg); } }
             `}</style>
           </div>
           )}
