@@ -33,7 +33,7 @@ import AdminPanel from './pages/AdminPanel';
 import LoginPage from './pages/LoginPage';
 import MockTestPage from './pages/MockTestPage';
 import AIChatPage from './pages/AIChatPage';
-import PythonCompiler from './pages/PythonCompiler'; // ✅ ADDED
+import PythonCompiler from './pages/PythonCompiler';
 
 // Contexts
 export const CartContext = React.createContext();
@@ -73,7 +73,7 @@ function App() {
   }, []);
 
   const [cart, setCart] = useState(() => {
-    const savedCart = localStorage.getItem('faizupyzone_cart');
+    const savedCart = localStorage.getItem('pyskill_cart');
     return savedCart ? JSON.parse(savedCart) : [];
   });
   const [user, setUser] = useState(null);
@@ -87,7 +87,6 @@ function App() {
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [razorpayError, setRazorpayError] = useState(false);
 
-  // ✅ Compiler state — initialCode passed from AIChatPage
   const [compilerInitialCode, setCompilerInitialCode] = useState('');
   
   // ✅ COMPLETE BROWSER BACK BUTTON FIX
@@ -96,16 +95,12 @@ function App() {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
       if (hash.startsWith('products/')) return 'products';
-      // ✅ FIX: 'compiler' aur 'aichat' removed from validPages
-      // Taake npm start ya refresh pe hamesha home aaye, compiler freeze na ho
       const validPages = ['home', 'products', 'cart', 'orders', 'admin', 'login', 'mocktests', 'leaderboard'];
       return validPages.includes(hash) ? hash : 'home';
     };
 
     const initialPage = getInitialPage();
     setCurrentPage(initialPage);
-
-    // ✅ FIX: replaceState se pehle se saved #compiler hash bhi reset ho jayega
     window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
 
     const handlePopState = (event) => {
@@ -135,13 +130,13 @@ function App() {
   
   // ✅ Dark mode
   const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem('faizupyzone_theme');
+    const saved = localStorage.getItem('pyskill_theme');
     return saved === 'dark';
   });
 
   // ✅ Background theme
   const [backgroundTheme, setBackgroundTheme] = useState(() => {
-    const saved = localStorage.getItem('faizupyzone_background');
+    const saved = localStorage.getItem('pyskill_background');
     return saved ? parseInt(saved) : 0;
   });
   
@@ -153,7 +148,7 @@ function App() {
   const toggleTheme = () => {
     setIsDark(prev => {
       const newTheme = !prev;
-      localStorage.setItem('faizupyzone_theme', newTheme ? 'dark' : 'light');
+      localStorage.setItem('pyskill_theme', newTheme ? 'dark' : 'light');
       return newTheme;
     });
   };
@@ -161,7 +156,7 @@ function App() {
   const toggleBackground = () => {
     setBackgroundTheme(prev => {
       const next = (prev + 1) % 12;
-      localStorage.setItem('faizupyzone_background', next.toString());
+      localStorage.setItem('pyskill_background', next.toString());
       return next;
     });
   };
@@ -172,7 +167,7 @@ function App() {
   };
 
   useEffect(() => {
-    localStorage.setItem('faizupyzone_cart', JSON.stringify(cart));
+    localStorage.setItem('pyskill_cart', JSON.stringify(cart));
   }, [cart]);
 
   // ✅ Razorpay Script Loading
@@ -286,7 +281,7 @@ function App() {
       key: RAZORPAY_KEY_ID,
       amount: amount * 100,
       currency: "INR",
-      name: "FaizUpyZone",
+      name: "PySkill",
       description: "Premium Study Materials",
       image: "https://img.icons8.com/fluency/96/000000/graduation-cap.png",
       handler: async function (response) {
@@ -327,7 +322,6 @@ function App() {
       setCart([...cart, {...product, quantity: 1}]);
       window.showToast?.('✅ Added to cart!', 'success');
     }
-    
     trackAction(ACTIONS.ADD_TO_CART, {
       productId: product.id,
       productName: product.title,
@@ -340,7 +334,6 @@ function App() {
     const product = cart.find(item => item.id === productId);
     setCart(cart.filter(item => item.id !== productId));
     window.showToast?.('🗑️ Removed from cart', 'info');
-    
     if (product) {
       trackAction(ACTIONS.REMOVE_FROM_CART, {
         productId: product.id,
@@ -355,7 +348,6 @@ function App() {
       setCurrentPage('login');
       return;
     }
-
     trackAction(ACTIONS.PURCHASE_INITIATED, {
       productId: product.id,
       productName: product.title,
@@ -393,10 +385,8 @@ function App() {
         await new Promise(resolve => setTimeout(resolve, 1000));
         await loadOrders();
         await new Promise(resolve => setTimeout(resolve, 500));
-
         setCurrentPage('orders');
         window.showToast?.('🎊 Payment successful! Download your PDFs now!', 'success');
-
       } catch (error) {
         console.error('❌ Payment handler error:', error);
         window.showToast?.('⚠️ Payment successful but error occurred. Check orders or contact admin!', 'warning');
@@ -496,20 +486,17 @@ function App() {
         }
 
         setCart([]);
-        localStorage.removeItem('faizupyzone_cart');
-        
+        localStorage.removeItem('pyskill_cart');
         await new Promise(resolve => setTimeout(resolve, 1000));
         await loadOrders();
         await new Promise(resolve => setTimeout(resolve, 500));
-
         setCurrentPage('orders');
         window.showToast?.('🎊 Order completed! Download your PDFs now!', 'success');
-
       } catch (error) {
         console.error('❌ Payment handler error:', error);
         window.showToast?.('⚠️ Payment successful but error occurred. Check orders!', 'warning');
         setCart([]);
-        localStorage.removeItem('faizupyzone_cart');
+        localStorage.removeItem('pyskill_cart');
         await loadOrders();
         setCurrentPage('orders');
       }
@@ -580,9 +567,6 @@ function App() {
     }
   };
 
-  // ✅ Handler: AIChatPage se compiler open karne ke liye
-  // AIChatPage mein yeh call karo:
-  //   props.openCompiler(code)  → compiler page khulega us code ke saath
   const openCompiler = useCallback((code = '') => {
     setCompilerInitialCode(code);
     setCurrentPage('compiler');
@@ -608,8 +592,6 @@ function App() {
             
             <ToastContainer />
             <Background />
-
-            {/* ✅ AI ChatBot - Sab pages par visible */}
             <AIChatBot setCurrentPage={setCurrentPage} currentPage={currentPage} />
             
             {!razorpayLoaded && !razorpayError && (
@@ -644,7 +626,6 @@ function App() {
             
             <main style={{ position: 'relative', zIndex: 1 }}>
               {currentPage === 'home' && <HomePage setCurrentPage={setCurrentPage} />}
-              
               {currentPage === 'products' && (
                 <ProductsPage 
                   products={products}
@@ -659,7 +640,6 @@ function App() {
                   onAddReview={handleAddReview}
                 />
               )}
-              
               {currentPage === 'cart' && (
                 <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />
               )}
@@ -677,8 +657,6 @@ function App() {
               )}
               {currentPage === 'mocktests'   && <MockTestPage />}
               {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
-
-              {/* ✅ AIChatPage — openCompiler prop pass kiya */}
               {currentPage === 'aichat' && (
                 <AIChatPage
                   setCurrentPage={setCurrentPage}
@@ -686,8 +664,6 @@ function App() {
                   openCompiler={openCompiler}
                 />
               )}
-
-              {/* ✅ PythonCompiler — separate full page */}
               {currentPage === 'compiler' && (
                 <PythonCompiler
                   initialCode={compilerInitialCode}

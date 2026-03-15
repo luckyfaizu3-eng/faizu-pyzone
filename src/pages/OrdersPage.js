@@ -35,7 +35,6 @@ function PdfDownloadButton({ pdf, isDark }) {
       setTimeout(() => setStatus('idle'), 3000);
     } catch (err) {
       console.error('PDF download error:', err);
-      // Fallback: direct link with download attribute
       const a = document.createElement('a');
       a.href = pdf.url;
       a.download = pdf.name.endsWith('.pdf') ? pdf.name : pdf.name + '.pdf';
@@ -175,7 +174,7 @@ export default function OrdersPage({ orders, user, refreshOrders }) {
   .pid{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;font-size:13px;color:#1d4ed8;font-weight:700;margin-top:20px;word-break:break-all;}
 </style></head><body>
 <div class="header">
-  <div><div class="brand">&#127891; FaizUpyZone</div><div style="font-size:13px;color:#64748b;margin-top:4px;">Premium Study Materials</div></div>
+  <div><div class="brand">&#127891; PySkill</div><div style="font-size:13px;color:#64748b;margin-top:4px;">Premium Study Materials</div></div>
   <div class="right"><h2 style="font-size:22px;font-weight:800;">INVOICE</h2><p style="color:#64748b;font-size:13px;margin-top:4px;">Date: ${order.date || new Date().toLocaleDateString('en-IN')}</p><div class="badge">&#10003; PAID</div></div>
 </div>
 <div class="grid">
@@ -190,7 +189,7 @@ export default function OrdersPage({ orders, user, refreshOrders }) {
   </tbody>
 </table>
 ${order.paymentId ? `<div class="pid">Payment ID: ${order.paymentId}</div>` : ''}
-<div class="footer"><p>Thank you for purchasing from FaizUpyZone!</p><p style="margin-top:6px;">Computer-generated invoice. No signature required.</p></div>
+<div class="footer"><p>Thank you for purchasing from PySkill!</p><p style="margin-top:6px;">Computer-generated invoice. No signature required.</p></div>
 </body></html>`;
 
     const blob = new Blob([html], { type: 'text/html' });
