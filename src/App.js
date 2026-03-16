@@ -46,14 +46,19 @@ import AdminStreak from './pages/AdminStreak';
 // ✅ Streak price service
 import { getStreakPrice } from './streakService';
 
+// ✅ Geo Price Service
+import { detectGeoPrice } from './services/geoPrice';
+
 // Contexts
 export const CartContext = React.createContext();
 export const AuthContext = React.createContext();
 export const ThemeContext = React.createContext();
+export const GeoContext = React.createContext();
 
 export const useCart = () => React.useContext(CartContext);
 export const useAuth = () => React.useContext(AuthContext);
 export const useTheme = () => React.useContext(ThemeContext);
+export const useGeo = () => React.useContext(GeoContext);
 
 export const RAZORPAY_KEY_ID = "rzp_live_SAvdBqaaBDr2qS";
 
@@ -69,7 +74,6 @@ export const CATEGORIES = [
   { id: 'marketing', name: 'Digital Marketing', icon: '📱', color: '#06b6d4' }
 ];
 
-// ✅ Admin email for free access
 const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
 
 function App() {
@@ -96,9 +100,19 @@ function App() {
   const [razorpayLoaded, setRazorpayLoaded] = useState(false);
   const [razorpayError, setRazorpayError] = useState(false);
   const [compilerInitialCode, setCompilerInitialCode] = useState('');
-
-  // ✅ Dynamic streak price from Firestore
   const [streakPrice, setStreakPrice] = useState(99);
+
+  // ✅ Geo State — poori website mein available
+  const [geoData, setGeoData] = useState(null);
+  const [showGeoBanner, setShowGeoBanner] = useState(true);
+
+  // ✅ Detect IP on first click / visit
+  useEffect(() => {
+    detectGeoPrice().then(data => {
+      setGeoData(data);
+      console.log(`🌍 User from: ${data.flag} ${data.countryName} — ${data.symbol}${data.basic}`);
+    });
+  }, []);
 
   // ✅ Browser back button fix
   useEffect(() => {
@@ -106,13 +120,11 @@ function App() {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
       if (hash.startsWith('products/')) return 'products';
-      // ✅ verify route — hash like #verify/CERT-ID
       if (hash.startsWith('verify/') || hash === 'verify') return 'verify';
       const validPages = [
         'home', 'products', 'cart', 'orders', 'admin', 'login',
         'mocktests', 'leaderboard', 'braintrap', 'aichat', 'compiler',
-        'streak', 'streak-practice', 'streak-result', 'admin-streak',
-        'verify'
+        'streak', 'streak-practice', 'streak-result', 'admin-streak', 'verify'
       ];
       return validPages.includes(hash) ? hash : 'home';
     };
@@ -184,7 +196,6 @@ function App() {
     localStorage.setItem('pyskill_cart', JSON.stringify(cart));
   }, [cart]);
 
-  // ✅ Razorpay
   useEffect(() => {
     if (window.Razorpay) { setRazorpayLoaded(true); return; }
     const existingScript = document.querySelector('script[src*="razorpay"]');
@@ -213,12 +224,9 @@ function App() {
     }
   }, []);
 
-  // ✅ Load products + streak price together on mount
   useEffect(() => {
     loadProducts();
-    getStreakPrice().then(p => {
-      if (p) setStreakPrice(p);
-    });
+    getStreakPrice().then(p => { if (p) setStreakPrice(p); });
   }, [loadProducts]);
 
   const loadOrders = useCallback(async () => {
@@ -247,8 +255,6 @@ function App() {
           uid: firebaseUser.uid,
           isAdmin: isAdminAuth(firebaseUser.email)
         });
-
-        // ✅ Admin ko streak free access
         if (firebaseUser.email === ADMIN_EMAIL) {
           localStorage.setItem(`streak_purchased_${firebaseUser.uid}`, 'true');
           if (!localStorage.getItem(`streak_start_${firebaseUser.uid}`)) {
@@ -256,7 +262,6 @@ function App() {
             localStorage.setItem(`streak_count_${firebaseUser.uid}`, '0');
           }
         }
-
       } else {
         setUser(null);
       }
@@ -305,6 +310,15 @@ function App() {
       console.error('❌ Error opening Razorpay:', error);
       window.showToast?.('❌ Failed to open payment. Please refresh!', 'error');
     }
+  };
+
+  // ✅ PayPal payment for foreign users
+  const initiatePayPal = (geo, level = 'basic', onSuccess) => {
+    const price = geo[level] || geo.price;
+    const currency = geo.currency;
+    const paypalUrl = `https://www.paypal.com/paypalme/pyskill/${price}${currency}`;
+    window.open(paypalUrl, '_blank');
+    window.showToast?.(`🅿️ PayPal opened — ${geo.symbol}${price} ${currency}`, 'info');
   };
 
   const addToCart = (product) => {
@@ -437,7 +451,6 @@ function App() {
     setCurrentPage('compiler');
   }, []);
 
-  // ✅ Streak payment handler
   const handleStreakPayment = () => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); setCurrentPage('login'); return; }
     initiatePayment(streakPrice, [], async (response) => {
@@ -449,14 +462,14 @@ function App() {
     });
   };
 
-  // ✅ Check if verify page — show without navbar/footer
-  const isVerifyPage = currentPage === 'verify' ||
-    window.location.hash.startsWith('#verify/');
+  const isVerifyPage = currentPage === 'verify' || window.location.hash.startsWith('#verify/');
+  const isIndia = geoData?.country === 'IN' || !geoData;
 
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
         <ThemeContext.Provider value={{ isDark, toggleTheme, backgroundTheme, toggleBackground }}>
+          <GeoContext.Provider value={{ geoData, isIndia, initiatePayPal }}>
           {showSplash ? (
             <SplashScreen onComplete={handleSplashComplete} />
           ) : (
@@ -477,6 +490,38 @@ function App() {
               <div style={{ position: 'fixed', bottom: '20px', right: '20px', background: 'rgba(99, 102, 241, 0.9)', color: '#fff', padding: '8px 16px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
                 <div style={{ width: '12px', height: '12px', border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
                 Loading payment system...
+              </div>
+            )}
+
+            {/* ✅ Foreign Country Banner — top of page */}
+            {!isVerifyPage && !isIndia && geoData && showGeoBanner && (
+              <div style={{
+                background: 'linear-gradient(135deg, #0f172a, #1e1b4b)',
+                padding: '10px 20px',
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px', flexWrap: 'wrap',
+                zIndex: 9998, position: 'relative',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '1.2rem' }}>{geoData.flag}</span>
+                  <span style={{ fontSize: '0.82rem', fontWeight: '600', color: '#e2e8f0' }}>
+                    Visiting from <strong style={{ color: '#fbbf24' }}>{geoData.countryName}</strong>?
+                    Prices shown in <strong style={{ color: '#fbbf24' }}>{geoData.currency}</strong>
+                  </span>
+                  <span style={{
+                    background: 'rgba(16,185,129,0.2)',
+                    border: '1px solid rgba(16,185,129,0.4)',
+                    borderRadius: '20px', padding: '2px 10px',
+                    fontSize: '0.72rem', fontWeight: '700', color: '#34d399'
+                  }}>
+                    🅿️ PayPal accepted
+                  </span>
+                </div>
+                <button onClick={() => setShowGeoBanner(false)} style={{
+                  background: 'transparent', border: 'none',
+                  color: '#64748b', cursor: 'pointer', fontSize: '1rem', flexShrink: 0
+                }}>✕</button>
               </div>
             )}
 
@@ -527,8 +572,6 @@ function App() {
                   {currentPage === 'compiler'    && (
                     <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />
                   )}
-
-                  {/* ✅ Brain Trap Game */}
                   {currentPage === 'braintrap'   && (
                     <BrainTrapGame
                       isDark={isDark}
@@ -538,8 +581,6 @@ function App() {
                       RAZORPAY_KEY_ID={RAZORPAY_KEY_ID}
                     />
                   )}
-
-                  {/* ✅ Streak Challenge Pages */}
                   {currentPage === 'streak' && (
                     <StreakChallengePage
                       isMobile={window.innerWidth <= 768}
@@ -582,6 +623,7 @@ function App() {
             `}</style>
           </div>
           )}
+          </GeoContext.Provider>
         </ThemeContext.Provider>
       </CartContext.Provider>
     </AuthContext.Provider>
