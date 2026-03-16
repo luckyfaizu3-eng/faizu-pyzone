@@ -42,13 +42,13 @@ export const SUBSCRIPTION_PLANS = {
     name: 'Pro Python Test',
     level: 'pro',
     price: 29,
-    timeLimit: 210,
+    timeLimit: 180,
     totalQuestions: 60,
     description: 'Job-interview level challenges',
     badge: '⭐ BEST',
     features: [
       '60 Pro-level questions',
-      '210 minutes (3.5 min per question)',
+      '180 minutes (3 min per question)',
       'Job interview standard',
       'Algorithms, design patterns',
       'Professional certificate'

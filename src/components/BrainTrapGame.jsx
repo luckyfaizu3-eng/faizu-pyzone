@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { db } from '../firebase';
 import { collection, addDoc, getDocs, query, orderBy, limit, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
+import { useGeo } from '../App';
 
 // ═══════════════════════════════════════════════════════════════
 // FALLBACK QUESTIONS
@@ -143,7 +144,7 @@ function DiffBadge({ diff }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ✅ REAL LEADERBOARD — Top 200, Paid decorated, Admin can remove
+// ✅ REAL LEADERBOARD
 // ═══════════════════════════════════════════════════════════════
 function LeaderboardInline({ isAdmin, currentUserId }) {
   const [entries, setEntries] = useState([]);
@@ -163,7 +164,6 @@ function LeaderboardInline({ isAdmin, currentUserId }) {
 
   useEffect(() => { fetchData(); }, []);
 
-  // ✅ Admin remove entry
   const removeEntry = async (entryId, entryName) => {
     if (!window.confirm(`Remove "${entryName}" from leaderboard?`)) return;
     setRemoving(entryId);
@@ -177,7 +177,6 @@ function LeaderboardInline({ isAdmin, currentUserId }) {
 
   return (
     <div style={{marginTop:"16px",background:"rgba(255,255,255,0.75)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:"18px",overflow:"hidden"}}>
-      {/* Header */}
       <div style={{background:"linear-gradient(135deg,#6366f1,#ec4899)",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{fontWeight:"900",color:"#fff",fontSize:"0.95rem"}}>🏆 Leaderboard</div>
         <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
@@ -185,15 +184,11 @@ function LeaderboardInline({ isAdmin, currentUserId }) {
           <button onClick={fetchData} style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:"8px",padding:"3px 8px",color:"#fff",fontSize:"0.65rem",fontWeight:"700",cursor:"pointer"}}>🔄</button>
         </div>
       </div>
-
-      {/* Legend */}
       <div style={{padding:"8px 16px",background:"rgba(99,102,241,0.05)",borderBottom:"1px solid rgba(99,102,241,0.1)",display:"flex",gap:"12px",flexWrap:"wrap"}}>
         <span style={{fontSize:"0.65rem",color:"#6366f1",fontWeight:"700"}}>👑 Paid member</span>
         <span style={{fontSize:"0.65rem",color:"#94a3b8",fontWeight:"600"}}>· Free player</span>
         {isAdmin && <span style={{fontSize:"0.65rem",color:"#ef4444",fontWeight:"700"}}>🗑️ Admin: click to remove entry</span>}
       </div>
-
-      {/* Entries */}
       <div style={{maxHeight:"400px",overflowY:"auto",padding:"8px"}}>
         {loading ? (
           <div style={{textAlign:"center",padding:"28px",color:"#6366f1",fontWeight:"700",fontSize:"0.85rem"}}>Loading... ⏳</div>
@@ -209,37 +204,17 @@ function LeaderboardInline({ isAdmin, currentUserId }) {
             <div key={entry.id} style={{
               display:"flex",alignItems:"center",gap:"10px",padding:"10px 10px",
               borderRadius:"12px",marginBottom:"4px",
-              background: isCurrentUser
-                ? "rgba(99,102,241,0.12)"
-                : i<3
-                  ? `rgba(${i===0?'245,158,11':i===1?'148,163,184':'249,115,22'},0.08)`
-                  : isPaidUser
-                    ? "rgba(99,102,241,0.06)"
-                    : "rgba(0,0,0,0.02)",
-              border: isCurrentUser
-                ? "1.5px solid rgba(99,102,241,0.4)"
-                : i<3
-                  ? `1px solid rgba(${i===0?'245,158,11':i===1?'148,163,184':'249,115,22'},0.25)`
-                  : isPaidUser
-                    ? "1px solid rgba(99,102,241,0.15)"
-                    : "1px solid rgba(0,0,0,0.05)",
+              background: isCurrentUser ? "rgba(99,102,241,0.12)" : i<3 ? `rgba(${i===0?'245,158,11':i===1?'148,163,184':'249,115,22'},0.08)` : isPaidUser ? "rgba(99,102,241,0.06)" : "rgba(0,0,0,0.02)",
+              border: isCurrentUser ? "1.5px solid rgba(99,102,241,0.4)" : i<3 ? `1px solid rgba(${i===0?'245,158,11':i===1?'148,163,184':'249,115,22'},0.25)` : isPaidUser ? "1px solid rgba(99,102,241,0.15)" : "1px solid rgba(0,0,0,0.05)",
               position:"relative"
             }}>
-              {/* Rank */}
-              <div style={{fontSize:i<3?"1.2rem":"0.8rem",fontWeight:"900",minWidth:"28px",textAlign:"center",
-                color:i<3?['#f59e0b','#94a3b8','#f97316'][i]:'#94a3b8'}}>
+              <div style={{fontSize:i<3?"1.2rem":"0.8rem",fontWeight:"900",minWidth:"28px",textAlign:"center",color:i<3?['#f59e0b','#94a3b8','#f97316'][i]:'#94a3b8'}}>
                 {i<3?medals[i]:`#${i+1}`}
               </div>
-
-              {/* Name + stats */}
               <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
                   {isPaidUser && <span style={{fontSize:"0.6rem"}}>👑</span>}
-                  <div style={{fontWeight:"800",fontSize:"0.85rem",color:"#1e1b4b",
-                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
-                    background:isPaidUser?"linear-gradient(135deg,#6366f1,#ec4899)":undefined,
-                    WebkitBackgroundClip:isPaidUser?"text":undefined,
-                    WebkitTextFillColor:isPaidUser?"transparent":undefined}}>
+                  <div style={{fontWeight:"800",fontSize:"0.85rem",color:"#1e1b4b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",background:isPaidUser?"linear-gradient(135deg,#6366f1,#ec4899)":undefined,WebkitBackgroundClip:isPaidUser?"text":undefined,WebkitTextFillColor:isPaidUser?"transparent":undefined}}>
                     {entry.name}
                     {isCurrentUser && <span style={{fontSize:"0.6rem",marginLeft:"4px",color:"#6366f1",WebkitTextFillColor:"#6366f1"}}>← You</span>}
                   </div>
@@ -248,26 +223,15 @@ function LeaderboardInline({ isAdmin, currentUserId }) {
                   {entry.correct}/{entry.total} correct · {entry.maxStreak}🔥 streak · {entry.date}
                 </div>
               </div>
-
-              {/* Score */}
               <div style={{textAlign:"right",flexShrink:0}}>
-                <div style={{fontSize:"1rem",fontWeight:"900",
-                  background:isPaidUser?"linear-gradient(135deg,#6366f1,#ec4899)":"none",
-                  WebkitBackgroundClip:isPaidUser?"text":"unset",
-                  WebkitTextFillColor:isPaidUser?"transparent":"#1e1b4b",
-                  color:isPaidUser?"transparent":"#1e1b4b"}}>
+                <div style={{fontSize:"1rem",fontWeight:"900",background:isPaidUser?"linear-gradient(135deg,#6366f1,#ec4899)":"none",WebkitBackgroundClip:isPaidUser?"text":"unset",WebkitTextFillColor:isPaidUser?"transparent":"#1e1b4b",color:isPaidUser?"transparent":"#1e1b4b"}}>
                   {entry.score}
                 </div>
                 <div style={{fontSize:"0.58rem",color:"#94a3b8",fontWeight:"700"}}>PTS</div>
               </div>
-
-              {/* Admin remove button */}
               {isAdmin && (
-                <button onClick={()=>removeEntry(entry.id, entry.name)}
-                  disabled={removing===entry.id}
-                  style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",
-                    borderRadius:"8px",padding:"4px 8px",color:"#ef4444",fontSize:"0.65rem",
-                    fontWeight:"700",cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
+                <button onClick={()=>removeEntry(entry.id, entry.name)} disabled={removing===entry.id}
+                  style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"8px",padding:"4px 8px",color:"#ef4444",fontSize:"0.65rem",fontWeight:"700",cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
                   {removing===entry.id?"...":"🗑️"}
                 </button>
               )}
@@ -275,7 +239,6 @@ function LeaderboardInline({ isAdmin, currentUserId }) {
           );
         })}
       </div>
-
       {entries.length > 0 && (
         <div style={{padding:"8px 16px",borderTop:"1px solid rgba(99,102,241,0.1)",textAlign:"center",fontSize:"0.68rem",color:"#94a3b8"}}>
           {entries.length} players on leaderboard
@@ -286,7 +249,7 @@ function LeaderboardInline({ isAdmin, currentUserId }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ADMIN CONTROLS — price only, no fake add
+// ADMIN CONTROLS
 // ═══════════════════════════════════════════════════════════════
 function AdminControls({ livePrice, setLivePrice }) {
   const [inputPrice, setInputPrice] = useState(livePrice.toString());
@@ -350,7 +313,7 @@ function AdminControls({ livePrice, setLivePrice }) {
             {genStatus&&<div style={{fontSize:"0.7rem",marginTop:"6px",color:genStatus.startsWith('✅')?"#059669":"#dc2626",fontWeight:"700"}}>{genStatus}</div>}
           </div>
           <div style={{borderTop:"1px solid rgba(99,102,241,0.1)",paddingTop:"12px"}}>
-            <div style={{fontSize:"0.72rem",fontWeight:"700",color:"#4338ca",marginBottom:"8px"}}>💰 Set Monthly Price</div>
+            <div style={{fontSize:"0.72rem",fontWeight:"700",color:"#4338ca",marginBottom:"8px"}}>💰 Set Monthly Price (INR base)</div>
             <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:"4px",flex:1,background:"rgba(255,255,255,0.9)",border:"1.5px solid rgba(99,102,241,0.3)",borderRadius:"12px",padding:"0 12px"}}>
                 <span style={{fontSize:"0.9rem",fontWeight:"800",color:"#6366f1"}}>₹</span>
@@ -371,9 +334,9 @@ function AdminControls({ livePrice, setLivePrice }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// PAYWALL MODAL
+// ✅ GEO-AWARE PAYWALL MODAL
 // ═══════════════════════════════════════════════════════════════
-function PaywallModal({ onClose, onUnlock, livePrice }) {
+function PaywallModal({ onClose, onUnlock, displayPrice, isIndia, geoData }) {
   const features = [
     {icon:"♾️",title:"30 Questions/Day",desc:"10 Easy + 10 Medium + 10 Hard"},
     {icon:"🤖",title:"AI-Generated Daily",desc:"Fresh questions every session"},
@@ -387,6 +350,12 @@ function PaywallModal({ onClose, onUnlock, livePrice }) {
           <div style={{fontSize:"3.5rem",marginBottom:"8px"}}>🔐</div>
           <div style={{fontSize:"1.6rem",fontWeight:"900",color:"#fff",marginBottom:"6px"}}>Unlock Full Access</div>
           <div style={{fontSize:"0.82rem",color:"#94a3b8"}}>You've used your 10 free questions today</div>
+          {/* ✅ Foreign currency notice */}
+          {!isIndia && geoData && (
+            <div style={{marginTop:"8px",display:"inline-flex",alignItems:"center",gap:"6px",background:"rgba(99,102,241,0.15)",border:"1px solid rgba(99,102,241,0.3)",borderRadius:"20px",padding:"4px 12px",fontSize:"0.72rem",fontWeight:"700",color:"#a78bfa"}}>
+              {geoData.flag} {geoData.countryName} • 🅿️ PayPal
+            </div>
+          )}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",marginBottom:"24px"}}>
           {features.map((f,i)=>(
@@ -397,14 +366,18 @@ function PaywallModal({ onClose, onUnlock, livePrice }) {
             </div>
           ))}
         </div>
+        {/* ✅ Geo price display */}
         <div style={{textAlign:"center",marginBottom:"20px"}}>
           <div style={{display:"flex",alignItems:"baseline",justifyContent:"center",gap:"6px"}}>
-            <span style={{fontSize:"3rem",fontWeight:"900",background:"linear-gradient(135deg,#6366f1,#ec4899)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>₹{livePrice}</span>
+            <span style={{fontSize:"3rem",fontWeight:"900",background:"linear-gradient(135deg,#6366f1,#ec4899)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{displayPrice}</span>
             <span style={{fontSize:"0.82rem",color:"#64748b"}}>/month</span>
           </div>
+          {!isIndia && geoData && (
+            <div style={{fontSize:"0.72rem",color:"#64748b",marginTop:"4px"}}>via PayPal • {geoData.currency}</div>
+          )}
         </div>
         <button onClick={onUnlock} style={{width:"100%",padding:"15px",background:"linear-gradient(135deg,#6366f1,#ec4899)",border:"none",borderRadius:"16px",color:"#fff",fontSize:"1rem",fontWeight:"900",cursor:"pointer",marginBottom:"10px"}}>
-          🚀 Unlock for ₹{livePrice}/month
+          🚀 Unlock for {displayPrice}/month {!isIndia && geoData ? "via PayPal" : ""}
         </button>
         <button onClick={onClose} style={{width:"100%",padding:"10px",background:"transparent",border:"none",color:"#64748b",fontSize:"0.8rem",cursor:"pointer"}}>
           Maybe later
@@ -448,6 +421,9 @@ function AILoadingScreen() {
 const ADMIN_EMAIL = "luckyfaizu3@gmail.com";
 
 export default function BrainTrapGame({ user, onPayment }) {
+  // ✅ Geo hook
+  const { geoData, isIndia, initiatePayPal } = useGeo();
+
   const [screen, setScreen] = useState("intro");
   const [storage, setStorage] = useState(()=>initStorage());
   const [questions, setQuestions] = useState([]);
@@ -483,6 +459,20 @@ export default function BrainTrapGame({ user, onPayment }) {
 
   const isAdmin = user?.email === ADMIN_EMAIL;
   const isPaid = storage.isPaid || isAdmin;
+
+  // ✅ Geo-aware price display
+  // livePrice is always INR base (set by admin). Convert for foreign users.
+  const getDisplayPrice = () => {
+    if (isIndia || !geoData) return `₹${livePrice}`;
+    // Scale: livePrice / 49 (INR base) * geoData.basic
+    const ratio = livePrice / 49;
+    const raw = geoData.basic * ratio;
+    const rounded = raw < 10
+      ? Math.round(raw * 100) / 100
+      : Math.floor(raw) + 0.99;
+    return `${geoData.symbol}${rounded.toFixed(2)}`;
+  };
+  const displayPrice = getDisplayPrice();
 
   // Load live price
   useEffect(()=>{
@@ -540,7 +530,6 @@ export default function BrainTrapGame({ user, onPayment }) {
   const isDisqualifiedToday = !isAdmin && storage.disqualifiedDate===getTodayKey();
   const canPlay = !freeBlocked && !paidBlocked && !isDisqualifiedToday && !deviceBlocked;
 
-  // Load questions
   const loadQuestions = useCallback(async()=>{
     setAiStatus("loading");
     try {
@@ -553,7 +542,6 @@ export default function BrainTrapGame({ user, onPayment }) {
         return result.questions;
       }
     } catch(e){console.error("AI failed:",e);}
-    // Firebase backup
     try {
       const snap=await getDoc(doc(db,'questionCache','braintrap_daily'));
       if(snap.exists()&&snap.data().questions?.length>=20){setAiStatus("cached");return snap.data().questions;}
@@ -562,25 +550,16 @@ export default function BrainTrapGame({ user, onPayment }) {
     return FALLBACK_QUESTIONS;
   },[]);
 
-  // ✅ FIX 1: Login required check in startGame
   const startGame = useCallback(async()=>{
-    // ✅ Must be logged in
-    if(!user){
-      window.showToast?.('⚠️ Please login first!','warning');
-      return;
-    }
+    if(!user){window.showToast?.('⚠️ Please login first!','warning');return;}
     const today=getTodayKey();
     let st=storage;
     if(st.date!==today){st={...st,date:today,questionsAnswered:0,hasPlayedFree:false};saveStorage(st);setStorage(st);}
     setScreen("loading");
     const allQs=await loadQuestions();
     const normalized=allQs.map((q,idx)=>({
-      id:q.id||idx+1,
-      code:q.code||q.question||'',
-      answer:q.answer||(q.options&&q.options[q.correct])||'',
-      options:q.options||[],
-      explanation:q.explanation||'',
-      difficulty:q.difficulty||'easy',
+      id:q.id||idx+1,code:q.code||q.question||'',answer:q.answer||(q.options&&q.options[q.correct])||'',
+      options:q.options||[],explanation:q.explanation||'',difficulty:q.difficulty||'easy',
       trap:q.difficulty==='trap'||q.difficulty==='mega',
     }));
     const easy=normalized.filter(q=>q.difficulty==='easy').sort(()=>Math.random()-.5);
@@ -595,15 +574,11 @@ export default function BrainTrapGame({ user, onPayment }) {
       if(sel.length<8) sel=normalized.sort(()=>Math.random()-.5).slice(0,10);
     }
     sel=sel.sort(()=>Math.random()-.5);
-    setQuestions(sel);
-    setQIndex(0);setScore(0);setCorrect(0);setStreak(0);setMaxStreak(0);
-    setSelected(null);setAnswered(false);setTimer(12);
-    setSessionAnswers([]);setReaction("");setSaved(false);setPlayerName('');
-    resetAntiCheat();
-    setScreen("playing");
+    setQuestions(sel);setQIndex(0);setScore(0);setCorrect(0);setStreak(0);setMaxStreak(0);
+    setSelected(null);setAnswered(false);setTimer(12);setSessionAnswers([]);setReaction("");setSaved(false);setPlayerName('');
+    resetAntiCheat();setScreen("playing");
   },[isPaid,isAdmin,loadQuestions,storage,user]);
 
-  // Timer
   useEffect(()=>{
     if(screen!=="playing"||answered) return;
     timerRef.current=setInterval(()=>{
@@ -614,7 +589,6 @@ export default function BrainTrapGame({ user, onPayment }) {
 
   useEffect(()=>{if(screen==="playing"&&!answered)setTimer(12);},[qIndex,screen,answered]);
 
-  // Anti-cheat
   useEffect(()=>{
     if(screen!=="playing") return;
     warningsRef.current=warnings;
@@ -638,33 +612,23 @@ export default function BrainTrapGame({ user, onPayment }) {
     };
     const onCtx=(e)=>{e.preventDefault();trigger('Right-click blocked!');};
     const onCopy=(e)=>{e.preventDefault();trigger('Copying blocked!');};
-    document.addEventListener('visibilitychange',onVis);
-    window.addEventListener('blur',onBlur);
-    document.addEventListener('keydown',onKey);
-    document.addEventListener('contextmenu',onCtx);
-    document.addEventListener('copy',onCopy);
+    document.addEventListener('visibilitychange',onVis);window.addEventListener('blur',onBlur);
+    document.addEventListener('keydown',onKey);document.addEventListener('contextmenu',onCtx);document.addEventListener('copy',onCopy);
     return()=>{
-      document.removeEventListener('visibilitychange',onVis);
-      window.removeEventListener('blur',onBlur);
-      document.removeEventListener('keydown',onKey);
-      document.removeEventListener('contextmenu',onCtx);
-      document.removeEventListener('copy',onCopy);
+      document.removeEventListener('visibilitychange',onVis);window.removeEventListener('blur',onBlur);
+      document.removeEventListener('keydown',onKey);document.removeEventListener('contextmenu',onCtx);document.removeEventListener('copy',onCopy);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[screen,warnings]);
 
-  // ✅ FIX 2: resetAntiCheat does NOT reset disqualifiedDate
   const resetAntiCheat = ()=>{
-    setWarnings(0);warningsRef.current=0;setShowWarning(false);
-    // NOTE: Do NOT reset disqualified here — only reset game UI state
-    setDisqualified(false);
+    setWarnings(0);warningsRef.current=0;setShowWarning(false);setDisqualified(false);
   };
 
   const handleAnswerRef = useRef(null);
   handleAnswerRef.current = useCallback((option)=>{
     if(answered) return;
-    clearInterval(timerRef.current);
-    setSelected(option);setAnswered(true);
+    clearInterval(timerRef.current);setSelected(option);setAnswered(true);
     const q=questions[qIndex];if(!q) return;
     const isCorrect=option===q.answer;
     let ns=score,nc=correct,nst=streak,nms=maxStreak;
@@ -701,55 +665,6 @@ export default function BrainTrapGame({ user, onPayment }) {
 
   const handleAnswer=(opt)=>handleAnswerRef.current(opt);
 
-  // ✅ FIX 3: Auto save to leaderboard — real users only, no fake entries
-  const saveScore = useCallback(async(finalScore, finalCorrect, finalMaxStreak, finalQuestions)=>{
-    if(!playerName.trim()||saving||saved) return;
-    if(!user?.uid) return; // must be logged in
-    setSaving(true);
-    try {
-      await addDoc(collection(db,'brainTrapLeaderboard'),{
-        name:playerName.trim(),
-        score:finalScore,
-        correct:finalCorrect,
-        total:finalQuestions,
-        maxStreak:finalMaxStreak,
-        date:new Date().toLocaleDateString('en-IN'),
-        timestamp:Date.now(),
-        userId:user.uid,
-        userEmail:user.email||'',
-        isPaid:isPaid||false, // ✅ Mark if paid — for decoration
-      });
-      setSaved(true);
-    } catch(e){console.error(e);}
-    finally{setSaving(false);}
-  },[playerName,saving,saved,user,isPaid]);
-
-  const unlockPaid=async()=>{
-    if(!user){window.showToast?.('⚠️ Please login first!','warning');return;}
-    let price=49;
-    try {
-      const snap=await getDoc(doc(db,'settings','braintrap'));
-      if(snap.exists()&&snap.data().price){price=snap.data().price;localStorage.setItem('braintrap_price',price.toString());}
-      else price=parseInt(localStorage.getItem('braintrap_price')||'49');
-    } catch{price=parseInt(localStorage.getItem('braintrap_price')||'49');}
-    onPayment(price,[],async(response)=>{
-      try {
-        await setDoc(doc(db,'users',user.uid,'braintrapSubscription','status'),{isPaid:true,paidAt:new Date().toISOString(),paymentId:response?.razorpay_payment_id||'manual',email:user.email,price});
-        const updated={...storage,isPaid:true,questionsAnswered:0,hasPlayedFree:false};
-        saveStorage(updated);setStorage(updated);setShowPaywall(false);
-        window.showToast?.('🎉 Brain Trap unlocked!','success');
-      } catch(e){
-        const updated={...storage,isPaid:true,questionsAnswered:0,hasPlayedFree:false};
-        saveStorage(updated);setStorage(updated);setShowPaywall(false);
-        window.showToast?.('🎉 Unlocked!','success');
-      }
-    });
-  };
-
-  const q=questions[qIndex];
-  const progress=questions.length>0?(qIndex/questions.length)*100:0;
-
-  // ✅ FIX 3: Auto save to leaderboard when result screen shows
   useEffect(()=>{
     if(screen==="result"&&playerName.trim()&&!saved&&!saving&&!disqualified&&user?.uid){
       saveScore(score,correct,maxStreak,questions.length);
@@ -757,19 +672,84 @@ export default function BrainTrapGame({ user, onPayment }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[screen]);
 
+  const saveScore = useCallback(async(finalScore, finalCorrect, finalMaxStreak, finalQuestions)=>{
+    if(!playerName.trim()||saving||saved) return;
+    if(!user?.uid) return;
+    setSaving(true);
+    try {
+      await addDoc(collection(db,'brainTrapLeaderboard'),{
+        name:playerName.trim(),score:finalScore,correct:finalCorrect,total:finalQuestions,
+        maxStreak:finalMaxStreak,date:new Date().toLocaleDateString('en-IN'),timestamp:Date.now(),
+        userId:user.uid,userEmail:user.email||'',isPaid:isPaid||false,
+      });
+      setSaved(true);
+    } catch(e){console.error(e);}
+    finally{setSaving(false);}
+  },[playerName,saving,saved,user,isPaid]);
+
+  // ✅ Unified unlock: Razorpay for India, PayPal for foreign
+  const unlockPaid = async () => {
+    if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
+    let price = 49;
+    try {
+      const snap = await getDoc(doc(db, 'settings', 'braintrap'));
+      if (snap.exists() && snap.data().price) {
+        price = snap.data().price;
+        localStorage.setItem('braintrap_price', price.toString());
+      } else {
+        price = parseInt(localStorage.getItem('braintrap_price') || '49');
+      }
+    } catch { price = parseInt(localStorage.getItem('braintrap_price') || '49'); }
+
+    if (!isIndia && geoData) {
+      // ✅ Foreign user → PayPal
+      initiatePayPal(geoData, 'basic', null);
+      // Optimistically mark as paid after PayPal redirect (manual confirm flow)
+      window.showToast?.(`🅿️ Complete payment via PayPal then refresh to unlock!`, 'info');
+      return;
+    }
+
+    // Indian user → Razorpay
+    onPayment(price, [], async (response) => {
+      try {
+        await setDoc(doc(db, 'users', user.uid, 'braintrapSubscription', 'status'), {
+          isPaid: true, paidAt: new Date().toISOString(),
+          paymentId: response?.razorpay_payment_id || 'manual',
+          email: user.email, price
+        });
+        const updated = { ...storage, isPaid: true, questionsAnswered: 0, hasPlayedFree: false };
+        saveStorage(updated); setStorage(updated); setShowPaywall(false);
+        window.showToast?.('🎉 Brain Trap unlocked!', 'success');
+      } catch (e) {
+        const updated = { ...storage, isPaid: true, questionsAnswered: 0, hasPlayedFree: false };
+        saveStorage(updated); setStorage(updated); setShowPaywall(false);
+        window.showToast?.('🎉 Unlocked!', 'success');
+      }
+    });
+  };
+
+  const q = questions[qIndex];
+  const progress = questions.length > 0 ? (qIndex / questions.length) * 100 : 0;
+
   if(screen==="loading") return <AILoadingScreen/>;
 
   // ── INTRO ──
   if(screen==="intro") return (
     <div style={{minHeight:"100vh",background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",padding:"1.5rem",fontFamily:"'Space Grotesk',system-ui,sans-serif"}}>
       <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&display=swap" rel="stylesheet"/>
-      {showPaywall&&<PaywallModal onClose={()=>setShowPaywall(false)} onUnlock={unlockPaid} livePrice={livePrice}/>}
+      {showPaywall && <PaywallModal onClose={()=>setShowPaywall(false)} onUnlock={unlockPaid} displayPrice={displayPrice} isIndia={isIndia} geoData={geoData} />}
       <div style={{maxWidth:"500px",width:"100%",textAlign:"center"}}>
         <div style={{marginBottom:"6px",fontSize:"4.5rem",animation:"floatBob 3s ease-in-out infinite"}}>🧠</div>
         <h1 style={{fontSize:"clamp(2.2rem,6vw,3.2rem)",fontWeight:"900",margin:"0 0 4px",background:"linear-gradient(135deg,#6366f1,#ec4899)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:"-0.04em"}}>Brain Trap</h1>
-        <div style={{fontSize:"0.78rem",fontWeight:"800",color:"#1e1b4b",letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:"28px"}}>Python's Most Dangerous Quiz</div>
+        <div style={{fontSize:"0.78rem",fontWeight:"800",color:"#1e1b4b",letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:"16px"}}>Python's Most Dangerous Quiz</div>
 
-        {/* ✅ Login required message */}
+        {/* ✅ Foreign currency pill */}
+        {!isIndia && geoData && (
+          <div style={{display:"inline-flex",alignItems:"center",gap:"6px",marginBottom:"16px",background:"rgba(99,102,241,0.1)",border:"1px solid rgba(99,102,241,0.25)",borderRadius:"20px",padding:"5px 14px",fontSize:"0.75rem",fontWeight:"700",color:"#6366f1"}}>
+            {geoData.flag} {geoData.countryName} • Prices in {geoData.currency} • 🅿️ PayPal
+          </div>
+        )}
+
         {!user && (
           <div style={{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:"14px",padding:"12px 16px",marginBottom:"14px"}}>
             <div style={{fontSize:"0.85rem",color:"#dc2626",fontWeight:"700"}}>⚠️ You must be logged in to play!</div>
@@ -795,7 +775,8 @@ export default function BrainTrapGame({ user, onPayment }) {
                   :isPaid?paidBlocked?"⛔ 30/30 questions used today":`🎮 ${paidQuestionsLeft}/30 left`
                   :freeBlocked?"⛔ Free session used today":"🎮 Free: 10 questions/day"}
               </span>
-              {!isPaid&&<span style={{color:"#6366f1",fontWeight:"800",fontSize:"0.78rem",cursor:"pointer"}} onClick={()=>setShowPaywall(true)}>Upgrade — ₹{livePrice} →</span>}
+              {/* ✅ Geo-aware upgrade prompt */}
+              {!isPaid && <span style={{color:"#6366f1",fontWeight:"800",fontSize:"0.78rem",cursor:"pointer"}} onClick={()=>setShowPaywall(true)}>Upgrade — {displayPrice} →</span>}
             </div>
             {isPaid&&!isAdmin&&(
               <div style={{height:"4px",background:"rgba(99,102,241,0.15)",borderRadius:"4px",marginTop:"8px",overflow:"hidden"}}>
@@ -818,7 +799,7 @@ export default function BrainTrapGame({ user, onPayment }) {
           {!user?"⚠️ Please login first"
             :!playerName.trim()?"Enter your name first 👆"
             :isDisqualifiedToday?"🚫 Disqualified — try again tomorrow"
-            :deviceBlocked?"🔒 Upgrade — ₹"+livePrice+"/month"
+            :deviceBlocked?`🔒 Upgrade — ${displayPrice}/month`
             :isAdmin?"👑 Start (Admin Mode)"
             :freeBlocked?"Come back tomorrow 🌅"
             :paidBlocked?"30 questions done today!"
@@ -826,11 +807,15 @@ export default function BrainTrapGame({ user, onPayment }) {
             :"🧠 Start Free — 10 Questions"}
         </button>
 
-        {!isPaid&&user&&<button onClick={()=>setShowPaywall(true)} style={{width:"100%",padding:"12px",background:"transparent",border:"1.5px solid rgba(99,102,241,0.4)",borderRadius:"14px",color:"#6366f1",fontSize:"0.9rem",fontWeight:"700",cursor:"pointer",marginBottom:"8px"}}>🚀 Unlock 30 Questions/Day — ₹{livePrice}/month</button>}
+        {/* ✅ Geo-aware upgrade button */}
+        {!isPaid&&user&&(
+          <button onClick={()=>setShowPaywall(true)}
+            style={{width:"100%",padding:"12px",background:"transparent",border:"1.5px solid rgba(99,102,241,0.4)",borderRadius:"14px",color:"#6366f1",fontSize:"0.9rem",fontWeight:"700",cursor:"pointer",marginBottom:"8px"}}>
+            🚀 Unlock 30 Questions/Day — {displayPrice}/month{!isIndia&&geoData?" via PayPal":""}
+          </button>
+        )}
 
         {isAdmin&&<AdminControls livePrice={livePrice} setLivePrice={setLivePrice}/>}
-
-        {/* ✅ FIX 5: Real leaderboard — top 200, paid decorated, admin remove */}
         <LeaderboardInline isAdmin={isAdmin} currentUserId={user?.uid}/>
       </div>
       <style>{`@keyframes floatBob{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-14px) rotate(2deg)}}`}</style>
@@ -851,7 +836,6 @@ export default function BrainTrapGame({ user, onPayment }) {
           <div style={{fontSize:"0.88rem",fontWeight:"800",color:"#dc2626",marginBottom:"4px"}}>Banned for today</div>
           <div style={{fontSize:"0.75rem",color:"#7f1d1d",lineHeight:1.5}}>Come back tomorrow and play fairly.</div>
         </div>
-        {/* ✅ FIX 2: Back button does NOT call resetAntiCheat — disqualifiedDate stays */}
         <button onClick={()=>setScreen("intro")}
           style={{width:"100%",padding:"14px",background:"rgba(99,102,241,0.1)",border:"1.5px solid rgba(99,102,241,0.3)",borderRadius:"16px",color:"#3730a3",fontSize:"0.95rem",fontWeight:"800",cursor:"pointer"}}>
           ← Back to Home
@@ -952,16 +936,14 @@ export default function BrainTrapGame({ user, onPayment }) {
     const emoji=pct===100?"🏆":pct>=70?"🔥":pct>=40?"😅":"💀";
     const title=pct===100?"Perfect Score!":pct>=70?"Great Performance!":pct>=40?"Decent Effort!":"Keep Practicing!";
     if(score>storage.highScore){const u={...storage,highScore:score};saveStorage(u);setStorage(u);}
-
     return (
       <div style={{minHeight:"100vh",background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",padding:"1.5rem",fontFamily:"'Space Grotesk',system-ui,sans-serif"}}>
-        {showPaywall&&<PaywallModal onClose={()=>setShowPaywall(false)} onUnlock={unlockPaid} livePrice={livePrice}/>}
+        {showPaywall && <PaywallModal onClose={()=>setShowPaywall(false)} onUnlock={unlockPaid} displayPrice={displayPrice} isIndia={isIndia} geoData={geoData} />}
         <div style={{maxWidth:"480px",width:"100%",textAlign:"center"}}>
           <div style={{fontSize:"4rem",marginBottom:"10px"}}>{emoji}</div>
           <h2 style={{fontSize:"clamp(1.5rem,5vw,2rem)",fontWeight:"900",margin:"0 0 4px",background:"linear-gradient(135deg,#6366f1,#ec4899)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>{title}</h2>
           {playerName&&<div style={{fontSize:"0.82rem",color:"#6366f1",fontWeight:"700",marginBottom:"4px"}}>Player: {playerName}</div>}
           <div style={{fontSize:"0.82rem",color:"#3730a3",fontWeight:"600",marginBottom:"20px"}}>{pct}% accuracy</div>
-
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:"10px",marginBottom:"16px"}}>
             {[{label:"Score",value:score,icon:"⚡",color:"#4338ca"},{label:"Correct",value:`${correct}/${questions.length}`,icon:"✅",color:"#059669"},{label:"Streak",value:`${maxStreak}🔥`,icon:"🔥",color:"#d97706"}].map((s,i)=>(
               <div key={i} style={{background:"rgba(99,102,241,0.1)",border:"1px solid rgba(99,102,241,0.25)",borderRadius:"16px",padding:"14px 10px"}}>
@@ -971,16 +953,13 @@ export default function BrainTrapGame({ user, onPayment }) {
               </div>
             ))}
           </div>
-
           {saved&&<div style={{background:"rgba(5,150,105,0.1)",border:"1px solid rgba(5,150,105,0.3)",borderRadius:"12px",padding:"10px 14px",fontSize:"0.82rem",fontWeight:"700",color:"#059669",marginBottom:"12px"}}>🏆 Score saved to leaderboard as <strong>{playerName}</strong>!</div>}
           {saving&&<div style={{background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:"12px",padding:"10px 14px",fontSize:"0.78rem",color:"#4338ca",marginBottom:"12px"}}>⏳ Saving score to leaderboard...</div>}
-
           {!isPaid&&(
             <div style={{background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:"12px",padding:"10px 14px",fontSize:"0.78rem",color:"#4338ca",marginBottom:"12px"}}>
-              👑 Upgrade to ₹{livePrice}/month — get a gold name on the leaderboard!
+              👑 Upgrade to {displayPrice}/month{!isIndia&&geoData?" via PayPal":""} — get a gold name on the leaderboard!
             </div>
           )}
-
           <div style={{background:"rgba(99,102,241,0.06)",border:"1px solid rgba(99,102,241,0.2)",borderRadius:"16px",padding:"14px",marginBottom:"16px",maxHeight:"180px",overflowY:"auto"}}>
             <div style={{fontSize:"0.72rem",fontWeight:"800",color:"#3730a3",textTransform:"uppercase",marginBottom:"8px"}}>Review</div>
             {sessionAnswers.map((a,i)=>(
@@ -993,7 +972,6 @@ export default function BrainTrapGame({ user, onPayment }) {
               </div>
             ))}
           </div>
-
           <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
             {isPaid?(
               paidBlocked?
@@ -1003,7 +981,7 @@ export default function BrainTrapGame({ user, onPayment }) {
                 </button>
             ):(
               <button onClick={()=>setShowPaywall(true)} style={{padding:"15px",background:"linear-gradient(135deg,#6366f1,#ec4899)",border:"none",borderRadius:"16px",color:"#fff",fontSize:"1rem",fontWeight:"900",cursor:"pointer"}}>
-                🚀 Unlock 30 Questions/Day — ₹{livePrice}/month
+                🚀 Unlock 30 Questions/Day — {displayPrice}/month{!isIndia&&geoData?" via PayPal":""}
               </button>
             )}
             <button onClick={()=>setScreen("intro")} style={{padding:"12px",background:"transparent",border:"1px solid rgba(99,102,241,0.3)",borderRadius:"14px",color:"#3730a3",fontSize:"0.88rem",fontWeight:"700",cursor:"pointer"}}>← Back to Home</button>

@@ -577,20 +577,16 @@ function PythonQuestionsTab({ isMobile }) {
     finally { setSavingPrices(false); }
   };
 
-  // ✅ FIX: Sort by position first, then fallback to createdAt ascending
-  // This ensures Q1 stays Q1, Q2 stays Q2 always
   const fetchQuestions = async () => {
     setLoading(true);
     try {
       const q = query(collection(db, 'manualQuestions'), where('level', '==', level), where('source', '==', 'manual'));
       const snapshot = await getDocs(q);
       const qs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Sort by position field first; if no position, sort by createdAt ascending (oldest = first)
       qs.sort((a, b) => {
         if (a.position !== undefined && b.position !== undefined) {
           return a.position - b.position;
         }
-        // Fallback: oldest question first (ascending createdAt)
         return new Date(a.createdAt) - new Date(b.createdAt);
       });
       setQuestions(qs);
@@ -621,11 +617,9 @@ function PythonQuestionsTab({ isMobile }) {
         source: 'manual'
       };
       if (editingId) {
-        // ✅ Edit: do NOT change position — keep original serial number
         await updateDoc(doc(db, 'manualQuestions', editingId), { ...questionData, updatedAt: new Date().toISOString() });
         window.showToast?.('✅ Question updated!', 'success');
       } else {
-        // ✅ New question: assign next position so it always goes to the end
         const nextPosition = questions.length + 1;
         await addDoc(collection(db, 'manualQuestions'), {
           ...questionData,
@@ -645,7 +639,6 @@ function PythonQuestionsTab({ isMobile }) {
     try {
       await deleteDoc(doc(db, 'manualQuestions', id));
       window.showToast?.('✅ Deleted!', 'success');
-      // ✅ After delete, re-fetch and fix positions so sequence stays clean
       const remaining = questions.filter(q => q.id !== id);
       await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'manualQuestions', q.id), { position: idx + 1 })));
       setQuestions(remaining);
@@ -661,7 +654,6 @@ function PythonQuestionsTab({ isMobile }) {
     try {
       await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'manualQuestions', id))));
       window.showToast?.(`✅ ${selectedIds.length} questions deleted!`, 'success');
-      // ✅ Fix positions after bulk delete
       const remaining = questions.filter(q => !selectedIds.includes(q.id));
       await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'manualQuestions', q.id), { position: idx + 1 })));
       setQuestions(remaining);
@@ -893,7 +885,6 @@ function NEETQuestionsTab({ isMobile }) {
   const [coupons, setCoupons] = useState([]);
   const [showCouponForm, setShowCouponForm] = useState(false);
   const [couponForm, setCouponForm] = useState({ code: '', discount: 10, type: 'percentage', expiry: '', usageLimit: 100 });
-  // CHANGE 2: New seeding state
   const [seeding, setSeeding] = useState(false);
   const [confirmModal, setConfirmModal] = useState({ open: false, onConfirm: null, title: '', message: '', confirmLabel: 'Confirm', confirmColor: '#ef4444', icon: '⚠️' });
   const [form, setForm] = useState({ question: '', code: '', subject: 'Zoology', neetClass: '11', chapterNo: '', chapterName: '', topic: '', option1: '', option2: '', option3: '', option4: '', correct: 0, explanation: '' });
@@ -924,7 +915,6 @@ function NEETQuestionsTab({ isMobile }) {
     finally { setSavingSettings(false); }
   };
 
-  // ✅ FIX: Sort by position first, then fallback createdAt ascending
   const fetchQuestions = async () => {
     setLoading(true);
     try {
@@ -932,11 +922,9 @@ function NEETQuestionsTab({ isMobile }) {
       const snap = await getDocs(q);
       const qs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       qs.sort((a, b) => {
-        // Primary: position field (guaranteed sequential)
         if (a.position !== undefined && b.position !== undefined) {
           return a.position - b.position;
         }
-        // Secondary: class then chapter
         if (a.neetClass !== b.neetClass) return a.neetClass.localeCompare(b.neetClass);
         return (a.chapterNo || 0) - (b.chapterNo || 0);
       });
@@ -945,7 +933,6 @@ function NEETQuestionsTab({ isMobile }) {
     finally { setLoading(false); }
   };
 
-  // CHANGE 3: Auto-seed function
   const handleAutoSeed = () => {
     setConfirmModal({
       open: true,
@@ -956,7 +943,6 @@ function NEETQuestionsTab({ isMobile }) {
       confirmColor: '#16a34a',
       onConfirm: async () => {
         setConfirmModal(p => ({ ...p, open: false }));
-        // Guard: neetSeedData must be a non-empty array
         if (!Array.isArray(neetSeedData) || neetSeedData.length === 0) {
           window.showToast?.('❌ neetSeedData is missing or empty. Check src/data/neetSeedData.js exports.', 'error');
           return;
@@ -1065,11 +1051,9 @@ function NEETQuestionsTab({ isMobile }) {
         type: 'neet'
       };
       if (editingId) {
-        // ✅ Edit: keep original position
         await updateDoc(doc(db, 'neetQuestions', editingId), { ...data, updatedAt: new Date().toISOString() });
         window.showToast?.('✅ Question updated!', 'success');
       } else {
-        // ✅ New: assign sequential position
         const nextPosition = questions.length + 1;
         await addDoc(collection(db, 'neetQuestions'), { ...data, position: nextPosition, createdAt: new Date().toISOString() });
         window.showToast?.('✅ Question added!', 'success');
@@ -1085,7 +1069,6 @@ function NEETQuestionsTab({ isMobile }) {
     try {
       await deleteDoc(doc(db, 'neetQuestions', id));
       window.showToast?.('✅ Deleted!', 'success');
-      // ✅ Re-assign positions after delete
       const remaining = questions.filter(q => q.id !== id);
       await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'neetQuestions', q.id), { position: idx + 1 })));
       setQuestions(remaining);
@@ -1100,7 +1083,6 @@ function NEETQuestionsTab({ isMobile }) {
     try {
       await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'neetQuestions', id))));
       window.showToast?.(`✅ ${selectedIds.length} questions deleted!`, 'success');
-      // ✅ Re-assign positions after bulk delete
       const remaining = questions.filter(q => !selectedIds.includes(q.id));
       await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'neetQuestions', q.id), { position: idx + 1 })));
       setQuestions(remaining);
@@ -1148,7 +1130,6 @@ function NEETQuestionsTab({ isMobile }) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-            {/* CHANGE 4: New seed button added BEFORE the Settings button */}
             <button
               onClick={handleAutoSeed}
               disabled={seeding}
@@ -1731,7 +1712,6 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
 
   useEffect(() => { fetchQuestions(); }, []); // eslint-disable-line
 
-  // ✅ FIX: Sort by position ascending — guarantees Q1=first, Q2=second always
   const fetchQuestions = async () => {
     setLoading(true);
     try {
@@ -1742,7 +1722,6 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
         if (a.position !== undefined && b.position !== undefined) {
           return a.position - b.position;
         }
-        // Fallback: ascending createdAt (oldest first)
         return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
       });
       setQuestions(qs);
@@ -1770,11 +1749,9 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
         examName: exam.name
       };
       if (editingId) {
-        // ✅ Edit: keep original position unchanged
         await updateDoc(doc(db, 'customQuestions', editingId), { ...qData, updatedAt: new Date().toISOString() });
         window.showToast?.('✅ Question updated!', 'success');
       } else {
-        // ✅ New: assign next sequential position
         const nextPosition = questions.length + 1;
         await addDoc(collection(db, 'customQuestions'), { ...qData, position: nextPosition, createdAt: new Date().toISOString() });
         window.showToast?.('✅ Question added!', 'success');
@@ -1789,7 +1766,6 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
     try {
       await deleteDoc(doc(db, 'customQuestions', id));
       window.showToast?.('✅ Deleted!', 'success');
-      // ✅ Re-assign positions so sequence stays clean after delete
       const remaining = questions.filter(q => q.id !== id);
       await Promise.all(remaining.map((q, idx) => updateDoc(doc(db, 'customQuestions', q.id), { position: idx + 1 })));
       setQuestions(remaining);
@@ -1818,7 +1794,6 @@ function ExamQuestionsManager({ exam, isMobile, coupons, onBack, onSaveCoupon, o
         const remaining = exam.maxQuestions - questions.length;
         const toAdd = parsed.slice(0, remaining);
         const startPosition = questions.length + 1;
-        // ✅ CSV upload: each question gets correct sequential position
         await Promise.all(toAdd.map((q, idx) => addDoc(collection(db, 'customQuestions'), { ...q, position: startPosition + idx })));
         window.showToast?.(`✅ ${toAdd.length} questions uploaded!`, 'success');
         fetchQuestions();

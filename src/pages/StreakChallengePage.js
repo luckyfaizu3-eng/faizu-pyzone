@@ -3,6 +3,7 @@ import { getStreakPrice, setStreakPrice, getAllStreakUsers } from '../streakServ
 import { db } from '../firebase';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import jsPDF from 'jspdf';
+import { useGeo } from '../App';
 
 const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
 
@@ -16,6 +17,8 @@ const StreakChallengePage = ({ isDark, user, setCurrentPage, onBuy }) => {
   const [users,        setUsers]        = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [adminTab,     setAdminTab]     = useState('users');
+
+  const { geoData, isIndia } = useGeo();
 
   const isAdmin      = user?.email === ADMIN_EMAIL;
   const uid          = user?.uid;
@@ -109,7 +112,7 @@ const StreakChallengePage = ({ isDark, user, setCurrentPage, onBuy }) => {
 
   const handleBuy = () => {
     if (!user) { window.showToast?.('Please login first!', 'warning'); setCurrentPage('login'); return; }
-    if (onBuy) onBuy();
+    if (onBuy) onBuy(price);
   };
 
   const cardBg      = isDark ? 'rgba(255,255,255,0.05)' : '#ffffff';
@@ -167,7 +170,7 @@ const StreakChallengePage = ({ isDark, user, setCurrentPage, onBuy }) => {
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'10px', marginBottom:'6px' }}>
             <span style={{ fontSize:'1rem', color:textSec, textDecoration:'line-through' }}>Rs.{price * 2}</span>
             <span style={{ fontSize:mobile?'2.6rem':'4rem', fontWeight:'900', lineHeight:1, background:'linear-gradient(135deg,#ff6b00,#f59e0b)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
-              Rs.{price}
+              {isIndia ? `Rs.${price}` : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`}
             </span>
           </div>
           <div style={{ fontSize:'0.78rem', color:textSec, marginBottom:'20px' }}>Full 30-day access • PDF Result • Topper competition</div>
@@ -178,7 +181,7 @@ const StreakChallengePage = ({ isDark, user, setCurrentPage, onBuy }) => {
             </button>
           ) : (
             <button onClick={handleBuy} style={{ background:'linear-gradient(135deg,#ff6b00,#ff3d00)', color:'#fff', border:'none', borderRadius:'12px', padding:'14px 0', width:'100%', fontSize:'1rem', fontWeight:'800', cursor:'pointer', boxShadow:'0 8px 20px rgba(255,107,0,0.4)' }}>
-              🚀 Start Challenge — Rs.{price} Only
+              🚀 Start Challenge — {isIndia ? `Rs.${price}` : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`} Only
             </button>
           )}
 
@@ -241,7 +244,7 @@ const StreakChallengePage = ({ isDark, user, setCurrentPage, onBuy }) => {
         {!hasPurchased && (
           <div style={{ textAlign:'center', opacity:animIn?1:0, transition:'all 0.7s ease 0.8s', marginBottom: isAdmin?'40px':'0' }}>
             <button onClick={handleBuy} style={{ background:'linear-gradient(135deg,#ff6b00,#ff3d00)', color:'#fff', border:'none', borderRadius:'12px', padding:'14px 0', width:mobile?'100%':'320px', fontSize:'1rem', fontWeight:'800', cursor:'pointer', boxShadow:'0 8px 28px rgba(255,107,0,0.4)' }}>
-              🔥 Join the Challenge — Rs.{price}
+              🔥 Join the Challenge — {isIndia ? `Rs.${price}` : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`}
             </button>
             <p style={{ marginTop:'8px', fontSize:'0.74rem', color:textSec }}>Limited seats • New batch starts soon</p>
           </div>

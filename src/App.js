@@ -451,9 +451,10 @@ function App() {
     setCurrentPage('compiler');
   }, []);
 
-  const handleStreakPayment = () => {
+  const handleStreakPayment = (dynamicPrice) => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); setCurrentPage('login'); return; }
-    initiatePayment(streakPrice, [], async (response) => {
+    const finalPrice = dynamicPrice || streakPrice;
+    initiatePayment(finalPrice, [], async (response) => {
       localStorage.setItem(`streak_purchased_${user.uid}`, 'true');
       localStorage.setItem(`streak_start_${user.uid}`, new Date().toISOString());
       localStorage.setItem(`streak_count_${user.uid}`, '0');

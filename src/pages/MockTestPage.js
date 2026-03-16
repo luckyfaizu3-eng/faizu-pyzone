@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth, useTheme, RAZORPAY_KEY_ID } from '../App';
+import { useGeo } from '../App';
 import { Clock, Trophy, Award, Zap, Loader, CheckCircle, XCircle, Monitor, Smartphone, Lock, Unlock, TrendingUp, AlertTriangle } from 'lucide-react';
 import { SUBSCRIPTION_PLANS } from '../data/subscriptionPlans';
 import MockTestInterface from '../components/MockTestInterface';
@@ -196,6 +197,7 @@ function CouponModal({ plan, prices, isDark, onClose, onFreeAccess, onProceedPay
 function MockTestPage() {
   const { user } = useAuth();
   const { isDark } = useTheme();
+  const { geoData, isIndia } = useGeo() || { geoData: null, isIndia: true };
 
   const [currentStep, setCurrentStep] = useState('plans');
   const [selectedPlan, setSelectedPlan] = useState(null);
@@ -707,7 +709,9 @@ function MockTestPage() {
                       </div>
                       <h2 style={{ fontSize: 'clamp(1.3rem, 4vw, 1.8rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{plan.level}</h2>
                       <p style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 'clamp(0.8rem, 2.5vw, 0.95rem)', marginBottom: '1rem' }}>{plan.description}</p>
-                      <div style={{ fontSize: 'clamp(2rem, 6vw, 2.5rem)', fontWeight: '900', color: userIsAdmin ? '#10b981' : '#6366f1', marginBottom: '0.5rem' }}>{userIsAdmin ? 'FREE' : `₹${prices[plan.level] || plan.price}`}</div>
+                      <div style={{ fontSize: 'clamp(2rem, 6vw, 2.5rem)', fontWeight: '900', color: userIsAdmin ? '#10b981' : '#6366f1', marginBottom: '0.5rem' }}>
+                        {userIsAdmin ? 'FREE' : isIndia ? `₹${prices[plan.level] || plan.price}` : `${geoData?.symbol || '$'}${geoData?.[plan.level] || geoData?.basic || 2.99}`}
+                      </div>
                       {userIsAdmin && (<div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}>Admin Privilege — Unlimited Access</div>)}
                     </div>
                     <div style={{ background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
@@ -726,7 +730,7 @@ function MockTestPage() {
                       style={{ width: '100%', background: (!userIsAdmin && status.status === 'locked') ? 'rgba(99,102,241,0.3)' : userIsAdmin ? 'linear-gradient(135deg, #10b981, #059669)' : status.status === 'grace_period' || status.status === 'in_progress' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', padding: 'clamp(1rem, 3vw, 1.25rem)', borderRadius: '16px', fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)', fontWeight: '700', cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: (!userIsAdmin && status.status === 'locked') ? 'none' : '0 4px 20px rgba(99,102,241,0.4)', textTransform: 'uppercase', letterSpacing: '1px', opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1 }}
                       onMouseEnter={(e) => { if (userIsAdmin || status.status !== 'locked') e.currentTarget.style.transform = 'translateY(-2px)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}>
-                      {userIsAdmin ? <><Zap size={24} /> 🔓 Start Free Python Test (Unlimited)</> : status.status === 'grace_period' || status.status === 'in_progress' ? <><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Python Test' : 'Start Python Test'}</> : status.status === 'locked' ? <><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</> : <><Zap size={24} /> Buy / Coupon (₹{prices[plan.level] || plan.price})</>}
+                      {userIsAdmin ? <><Zap size={24} /> 🔓 Start Free Python Test (Unlimited)</> : status.status === 'grace_period' || status.status === 'in_progress' ? <><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Python Test' : 'Start Python Test'}</> : status.status === 'locked' ? <><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</> : <><Zap size={24} /> Buy / Coupon ({isIndia ? `₹${prices[plan.level] || plan.price}` : `${geoData?.symbol || '$'}${geoData?.[plan.level] || geoData?.basic || 2.99}`})</>}
                     </button>
                   </div>
                 );
@@ -748,7 +752,7 @@ function MockTestPage() {
         )}
 
         {activeTab === 'neet' && (
-          <NEETTab user={user} isDark={isDark} neetStep={neetStep} setNeetStep={setNeetStep} neetQuestions={neetQuestions} setNeetQuestions={setNeetQuestions} neetLoading={neetLoading} setNeetLoading={setNeetLoading} onNeetComplete={handleNeetTestComplete} />
+          <NEETTab user={user} isDark={isDark} neetStep={neetStep} setNeetStep={setNeetStep} neetQuestions={neetQuestions} setNeetQuestions={setNeetQuestions} neetLoading={neetLoading} setNeetLoading={setNeetLoading} onNeetComplete={handleNeetTestComplete} geoData={geoData} isIndia={isIndia} />
         )}
 
         {selectedCertificate && <CertificateViewer certificate={selectedCertificate} onClose={() => setSelectedCertificate(null)} />}
@@ -831,7 +835,7 @@ function MockTestPage() {
 // ==========================================
 // NEET TAB COMPONENT
 // ==========================================
-function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQuestions, neetLoading, setNeetLoading, onNeetComplete }) {
+function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQuestions, neetLoading, setNeetLoading, onNeetComplete, geoData, isIndia }) {
   const [isMobile, setIsMobile] = React.useState(window.innerWidth <= 768);
   const [neetSettings, setNeetSettings] = React.useState(null);
   const [showCoupon, setShowCoupon] = React.useState(false);
@@ -1014,7 +1018,7 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             {!userIsAdmin && onSale && (<span style={{ fontSize: isMobile ? '1.1rem' : '1.3rem', fontWeight: '700', color: '#94a3b8', textDecoration: 'line-through' }}>₹{originalPrice}</span>)}
             <span style={{ fontSize: isMobile ? '2rem' : '2.5rem', fontWeight: '900', color: userIsAdmin ? '#10b981' : (isDark ? '#e2e8f0' : '#dc2626') }}>
-              {userIsAdmin ? '🆓 FREE' : `₹${price}`}
+              {userIsAdmin ? '🆓 FREE' : (isIndia !== false ? `₹${price}` : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`)}
             </span>
           </div>
           {userIsAdmin && (<div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: '700', marginTop: '0.3rem' }}>Admin Privilege — No Lock, No Payment, Unlimited Tests</div>)}
@@ -1046,7 +1050,7 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
               {!userIsAdmin && isLocked && (<div style={{ padding: '0.65rem 1rem', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '10px', color: '#ef4444', fontWeight: '700', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>🔒 Locked — Available in {formatTimeRemaining(nStatus.timeRemaining)}</div>)}
               <button onClick={handleStartClick} disabled={isDisabled && !userIsAdmin}
                 style={{ width: '100%', maxWidth: '420px', padding: isMobile ? '1rem' : '1.25rem', background: (isDisabled && !userIsAdmin) ? (isLocked ? 'rgba(239,68,68,0.3)' : '#e2e8f0') : userIsAdmin ? 'linear-gradient(135deg,#10b981,#059669)' : (isGrace || isInProgress) ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#dc2626,#b91c1c)', border: 'none', borderRadius: '16px', color: (isDisabled && !userIsAdmin) && !isLocked ? '#94a3b8' : '#fff', fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '900', cursor: (isDisabled && !userIsAdmin) ? 'not-allowed' : 'pointer', opacity: (isLocked && !userIsAdmin) ? 0.7 : 1, boxShadow: (isDisabled && !userIsAdmin) ? 'none' : userIsAdmin ? '0 8px 24px rgba(16,185,129,0.4)' : (isGrace || isInProgress) ? '0 8px 24px rgba(16,185,129,0.4)' : '0 8px 24px rgba(220,38,38,0.4)', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', margin: '0 auto' }}>
-                {neetLoading ? '⏳ Loading Questions...' : !settingsLoaded && !userIsAdmin ? '⏳ Loading...' : userIsAdmin ? '🚀 Start Free NEET Test (Admin — Unlimited)' : isLocked ? `🔒 Locked — ${formatTimeRemaining(nStatus.timeRemaining)}` : (isGrace || isInProgress) ? `🚀 ${isInProgress ? 'Resume' : 'Start'} NEET Test` : `🚀 Start NEET Test — ₹${price}`}
+                {neetLoading ? '⏳ Loading Questions...' : !settingsLoaded && !userIsAdmin ? '⏳ Loading...' : userIsAdmin ? '🚀 Start Free NEET Test (Admin — Unlimited)' : isLocked ? `🔒 Locked — ${formatTimeRemaining(nStatus.timeRemaining)}` : (isGrace || isInProgress) ? `🚀 ${isInProgress ? 'Resume' : 'Start'} NEET Test` : `🚀 Start NEET Test — ${isIndia !== false ? `₹${price}` : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`}`}
               </button>
             </>
           );
