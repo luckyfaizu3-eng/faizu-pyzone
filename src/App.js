@@ -35,6 +35,7 @@ import LoginPage from './pages/LoginPage';
 import MockTestPage from './pages/MockTestPage';
 import AIChatPage from './pages/AIChatPage';
 import PythonCompiler from './pages/PythonCompiler';
+import CertificateVerifyPage from './pages/CertificateVerifyPage';
 
 // ✅ Streak Challenge Imports
 import StreakChallengePage from './pages/StreakChallengePage';
@@ -105,10 +106,13 @@ function App() {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
       if (hash.startsWith('products/')) return 'products';
+      // ✅ verify route — hash like #verify/CERT-ID
+      if (hash.startsWith('verify/') || hash === 'verify') return 'verify';
       const validPages = [
         'home', 'products', 'cart', 'orders', 'admin', 'login',
         'mocktests', 'leaderboard', 'braintrap', 'aichat', 'compiler',
-        'streak', 'streak-practice', 'streak-result', 'admin-streak'
+        'streak', 'streak-practice', 'streak-result', 'admin-streak',
+        'verify'
       ];
       return validPages.includes(hash) ? hash : 'home';
     };
@@ -133,6 +137,7 @@ function App() {
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('products/')) return;
+    if (hash.startsWith('verify/')) return;
     if (currentPage !== window.history.state?.page) {
       window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
@@ -432,7 +437,7 @@ function App() {
     setCurrentPage('compiler');
   }, []);
 
-  // ✅ Streak payment handler — ab dynamic price use hogi (Firestore se)
+  // ✅ Streak payment handler
   const handleStreakPayment = () => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); setCurrentPage('login'); return; }
     initiatePayment(streakPrice, [], async (response) => {
@@ -443,6 +448,10 @@ function App() {
       setCurrentPage('streak-practice');
     });
   };
+
+  // ✅ Check if verify page — show without navbar/footer
+  const isVerifyPage = currentPage === 'verify' ||
+    window.location.hash.startsWith('#verify/');
 
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
@@ -470,97 +479,103 @@ function App() {
                 Loading payment system...
               </div>
             )}
-            
-            <Navbar 
-              currentPage={currentPage} 
-              setCurrentPage={setCurrentPage}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              mobileMenuOpen={mobileMenuOpen}
-              setMobileMenuOpen={setMobileMenuOpen}
-              user={user}
-              logout={logout}
-              cartCount={cartCount}
-            />
-            
-            <main style={{ position: 'relative', zIndex: 1 }}>
-              {currentPage === 'home'       && <HomePage setCurrentPage={setCurrentPage} />}
-              {currentPage === 'products'   && (
-                <ProductsPage 
-                  products={products}
-                  setProducts={setProducts}
-                  refreshProducts={loadProducts}
-                  buyNow={buyNow} 
-                  selectedCategory={selectedCategory} 
-                  setSelectedCategory={setSelectedCategory} 
+
+            {/* ✅ Verify page — no navbar/footer */}
+            {isVerifyPage ? (
+              <CertificateVerifyPage />
+            ) : (
+              <>
+                <Navbar 
+                  currentPage={currentPage} 
+                  setCurrentPage={setCurrentPage}
                   searchQuery={searchQuery}
-                  isProductPurchased={isProductPurchased}
+                  setSearchQuery={setSearchQuery}
+                  mobileMenuOpen={mobileMenuOpen}
+                  setMobileMenuOpen={setMobileMenuOpen}
                   user={user}
-                  onAddReview={handleAddReview}
+                  logout={logout}
+                  cartCount={cartCount}
                 />
-              )}
-              {currentPage === 'cart'       && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
-              {currentPage === 'login'      && <LoginPage />}
-              {currentPage === 'orders'     && <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />}
-              {currentPage === 'admin'      && user?.isAdmin && (
-                <AdminPanel products={products} addProduct={addProduct} deleteProduct={deleteProduct} orders={orders} />
-              )}
-              {currentPage === 'mocktests'   && <MockTestPage />}
-              {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
-              {currentPage === 'aichat'      && (
-                <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />
-              )}
-              {currentPage === 'compiler'    && (
-                <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />
-              )}
+                
+                <main style={{ position: 'relative', zIndex: 1 }}>
+                  {currentPage === 'home'       && <HomePage setCurrentPage={setCurrentPage} />}
+                  {currentPage === 'products'   && (
+                    <ProductsPage 
+                      products={products}
+                      setProducts={setProducts}
+                      refreshProducts={loadProducts}
+                      buyNow={buyNow} 
+                      selectedCategory={selectedCategory} 
+                      setSelectedCategory={setSelectedCategory} 
+                      searchQuery={searchQuery}
+                      isProductPurchased={isProductPurchased}
+                      user={user}
+                      onAddReview={handleAddReview}
+                    />
+                  )}
+                  {currentPage === 'cart'       && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
+                  {currentPage === 'login'      && <LoginPage />}
+                  {currentPage === 'orders'     && <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />}
+                  {currentPage === 'admin'      && user?.isAdmin && (
+                    <AdminPanel products={products} addProduct={addProduct} deleteProduct={deleteProduct} orders={orders} />
+                  )}
+                  {currentPage === 'mocktests'   && <MockTestPage />}
+                  {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
+                  {currentPage === 'aichat'      && (
+                    <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />
+                  )}
+                  {currentPage === 'compiler'    && (
+                    <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />
+                  )}
 
-              {/* ✅ Brain Trap Game — onPayment prop added for real Razorpay */}
-              {currentPage === 'braintrap'   && (
-                <BrainTrapGame
-                  isDark={isDark}
-                  isMobile={window.innerWidth <= 768}
-                  user={user}
-                  onPayment={initiatePayment}
-                  RAZORPAY_KEY_ID={RAZORPAY_KEY_ID}
-                />
-              )}
+                  {/* ✅ Brain Trap Game */}
+                  {currentPage === 'braintrap'   && (
+                    <BrainTrapGame
+                      isDark={isDark}
+                      isMobile={window.innerWidth <= 768}
+                      user={user}
+                      onPayment={initiatePayment}
+                      RAZORPAY_KEY_ID={RAZORPAY_KEY_ID}
+                    />
+                  )}
 
-              {/* ✅ Streak Challenge Pages */}
-              {currentPage === 'streak' && (
-                <StreakChallengePage
-                  isMobile={window.innerWidth <= 768}
-                  isDark={isDark}
-                  user={user}
-                  setCurrentPage={setCurrentPage}
-                  onBuy={handleStreakPayment}
-                />
-              )}
-              {currentPage === 'streak-practice' && (
-                <DailyPractice
-                  isMobile={window.innerWidth <= 768}
-                  isDark={isDark}
-                  user={user}
-                  setCurrentPage={setCurrentPage}
-                />
-              )}
-              {currentPage === 'streak-result' && (
-                <StreakResult
-                  isMobile={window.innerWidth <= 768}
-                  isDark={isDark}
-                  user={user}
-                  setCurrentPage={setCurrentPage}
-                />
-              )}
-              {/* ✅ Admin Streak — sirf luckyfaizu3@gmail.com ke liye */}
-              {currentPage === 'admin-streak' && user?.email === ADMIN_EMAIL && (
-                <AdminStreak
-                  isMobile={window.innerWidth <= 768}
-                  isDark={isDark}
-                />
-              )}
-            </main>
-            
-            {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
+                  {/* ✅ Streak Challenge Pages */}
+                  {currentPage === 'streak' && (
+                    <StreakChallengePage
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                      user={user}
+                      setCurrentPage={setCurrentPage}
+                      onBuy={handleStreakPayment}
+                    />
+                  )}
+                  {currentPage === 'streak-practice' && (
+                    <DailyPractice
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                      user={user}
+                      setCurrentPage={setCurrentPage}
+                    />
+                  )}
+                  {currentPage === 'streak-result' && (
+                    <StreakResult
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                      user={user}
+                      setCurrentPage={setCurrentPage}
+                    />
+                  )}
+                  {currentPage === 'admin-streak' && user?.email === ADMIN_EMAIL && (
+                    <AdminStreak
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                    />
+                  )}
+                </main>
+                
+                {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
+              </>
+            )}
             
             <style>{`
               @keyframes spin { to { transform: rotate(360deg); } }

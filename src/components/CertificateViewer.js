@@ -67,7 +67,9 @@ function CertSVG({ cert }) {
   const { leftBg, leftAccent, accentColor, accentLight, goldDark, goldLight, goldMid, ribbonTop, label, badgeText, skills } = cfg;
   const W = 1056, H = 748;
   const score = cert.score ?? 0;
-  const verifyUrl = `https://pyskill.shop/verify/${cert.certificateId || ''}`;
+  const studentNameUpper = (cert.userName || '').toUpperCase();
+  // ✅ QR minimal = 0.1 sec scan!
+  const verifyUrl = `PYSKILL|${cert.certificateId||'N/A'}|${studentNameUpper}|${(cert.level||'BASIC').toUpperCase()}|${score}%|${cert.date||'N/A'}|faizupyzone.shop`;
 
   return (
     <svg
@@ -232,7 +234,7 @@ function CertSVG({ cert }) {
       {/* Name */}
       <text x={590} y={240} textAnchor="middle"
         fontSize="54" fontStyle="italic" fontWeight="600"
-        fill="#111111" fontFamily='"Cormorant Garamond", Georgia, serif'>{cert.userName}</text>
+        fill="#111111" fontFamily='"Cormorant Garamond", Georgia, serif'>{studentNameUpper}</text>
 
       <line x1={370} y1={255} x2={810} y2={255} stroke="#222" strokeWidth="1.3" />
       <line x1={400} y1={260} x2={780} y2={260} stroke={goldMid} strokeWidth="0.75" />
@@ -277,17 +279,23 @@ function CertSVG({ cert }) {
       <line x1={600} y1={445} x2={800} y2={445} stroke={goldMid} strokeWidth="0.75" opacity="0.5" />
 
       {/* Meta info */}
+      {/* CERT ID — full width, bigger */}
+      <text x={590} y={460} textAnchor="middle" fontSize="8" fontWeight="700"
+        fill={goldDark} fontFamily='"Cinzel", serif' letterSpacing="2">CERTIFICATE ID</text>
+      <text x={590} y={476} textAnchor="middle" fontSize="11" fontWeight="800"
+        fill="#1a1a2e" fontFamily='"Courier New", monospace' letterSpacing="1">{cert.certificateId || 'N/A'}</text>
+
+      {/* Level, Date, Location row */}
       {[
-        { lbl: 'CERT ID', val: cert.certificateId || '', x: 415 },
-        { lbl: 'LEVEL', val: (cert.level || 'BASIC').toUpperCase(), x: 555 },
-        { lbl: 'DATE', val: cert.date || '', x: 660 },
-        { lbl: 'LOCATION', val: cert.userAddress || 'India', x: 770 },
+        { lbl: 'LEVEL', val: (cert.level || 'BASIC').toUpperCase(), x: 430 },
+        { lbl: 'DATE', val: cert.date || '', x: 590 },
+        { lbl: 'LOCATION', val: cert.userAddress || 'India', x: 750 },
       ].map(({ lbl, val, x }) => (
         <g key={lbl}>
-          <text x={x} y={467} textAnchor="middle" fontSize="7" fontWeight="700"
-            fill={goldDark} fontFamily='"Cinzel", serif' letterSpacing="1">{lbl}</text>
-          <text x={x} y={483} textAnchor="middle" fontSize="10.5" fontWeight="600"
-            fill="#1a1a2e" fontFamily='"Cormorant Garamond", Georgia, serif'>{val}</text>
+          <text x={x} y={494} textAnchor="middle" fontSize="8" fontWeight="700"
+            fill={goldDark} fontFamily='"Cinzel", serif' letterSpacing="1.5">{lbl}</text>
+          <text x={x} y={510} textAnchor="middle" fontSize="12" fontWeight="700"
+            fill="#1a1a2e" fontFamily='"Cinzel", serif'>{val}</text>
         </g>
       ))}
 
@@ -323,25 +331,31 @@ function CertSVG({ cert }) {
       </g>
 
       <text x={705} y={602} textAnchor="middle" fontSize="8" fontWeight="600"
-        fill="#888" fontFamily='"Cinzel", serif' letterSpacing="1">FOUNDER &amp; CEO, PYSKILL</text>
+        fill="#888" fontFamily='"Cinzel", serif' letterSpacing="1">FOUNDER &amp; CEO, FAIZUPYZONE</text>
       <text x={705} y={616} textAnchor="middle" fontSize="9" fontStyle="italic"
-        fill={goldDark} fontFamily='"Cormorant Garamond", Georgia, serif'>@pyskill</text>
+        fill={goldDark} fontFamily='"Cormorant Garamond", Georgia, serif'>@code_with_06</text>
 
       {/* QR Code — bigger */}
       <rect x={W - 128} y={500} width={100} height={100} fill="#fff" rx="4"
         stroke={accentColor} strokeWidth="2.5" />
       <QRImage value={verifyUrl} x={W - 125} y={503} size={94} color={leftBg} />
       <text x={W - 78} y={612} textAnchor="middle" fontSize="7"
-        fill={accentColor} fontFamily='"Cinzel", serif' letterSpacing="1">SCAN TO VERIFY</text>
+        fill={accentColor} fontFamily='"Cinzel", serif' letterSpacing="1" fontWeight="700">SCAN TO VERIFY</text>
+      <text x={W - 78} y={624} textAnchor="middle" fontSize="7"
+        fill="#666" fontFamily='"Cinzel", serif' fontWeight="600">All details inside</text>
 
-      {/* Anti-cheat disclaimer */}
-      <rect x={370} y={H - 44} width={W - 386} height={26} rx="5"
-        fill={accentColor} opacity="0.08" />
-      <line x1={374} y1={H - 44} x2={W - 18} y2={H - 44}
-        stroke={accentColor} strokeWidth="1" opacity="0.4" />
-      <text x={600} y={H - 26} textAnchor="middle" fontSize="8.5" fill="#555"
-        fontFamily='"Cinzel", serif' letterSpacing="0.5">
-        This assessment was conducted under PySkill&apos;s anti-cheat proctored environment • pyskill.shop
+      {/* Professional Disclaimer */}
+      <rect x={370} y={H - 58} width={W - 386} height={44} rx="6"
+        fill={accentColor} opacity="0.07" />
+      <line x1={374} y1={H - 58} x2={W - 18} y2={H - 58}
+        stroke={accentColor} strokeWidth="1.2" opacity="0.5" />
+      <text x={600} y={H - 38} textAnchor="middle" fontSize="8.5" fill="#444"
+        fontFamily='"Cinzel", serif' fontWeight="600" letterSpacing="0.3">
+        This certificate confirms that the above-named individual has passed PySkill&apos;s proctored Python test
+      </text>
+      <text x={600} y={H - 22} textAnchor="middle" fontSize="8.5" fill="#444"
+        fontFamily='"Cinzel", serif' letterSpacing="0.3">
+        under strict anti-cheat monitoring. Valid for resume, LinkedIn &amp; portfolio. Verified at faizupyzone.shop
       </text>
     </svg>
   );
@@ -545,7 +559,7 @@ export default function CertificateViewer({ certificate, onClose }) {
           </div>
 
           <div style={{ fontFamily: '"Cinzel",serif', fontSize: 9, color: '#3a3a3a', letterSpacing: 2 }}>
-            PDF • 4K IMAGE • PRINT READY • VERIFIED BY PYSKILL
+            PDF • 4K IMAGE • PRINT READY • VERIFIED BY FAIZUPYZONE
           </div>
         </div>
       </div>
