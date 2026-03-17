@@ -5,7 +5,7 @@ export const SUBSCRIPTION_PLANS = {
     id: 'mock-basic',
     name: 'Basic Python Test',
     level: 'basic',
-    price: 12,
+    price: free,
     timeLimit: 60,
     totalQuestions: 60,
     description: 'Foundation level Python for beginners',
