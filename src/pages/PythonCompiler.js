@@ -1,83 +1,168 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 
 // ═══════════════════════════════════════
-//  Pyodide — Python 3.11 in Browser
+//  VS CODE LIGHT THEME
+// ═══════════════════════════════════════
+const VS = {
+  bg:'#ffffff', bg2:'#f3f3f3', bg3:'#ebebeb', bg4:'#e0e0e0',
+  border:'#e4e4e4', text:'#1f1f1f', textDim:'#6e7681', textMute:'#c0c0c0',
+  accent:'#0066b8', accentBg:'#dbeafe', green:'#1a7f37', greenBg:'#dcfce7',
+  yellow:'#795e26', orange:'#a31515', red:'#cd3131', redBg:'#fef2f2',
+  purple:'#6f42c1', blue:'#0451a5', comment:'#008000', string:'#a31515',
+  number:'#098658', keyword:'#0000ff', builtin:'#795e26',
+  mono:'"JetBrains Mono","Fira Code","Consolas",monospace',
+};
+
+// ═══════════════════════════════════════
+//  ✅ LAZY PYODIDE — load only on first Run
+//     UI opens instantly, no blocking
 // ═══════════════════════════════════════
 let _pyodide = null;
-let _loading = null;
+let _pyodideLoading = null;
+let _pyodideReady = false;
 
-const getPyodide = (onStatus) => {
-  if (_pyodide) return Promise.resolve(_pyodide);
-  if (_loading) return _loading;
-  _loading = (async () => {
+const loadPyodideLazy = (onStatus) => {
+  // Already ready — instant
+  if (_pyodideReady && _pyodide) {
+    onStatus('ready');
+    return Promise.resolve(_pyodide);
+  }
+  // Already loading — attach to existing promise
+  if (_pyodideLoading) {
+    return _pyodideLoading;
+  }
+  // Start loading
+  _pyodideLoading = (async () => {
+    onStatus('downloading');
+    // Load script only if not already present
     if (!window.loadPyodide) {
-      onStatus('loading');
       await new Promise((res, rej) => {
         const s = document.createElement('script');
         s.src = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
-        s.onload = res; s.onerror = rej;
+        s.onload = res;
+        s.onerror = rej;
         document.head.appendChild(s);
       });
     }
     onStatus('starting');
-    _pyodide = await window.loadPyodide({ indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/' });
-    await _pyodide.loadPackage('micropip');
+    _pyodide = await window.loadPyodide({
+      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/',
+    });
+    onStatus('packages');
+    // Load only essential packages (micropip only, skip heavy ones upfront)
+    try {
+      await _pyodide.loadPackage(['micropip']);
+    } catch (_) {}
+    _pyodideReady = true;
     onStatus('ready');
     return _pyodide;
   })();
-  return _loading;
+  return _pyodideLoading;
 };
 
 // ═══════════════════════════════════════
-//  Tokenizer — Light Theme Colors
+//  LANGUAGES
 // ═══════════════════════════════════════
-const KW = new Set(['def','class','import','from','return','if','elif','else','for','while',
-  'in','not','and','or','True','False','None','try','except','finally','with','as',
-  'pass','break','continue','lambda','yield','async','await','raise','del','global','nonlocal','assert','is']);
-const BT = new Set(['print','len','range','type','int','str','float','list','dict','set',
-  'tuple','input','open','enumerate','zip','map','filter','sorted','reversed','max','min',
-  'sum','abs','round','isinstance','hasattr','getattr','setattr','super','object',
-  'bool','bytes','repr','format','vars','dir','id','hex','oct','bin','eval','exec','__name__','__main__']);
-
-const TC = {
-  keyword:'#0550ae', builtin:'#8250df', string:'#0a3069',
-  comment:'#6e7781', number:'#0550ae', operator:'#24292f',
-  decorator:'#8250df', default:'#24292f'
+const LANGS = {
+  python:    { label:'Python',     icon:'🐍', ext:'py',   file:'main.py',    runner:'python' },
+  javascript:{ label:'JavaScript', icon:'🟨', ext:'js',   file:'main.js',    runner:'js' },
+  html:      { label:'HTML/CSS',   icon:'🌐', ext:'html', file:'index.html', runner:'html' },
+  csharp:    { label:'C#',         icon:'💜', ext:'cs',   file:'Program.cs', runner:'ai' },
+  java:      { label:'Java',       icon:'☕', ext:'java', file:'Main.java',  runner:'ai' },
+  cpp:       { label:'C++',        icon:'⚡', ext:'cpp',  file:'main.cpp',   runner:'ai' },
+  sql:       { label:'SQL',        icon:'🗄️', ext:'sql',  file:'query.sql',  runner:'ai' },
 };
 
-function tokenizePy(code) {
-  const tokens = [];
-  code.split('\n').forEach((line, li, arr) => {
-    const trimmed = line.trimStart();
-    if (trimmed.startsWith('@')) {
-      const end = trimmed.search(/\s/) > -1 ? trimmed.search(/\s/) : trimmed.length;
-      tokens.push({t:'default', v: line.slice(0, line.length - trimmed.length)});
-      tokens.push({t:'decorator', v: trimmed.slice(0, end)});
-      if (trimmed.slice(end)) tokens.push({t:'default', v: trimmed.slice(end)});
-      if (li < arr.length-1) tokens.push({t:'default', v:'\n'});
-      return;
-    }
-    const ci = line.indexOf('#');
-    const cp = ci >= 0 ? line.slice(0,ci) : line;
-    const cm = ci >= 0 ? line.slice(ci) : '';
-    const re = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|"""[\s\S]*?"""|'''[\s\S]*?'''|\b\d+\.?\d*\b|\b\w+\b|[^\w\s]|\s+)/g;
-    let m;
-    while ((m = re.exec(cp)) !== null) {
-      const w = m[0];
-      if (/^\s+$/.test(w))                     tokens.push({t:'default',  v:w});
-      else if (w[0]==='"'||w[0]==="'")          tokens.push({t:'string',   v:w});
-      else if (/^\d/.test(w))                   tokens.push({t:'number',   v:w});
-      else if (KW.has(w))                       tokens.push({t:'keyword',  v:w});
-      else if (BT.has(w))                       tokens.push({t:'builtin',  v:w});
-      else if (/^[+\-*/<>=!&|^~%@]+$/.test(w)) tokens.push({t:'operator', v:w});
-      else                                      tokens.push({t:'default',  v:w});
-    }
-    if (cm) tokens.push({t:'comment', v:cm});
-    if (li < arr.length-1) tokens.push({t:'default', v:'\n'});
-  });
-  return tokens;
-}
+const detectLang = (code) => {
+  if (!code || !code.trim()) return null;
+  const c = code.trim();
+  if (/^\s*<!DOCTYPE|^\s*<html/i.test(c))                   return 'html';
+  if (/^\s*<(div|p|h[1-6]|span|body)/i.test(c))             return 'html';
+  if (/using System|Console\.Write|namespace\s+\w/m.test(c)) return 'csharp';
+  if (/public\s+class\s+\w+|System\.out\.print/m.test(c))   return 'java';
+  if (/#include\s*<|cout\s*<<|int\s+main\s*\(/m.test(c))    return 'cpp';
+  if (/SELECT\s+|CREATE\s+TABLE|INSERT\s+INTO/im.test(c))   return 'sql';
+  if (/console\.log|const\s+\w+\s*=|let\s+\w+|=>/m.test(c))return 'javascript';
+  return null;
+};
 
+// ═══════════════════════════════════════
+//  CODE SAMPLES
+// ═══════════════════════════════════════
+const SAMPLES = {
+python:`# 🐍 Python Compiler — runs in browser!
+print("Hello, PySkill! 🎉")
+
+numbers = [1, 2, 3, 4, 5]
+total = sum(numbers)
+print(f"Sum: {total}")
+print(f"Average: {total / len(numbers)}")
+
+for i, n in enumerate(numbers, 1):
+    print(f"  {i}. {n} squared = {n**2}")
+
+print("\\n✅ Done!")
+`,
+javascript:`// 🟨 JavaScript
+const greet = name => \`Hello, \${name}! 👋\`;
+['Ali','Sara','Ahmed'].forEach((s,i)=>{
+  console.log(\`\${i+1}. \${greet(s)}\`);
+});
+const squares = [1,2,3,4,5].map(x=>x**2);
+console.log('Squares:', squares);
+`,
+html:`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>PySkill</title>
+  <style>
+    body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0}
+    .card{background:white;border-radius:20px;padding:40px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+    h1{color:#667eea;margin:0 0 10px}
+    button{background:#667eea;color:white;border:none;padding:12px 28px;border-radius:10px;cursor:pointer;font-size:16px;font-weight:bold}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>🎉 Hello World!</h1>
+    <p>Built with PySkill Compiler</p>
+    <button onclick="this.textContent='Clicked! 🚀'">Click Me!</button>
+  </div>
+</body>
+</html>`,
+csharp:`// 💜 C# — AI simulates output
+using System;
+class Program {
+    static void Main() {
+        Console.WriteLine("Hello, World!");
+        for(int i=1;i<=5;i++) Console.WriteLine($"  {i}. value={i*i}");
+    }
+}`,
+java:`// ☕ Java — AI simulates output
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+        for(int i=1;i<=5;i++) System.out.println("  "+i+". value="+(i*i));
+    }
+}`,
+cpp:`// ⚡ C++ — AI simulates output
+#include<iostream>
+using namespace std;
+int main(){
+    cout<<"Hello, World!"<<endl;
+    for(int i=1;i<=5;i++) cout<<"  "<<i<<". value="<<i*i<<endl;
+    return 0;
+}`,
+sql:`-- 🗄️ SQL — AI simulates output
+CREATE TABLE students(id INTEGER PRIMARY KEY,name TEXT,marks INTEGER);
+INSERT INTO students VALUES(1,'Ali',95),(2,'Sara',88),(3,'Ahmed',92);
+SELECT name,marks FROM students WHERE marks>90 ORDER BY marks DESC;`,
+};
+
+// ═══════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════
 const normalizeIndent = (code) => {
   if (!code) return code;
   return code.split('\n').map(line => {
@@ -91,537 +176,734 @@ const detectInputCalls = (code) => {
   const prompts = [];
   const re = /\binput\s*\(\s*(?:f?(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'))?[^)]*\)/g;
   let m;
-  while ((m = re.exec(code)) !== null)
-    prompts.push((m[1] ?? m[2] ?? '').replace(/\\n/g,'\n').replace(/\\t/g,'\t'));
+  while ((m = re.exec(code)) !== null) prompts.push((m[1]??m[2]??'').replace(/\\n/g,'\n'));
   return prompts;
 };
 
-const autoFixCode = (code) => {
-  let fixed = normalizeIndent(code);
-  const fixes = fixed !== code ? ['✅ Indentation fixed'] : [];
-  const pf = fixed.replace(/^(\s*)print\s+(?!\()([^\n]+)/gm, (_,i,a) => {
-    fixes.push('✅ print() fixed'); return `${i}print(${a.trim()})`;
+// ═══════════════════════════════════════
+//  TOKENIZERS
+// ═══════════════════════════════════════
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+const PY_KW = new Set(['def','class','import','from','return','if','elif','else','for','while','in','not','and','or','True','False','None','try','except','finally','with','as','pass','break','continue','lambda','yield','async','await','raise','del','global','nonlocal','assert','is']);
+const PY_BT = new Set(['print','len','range','type','int','str','float','list','dict','set','tuple','input','open','enumerate','zip','map','filter','sorted','reversed','max','min','sum','abs','round','isinstance','hasattr','getattr','setattr','super','object','bool','bytes','repr','format','vars','dir','id','hex','oct','bin','eval','exec','any','all','next','iter']);
+
+function tokenizePy(code) {
+  let h='';
+  code.split('\n').forEach((line,li,arr)=>{
+    const ci=line.indexOf('#'),cp=ci>=0?line.slice(0,ci):line,cm=ci>=0?line.slice(ci):'';
+    const re=/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b\d+\.?\d*\b|\b\w+\b|[^\w\s]|\s+)/g;
+    let mt;
+    while((mt=re.exec(cp))!==null){
+      const w=mt[0],e=esc(w);
+      if(/^\s+$/.test(w))              {h+=e;continue;}
+      if(w[0]==='"'||w[0]==="'")       {h+=`<span style="color:${VS.string}">${e}</span>`;continue;}
+      if(/^\d/.test(w))                {h+=`<span style="color:${VS.number}">${e}</span>`;continue;}
+      if(PY_KW.has(w))                 {h+=`<span style="color:${VS.keyword};font-weight:600">${e}</span>`;continue;}
+      if(PY_BT.has(w))                 {h+=`<span style="color:${VS.builtin}">${e}</span>`;continue;}
+      h+=e;
+    }
+    if(cm) h+=`<span style="color:${VS.comment}">${esc(cm)}</span>`;
+    if(li<arr.length-1) h+='\n';
   });
-  if (pf !== fixed) fixed = pf;
-  return { code: fixed, fixes: fixes.length ? fixes : ['ℹ️ No fixes needed'] };
+  return h;
+}
+
+const JS_KW = new Set(['const','let','var','function','return','if','else','for','while','do','switch','case','break','continue','new','class','extends','import','export','default','async','await','try','catch','finally','throw','typeof','instanceof','in','of','null','undefined','true','false','this','super','yield','delete','void','static']);
+const CS_KW = new Set(['using','namespace','class','public','private','protected','static','void','int','string','bool','double','float','var','new','return','if','else','for','foreach','while','do','switch','case','break','continue','try','catch','finally','throw','true','false','null','this','base','override','virtual','abstract','sealed','readonly','const']);
+const CPP_KW = new Set(['int','float','double','char','bool','void','string','auto','const','static','return','if','else','for','while','do','switch','case','break','continue','class','struct','public','private','protected','new','delete','namespace','using','include','template','try','catch','throw','true','false','nullptr','this','virtual','override']);
+
+function tokenizeGen(code, kwSet) {
+  let h='';
+  code.split('\n').forEach((line,li,arr)=>{
+    const ci=line.indexOf('//'),cp=ci>=0?line.slice(0,ci):line,cm=ci>=0?line.slice(ci):'';
+    const re=/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+\.?\d*\b|\b\w+\b|[^\w\s]|\s+)/g;
+    let mt;
+    while((mt=re.exec(cp))!==null){
+      const w=mt[0],e=esc(w);
+      if(/^\s+$/.test(w))                    {h+=e;continue;}
+      if(w[0]==='"'||w[0]==="'"||w[0]==='`') {h+=`<span style="color:${VS.string}">${e}</span>`;continue;}
+      if(/^\d/.test(w))                       {h+=`<span style="color:${VS.number}">${e}</span>`;continue;}
+      if(kwSet.has(w))                        {h+=`<span style="color:${VS.keyword};font-weight:600">${e}</span>`;continue;}
+      h+=e;
+    }
+    if(cm) h+=`<span style="color:${VS.comment}">${esc(cm)}</span>`;
+    if(li<arr.length-1) h+='\n';
+  });
+  return h;
+}
+
+const getHL = (lang) => {
+  if (lang==='python')      return c => tokenizePy(c);
+  if (lang==='javascript')  return c => tokenizeGen(c, JS_KW);
+  if (lang==='csharp'||lang==='java') return c => tokenizeGen(c, CS_KW);
+  if (lang==='cpp')         return c => tokenizeGen(c, CPP_KW);
+  return c => esc(c);
 };
 
 // ═══════════════════════════════════════
-//  Code Editor
+//  AI FIX
 // ═══════════════════════════════════════
-const MONO = '"JetBrains Mono","Fira Code","Cascadia Code","Consolas",monospace';
+const AI_URL = 'https://white-limit-e2fe.luckyfaizu3.workers.dev/chat';
 
-const CodeEditor = ({ value, onChange, fontSize, isMobile }) => {
-  const taRef = useRef(null), hiRef = useRef(null), lnRef = useRef(null);
-  const valRef = useRef(value);
-  useEffect(() => { valRef.current = value; }, [value]);
+const aiAutoFix = async (code, lang) => {
+  try {
+    const resp = await fetch(AI_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ messages:[
+        {role:'system',content:`You are a ${lang} code fixer. Return ONLY the fixed raw code. No explanation, no markdown, no backticks.`},
+        {role:'user',content:`Fix:\n\n${code}`}
+      ], max_tokens:1500, temperature:0.1 })
+    });
+    if (!resp.ok) throw new Error();
+    const reader=resp.body.getReader(), decoder=new TextDecoder();
+    let result='',leftover='';
+    while(true){
+      const{done,value}=await reader.read(); if(done) break;
+      const chunk=leftover+decoder.decode(value,{stream:true});
+      const lines=chunk.split('\n'); leftover=lines.pop()||'';
+      for(const l of lines){
+        const t=l.trim(); if(!t.startsWith('data: ')) continue;
+        const d=t.slice(6).trim(); if(d==='[DONE]'||!d) continue;
+        try{const p=JSON.parse(d);const delta=p.choices?.[0]?.delta?.content;if(delta)result+=delta;}catch{}
+      }
+    }
+    result=result.trim().replace(/^```[\w]*\n?/,'').replace(/\n?```$/,'').trim();
+    return result||null;
+  } catch { return null; }
+};
 
-  const syncScroll = useCallback(() => {
-    const ta = taRef.current; if (!ta) return;
-    if (hiRef.current) { hiRef.current.scrollTop=ta.scrollTop; hiRef.current.scrollLeft=ta.scrollLeft; }
-    if (lnRef.current) lnRef.current.scrollTop = ta.scrollTop;
-  }, []);
+// ═══════════════════════════════════════
+//  CODE EDITOR
+// ═══════════════════════════════════════
+const CodeEditor = ({ value, onChange, lang, fontSize, isMobile=false }) => {
+  const taRef=useRef(null), hiRef=useRef(null), lnRef=useRef(null);
+  const valRef=useRef(value);
+  useEffect(()=>{ valRef.current=value; },[value]);
+  const tokenize = useMemo(()=>getHL(lang),[lang]);
+  const LH = Math.round(fontSize*1.75);
 
-  const handleKeyDown = useCallback((e) => {
-    const ta = taRef.current; if (!ta) return;
-    const s = ta.selectionStart, end = ta.selectionEnd, v = valRef.current;
-    if (e.key==='Tab') {
+  const syncScroll = useCallback(()=>{
+    const ta=taRef.current; if(!ta) return;
+    if(hiRef.current){ hiRef.current.scrollTop=ta.scrollTop; hiRef.current.scrollLeft=ta.scrollLeft; }
+    if(lnRef.current) lnRef.current.scrollTop=ta.scrollTop;
+  },[]);
+
+  const onKeyDown = useCallback((e)=>{
+    const ta=taRef.current; if(!ta) return;
+    const s=ta.selectionStart, end=ta.selectionEnd, v=valRef.current;
+    if(e.key==='Tab'){
       e.preventDefault();
       onChange(v.slice(0,s)+'    '+v.slice(end));
       requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s+4; });
-    } else if (e.key==='Enter') {
+    } else if(e.key==='Enter'){
       e.preventDefault();
-      const ls = v.lastIndexOf('\n',s-1)+1;
-      const lt = v.slice(ls,s);
-      const lead = lt.match(/^(\s*)/)[1].length;
-      const extra = lt.trimEnd().endsWith(':') ? 4 : 0;
-      const indent = ' '.repeat(lead+extra);
-      onChange(v.slice(0,s)+'\n'+indent+v.slice(end));
-      requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s+1+indent.length; });
-    } else if (e.key==='Backspace' && s===end) {
-      const ls = v.lastIndexOf('\n',s-1)+1;
-      const bc = v.slice(ls,s);
-      if (/^ +$/.test(bc) && bc.length%4===0 && bc.length>0) {
+      const ls=v.lastIndexOf('\n',s-1)+1, lt=v.slice(ls,s);
+      const lead=lt.match(/^(\s*)/)[1].length;
+      const extra=(lt.trimEnd().endsWith(':')||lt.trimEnd().endsWith('{')||lt.trimEnd().endsWith('('))?4:0;
+      const ind=' '.repeat(lead+extra);
+      onChange(v.slice(0,s)+'\n'+ind+v.slice(end));
+      requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s+1+ind.length; });
+    } else if(e.key==='Backspace'&&s===end){
+      const ls=v.lastIndexOf('\n',s-1)+1, bc=v.slice(ls,s);
+      if(/^ +$/.test(bc)&&bc.length%4===0&&bc.length>0){
         e.preventDefault();
         onChange(v.slice(0,s-4)+v.slice(s));
         requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s-4; });
       }
     }
-    const pairs={'(':')', '[':']', '{':'}'};
-    if (pairs[e.key] && s===end) {
+    const pairs={'(':')','{':'}','[':']'};
+    if(pairs[e.key]&&s===end){
       e.preventDefault();
       onChange(v.slice(0,s)+e.key+pairs[e.key]+v.slice(end));
       requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s+1; });
     }
-  }, [onChange]);
+  },[onChange]);
 
-  const lineCount = (value||'').split('\n').length;
-  const FS = `${fontSize}px`, LH = Math.round(fontSize*1.75), LHS = `${LH}px`;
-  const PL = isMobile ? '12px' : '52px';
-  const shared = {
+  const lineCount=(value||'').split('\n').length;
+  const shared={
     position:'absolute',top:0,left:0,right:0,bottom:0,
-    paddingTop:'14px',paddingBottom:'40px',paddingLeft:PL,paddingRight:'14px',
-    fontFamily:MONO,fontSize:FS,lineHeight:LHS,
-    whiteSpace:isMobile?'pre-wrap':'pre',wordBreak:isMobile?'break-all':'normal',
-    overflowX:isMobile?'hidden':'auto',overflowY:'auto',tabSize:4,
+    paddingTop:'12px',paddingBottom:'60px',
+    paddingLeft:isMobile?'10px':'50px',paddingRight:'10px',
+    fontFamily:VS.mono,fontSize:fontSize+'px',lineHeight:LH+'px',
+    whiteSpace:'pre-wrap',wordBreak:'break-all',
+    overflowX:'hidden',overflowY:'auto',tabSize:4,
   };
 
   return (
-    <div style={{position:'relative',flex:1,overflow:'hidden',minHeight:0,background:'#ffffff'}}>
-      {!isMobile && (
-        <div ref={lnRef} aria-hidden style={{
-          position:'absolute',top:0,left:0,bottom:0,width:'44px',
-          background:'#f6f8fa',borderRight:'1px solid #e8ecf0',
-          overflow:'hidden',pointerEvents:'none',zIndex:4,paddingTop:'14px'
-        }}>
-          {Array.from({length:lineCount}).map((_,i)=>(
-            <div key={i} style={{height:LHS,lineHeight:LHS,textAlign:'right',paddingRight:'10px',fontSize:Math.max(fontSize-2,10)+'px',color:'#c9d1d9',fontFamily:MONO,userSelect:'none'}}>{i+1}</div>
-          ))}
-        </div>
-      )}
-      <div ref={hiRef} aria-hidden style={{...shared,pointerEvents:'none',zIndex:2}}>
-        <pre style={{margin:0,padding:0,whiteSpace:isMobile?'pre-wrap':'pre',fontFamily:MONO,fontSize:FS,lineHeight:LHS,background:'transparent'}}>
-          {value
-            ? tokenizePy(value).map((tok,i)=><span key={i} style={{color:TC[tok.t]||TC.default}}>{tok.v}</span>)
-            : <span style={{color:'#c9d1d9'}}>{'# Write your Python code here...'}</span>}
-        </pre>
+    <div style={{position:'relative',flex:1,overflow:'hidden',minHeight:0,background:VS.bg}}>
+      {/* Line numbers */}
+      <div ref={lnRef} style={{
+        position:'absolute',top:0,left:0,bottom:0,width:'44px',
+        display:isMobile?'none':'block',
+        background:'#f8f8f8',borderRight:`1px solid ${VS.border}`,
+        overflow:'hidden',pointerEvents:'none',zIndex:4,paddingTop:'12px',
+      }}>
+        {Array.from({length:lineCount}).map((_,i)=>(
+          <div key={i} style={{height:LH+'px',lineHeight:LH+'px',textAlign:'right',paddingRight:'10px',fontSize:Math.max(fontSize-2,9)+'px',color:VS.textMute,fontFamily:VS.mono,userSelect:'none'}}>{i+1}</div>
+        ))}
       </div>
+      {/* Highlight */}
+      <div ref={hiRef} style={{...shared,pointerEvents:'none',zIndex:2,color:VS.text}}>
+        <pre style={{margin:0,padding:0,fontFamily:VS.mono,fontSize:fontSize+'px',lineHeight:LH+'px',background:'transparent',whiteSpace:'pre-wrap',wordBreak:'break-all'}}
+          dangerouslySetInnerHTML={{__html:value?tokenize(value):`<span style="color:${VS.textMute}">// Write your code here...</span>`}}/>
+      </div>
+      {/* Textarea */}
       <textarea ref={taRef} value={value} onChange={e=>onChange(e.target.value)}
-        onScroll={syncScroll} onKeyDown={handleKeyDown}
+        onScroll={syncScroll} onKeyDown={onKeyDown}
         spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off"
-        style={{...shared,background:'transparent',color:'transparent',caretColor:'#0550ae',border:'none',outline:'none',resize:'none',zIndex:3}}
-      />
+        style={{...shared,background:'transparent',color:'transparent',caretColor:VS.text,border:'none',outline:'none',resize:'none',zIndex:3}}/>
     </div>
   );
 };
 
 // ═══════════════════════════════════════
-//  Terminal — White Theme
+//  TERMINAL
 // ═══════════════════════════════════════
-const Terminal = ({ lines, isWaiting, currentPrompt, onSubmit, onClear }) => {
+const Terminal = ({ lines, isWaiting, currentPrompt, onSubmit }) => {
   const [val, setVal] = useState('');
-  const bottomRef = useRef(null);
-  const inputRef  = useRef(null);
-
-  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); }, [lines, isWaiting]);
-  useEffect(()=>{ if (isWaiting) setTimeout(()=>inputRef.current?.focus(),80); }, [isWaiting, currentPrompt]);
-
-  const submit = () => { if (!isWaiting) return; onSubmit(val); setVal(''); };
-
-  const getStyle = (type) => ({
-    output: { color:'#24292f' },
-    error:  { color:'#cf222e' },
-    input:  { color:'#0550ae', fontWeight:600 },
-    prompt: { color:'#6639ba' },
-    info:   { color:'#8c959f' },
-    success:{ color:'#1a7f37' },
-    system: { color:'#0969da' },
-  }[type] || { color:'#24292f' });
-
+  const bottomRef=useRef(null), inputRef=useRef(null);
+  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); },[lines,isWaiting]);
+  useEffect(()=>{ if(isWaiting) setTimeout(()=>inputRef.current?.focus(),80); },[isWaiting,currentPrompt]);
+  const submit=()=>{ if(!isWaiting) return; onSubmit(val); setVal(''); };
+  const C={output:VS.text,error:VS.red,success:VS.green,info:VS.textDim,system:VS.accent,prompt:VS.purple,input:VS.blue};
   return (
-    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0,background:'#ffffff'}}>
-      <div style={{flex:1,overflowY:'auto',padding:'14px 16px',fontFamily:MONO,fontSize:13,lineHeight:1.9}}>
+    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0,background:VS.bg}}>
+      <div style={{flex:1,overflowY:'auto',padding:'10px 14px',fontFamily:VS.mono,fontSize:'13px',lineHeight:'1.85'}}>
         {lines.map((line,i)=>(
-          <div key={i} style={{...getStyle(line.type),whiteSpace:'pre-wrap',wordBreak:'break-word',animation:'fadeIn 0.12s ease',display:'flex',alignItems:'flex-start',gap:6}}>
-            {line.type==='error'   && <span style={{color:'#cf222e',marginTop:2,flexShrink:0}}>✕</span>}
-            {line.type==='success' && <span style={{color:'#1a7f37',marginTop:2,flexShrink:0}}>✓</span>}
-            {line.type==='input'   && <span style={{color:'#8c959f',marginTop:2,flexShrink:0}}>›</span>}
+          <div key={i} style={{color:C[line.type]||VS.text,whiteSpace:'pre-wrap',wordBreak:'break-word',display:'flex',alignItems:'flex-start',gap:6}}>
+            {line.type==='error'  &&<span style={{flexShrink:0,marginTop:2}}>✕</span>}
+            {line.type==='success'&&<span style={{flexShrink:0,marginTop:2}}>✓</span>}
+            {line.type==='input'  &&<span style={{flexShrink:0,marginTop:2,color:VS.textDim}}>›</span>}
             <span>{line.text}</span>
           </div>
         ))}
-
-        {/* Live input line — IDLE style */}
-        {isWaiting && (
-          <div style={{display:'flex',alignItems:'center',flexWrap:'wrap',marginTop:2}}>
-            <span style={{color:'#6639ba',fontFamily:MONO,fontSize:13,whiteSpace:'pre'}}>{currentPrompt}</span>
-            <input ref={inputRef} value={val}
-              onChange={e=>setVal(e.target.value)}
+        {isWaiting&&(
+          <div style={{display:'flex',alignItems:'center',flexWrap:'wrap'}}>
+            <span style={{color:VS.purple,fontFamily:VS.mono,fontSize:'13px',whiteSpace:'pre'}}>{currentPrompt}</span>
+            <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)}
               onKeyDown={e=>{ if(e.key==='Enter') submit(); }}
-              style={{
-                flex:1,minWidth:80,background:'transparent',border:'none',outline:'none',
-                fontFamily:MONO,fontSize:13,color:'#0550ae',caretColor:'#0550ae',
-                lineHeight:1.9,fontWeight:600,
-              }}
-              autoFocus placeholder="type here..."
-            />
+              placeholder="type here..."
+              style={{flex:1,minWidth:60,background:'transparent',border:'none',outline:'none',fontFamily:VS.mono,fontSize:'13px',color:VS.blue,caretColor:VS.blue,fontWeight:600,lineHeight:'1.85'}}
+              autoFocus/>
           </div>
         )}
         <div ref={bottomRef}/>
       </div>
-
-      {/* Bottom bar */}
-      <div style={{display:'flex',alignItems:'center',padding:'5px 12px',background:'#f6f8fa',borderTop:'1px solid #e8ecf0',gap:8,flexShrink:0}}>
-        {isWaiting
-          ? <><span style={{fontSize:11,color:'#6639ba',fontFamily:MONO}}>⌨️ Type your input and press Enter</span>
-              <button onClick={submit} style={{marginLeft:'auto',padding:'3px 14px',background:'#0969da',border:'none',borderRadius:6,color:'#fff',fontSize:12,cursor:'pointer',fontFamily:MONO,fontWeight:600}}>Enter ↵</button>
-            </>
-          : <><span style={{fontSize:11,color:'#8c959f',fontFamily:MONO}}>Python 3.11 · Browser · No Server</span>
-              <button onClick={onClear} style={{marginLeft:'auto',background:'none',border:'1px solid #e8ecf0',color:'#8c959f',cursor:'pointer',fontSize:11,padding:'2px 10px',borderRadius:4,fontFamily:MONO}}>Clear</button>
-            </>
-        }
-      </div>
+      {isWaiting&&(
+        <div style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',background:VS.bg2,borderTop:`1px solid ${VS.border}`,flexShrink:0}}>
+          <span style={{fontSize:'11px',color:VS.purple,fontFamily:VS.mono}}>⌨ Type → Enter</span>
+          <button onClick={submit} style={{marginLeft:'auto',background:VS.accent,border:'none',color:'#fff',padding:'3px 12px',borderRadius:4,fontFamily:VS.mono,fontSize:'11px',cursor:'pointer',fontWeight:700}}>Enter ↵</button>
+        </div>
+      )}
     </div>
   );
 };
 
 // ═══════════════════════════════════════
-//  Default Code
+//  ✅ LOADING OVERLAY — shows only when
+//     user clicks Run for first time
 // ═══════════════════════════════════════
-const DEFAULT_CODE = `# 🐍 Python Compiler — FaizUpyZone
-# Runs 100% in your browser — No server!
-
-def greet(name):
-    return f"Hello, {name}! Welcome 🎉"
-
-students = ["Ali", "Sara", "Ahmed", "Zara"]
-for i, student in enumerate(students, 1):
-    print(f"{i}. {greet(student)}")
-
-print("\\n✅ Happy Coding! 🚀")
-`;
+const LoadingOverlay = ({ msg, progress }) => (
+  <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16,background:VS.bg,padding:24}}>
+    <div style={{fontSize:44,animation:'bounce 0.9s ease infinite'}}>🐍</div>
+    <div style={{fontFamily:VS.mono,fontSize:'13px',color:VS.accent,fontWeight:600,textAlign:'center'}}>{msg}</div>
+    {/* Progress bar */}
+    <div style={{width:'220px',height:'4px',background:VS.bg3,borderRadius:4,overflow:'hidden'}}>
+      <div style={{height:'100%',width:progress+'%',background:VS.accent,borderRadius:4,transition:'width 0.4s ease'}}/>
+    </div>
+    <div style={{fontFamily:VS.mono,fontSize:'10px',color:VS.textDim}}>First run only — then instant ⚡</div>
+  </div>
+);
 
 // ═══════════════════════════════════════
-//  Main Compiler
+//  MAIN COMPILER
 // ═══════════════════════════════════════
 const PythonCompiler = ({ initialCode='', onClose=null }) => {
-  const [code,       setCode]      = useState(()=>normalizeIndent(initialCode)||DEFAULT_CODE);
-  const [status,     setStatus]    = useState('booting');
-  const [termLines,  setTermLines] = useState([]);
+  const initLang = detectLang(initialCode)||'python';
+  const initCode = initialCode?.trim() ? initialCode : SAMPLES[initLang];
+
+  const [lang,       setLang]      = useState(initLang);
+  const [code,       setCode]      = useState(initCode);
+  // ✅ Status starts 'idle' immediately — no booting state on open
+  const [status,     setStatus]    = useState('idle');
+  const [termLines,  setTermLines] = useState([
+    {type:'system', text:`${LANGS[initLang].icon} ${LANGS[initLang].label} — Ready`},
+    {type:'info',   text:'▶ Press Run to execute your code\n'},
+  ]);
   const [isWaiting,  setIsWaiting] = useState(false);
   const [curPrompt,  setCurPrompt] = useState('');
   const [inputQueue, setInputQueue]= useState([]);
   const [inputIdx,   setInputIdx]  = useState(0);
   const [allPrompts, setAllPrompts]= useState([]);
   const [pendingCode,setPending]   = useState('');
-  const [fixes,      setFixes]     = useState([]);
-  const [showFixes,  setShowFixes] = useState(false);
-  const [fontSize,   setFontSize]  = useState(14);
-  const [copied,     setCopied]    = useState(false);
-  const [isMobile,   setIsMobile]  = useState(window.innerWidth<=768);
   const [execTime,   setExecTime]  = useState(null);
-  const [pyReady,    setPyReady]   = useState(false);
-  const [bootMsg,    setBootMsg]   = useState('Loading Python...');
+  const [hasError,   setHasError]  = useState(false);
+  const [isFixing,   setIsFixing]  = useState(false);
+  const [fixMsg,     setFixMsg]    = useState('');
+  const [showFix,    setShowFix]   = useState(false);
+  const [fontSize,   setFontSize]  = useState(()=>window.innerWidth<=600?12:13);
+  const [copied,     setCopied]    = useState(false);
+  const [termCopied, setTermCopied]= useState(false);
+  const [showPreview,setShowPreview]=useState(false);
+  const [menuOpen,   setMenuOpen]  = useState(false);
+  const [isMobile,   setIsMobile]  = useState(()=>window.innerWidth<=600);
+
+  // ✅ Loading state for lazy pyodide
+  const [pyLoading,  setPyLoading] = useState(false);
+  const [pyLoadMsg,  setPyLoadMsg] = useState('');
+  const [pyProgress, setPyProgress]= useState(0);
 
   const codeRef = useRef(code);
   useEffect(()=>{ codeRef.current=code; },[code]);
   useEffect(()=>{
-    const h=()=>setIsMobile(window.innerWidth<=768);
-    window.addEventListener('resize',h); return ()=>window.removeEventListener('resize',h);
+    const h=()=>setIsMobile(window.innerWidth<=600);
+    window.addEventListener('resize',h);
+    return ()=>window.removeEventListener('resize',h);
   },[]);
 
+  // ✅ NO useEffect boot — Pyodide loads only when Run is clicked
+  // Optionally: preload in background after 3s (silent, no UI change)
   useEffect(()=>{
-    getPyodide((s)=>{
-      if(s==='loading')  setBootMsg('📦 Downloading Python (one time ~10MB)...');
-      if(s==='starting') setBootMsg('🐍 Starting Python 3.11...');
-    }).then(()=>{
-      setPyReady(true); setStatus('idle');
-      setTermLines([
-        {type:'system', text:'🐍 Python 3.11 — Browser Engine (Pyodide)'},
-        {type:'system', text:'⚡ No server · No API · 100% Free · Unlimited'},
-        {type:'info',   text:'\nClick ▶ Run to execute your code!\n'},
-      ]);
-    }).catch(err=>{
-      setStatus('error');
-      setTermLines([{type:'error', text:`❌ Failed to load Python: ${err.message}`}]);
-    });
+    const timer = setTimeout(()=>{
+      if (!_pyodideReady) {
+        // Silent background preload — no UI change
+        loadPyodideLazy(()=>{}).catch(()=>{});
+      }
+    }, 3000); // start preloading after 3s silently
+    return ()=>clearTimeout(timer);
   },[]);
 
-  const addLines = (nl) => setTermLines(prev=>[...prev,...nl]);
+  const addLine  = (type,text) => setTermLines(p=>[...p,{type,text}]);
+  const addLines = (nl)        => setTermLines(p=>[...p,...nl]);
 
   const resetTerminal = () => {
     setIsWaiting(false); setCurPrompt('');
-    setInputQueue([]); setInputIdx(0);
-    setAllPrompts([]); setPending(''); setExecTime(null);
+    setInputQueue([]); setInputIdx(0); setAllPrompts([]);
+    setPending(''); setExecTime(null); setHasError(false);
+    setShowFix(false); setShowPreview(false);
   };
 
-  const doExecute = useCallback(async (codeToRun, stdinArr) => {
+  // ═══════════════════════════════════════
+  //  Execute Python (called after py ready)
+  // ═══════════════════════════════════════
+  const doExecute = useCallback(async(codeToRun, stdinArr) => {
     setStatus('running');
-    const t0 = Date.now();
+    const t0=Date.now();
     try {
-      const py = await getPyodide(()=>{});
+      const py = _pyodide;
+      const BUILTIN = new Set(['sys','io','os','re','math','json','time','random','datetime','collections','itertools','functools','string','pathlib','builtins','abc','copy','typing','enum','dataclasses','contextlib','hashlib','base64','struct','array','heapq','bisect','gc','inspect','traceback','warnings','logging','csv','sqlite3','argparse','glob','tempfile','calendar','pprint','textwrap','ast','token','unittest','threading','queue','multiprocessing','concurrent','asyncio','subprocess','socket','ssl','http','html','xml','email','urllib','ftplib','smtplib','zipfile','tarfile','gzip','shutil','stat','platform','signal','ctypes','decimal','fractions','statistics','cmath','numbers','operator','codecs','unicodedata','locale','pickle','shelve','dbm','importlib','pkgutil','runpy','dis','py_compile','tokenize','keyword','linecache','symtable','antigravity','this','__future__','__main__']);
+      const importRe=/^(?:import|from)\s+([\w]+)/gm;
+      const toInstall=new Set(); let im;
+      while((im=importRe.exec(codeToRun))!==null){
+        const p=im[1]; if(!BUILTIN.has(p)&&!BUILTIN.has(p.toLowerCase())) toInstall.add(p);
+      }
+      if(toInstall.size>0){
+        addLine('system',`📦 Installing: ${[...toInstall].join(', ')}...`);
+        try{
+          const PYODIDE_PKGS=['numpy','pandas','matplotlib','scipy','Pillow','sympy','networkx','scikit-learn','statsmodels','bokeh','lxml','cryptography','regex','pyyaml'];
+          const pyPkgs=[...toInstall].filter(p=>PYODIDE_PKGS.map(x=>x.toLowerCase()).includes(p.toLowerCase()));
+          const mpPkgs=[...toInstall].filter(p=>!PYODIDE_PKGS.map(x=>x.toLowerCase()).includes(p.toLowerCase()));
+          if(pyPkgs.length>0) { try{ await py.loadPackage(pyPkgs); }catch{} }
+          if(mpPkgs.length>0){
+            await py.runPythonAsync(`
+import micropip
+for _p in ${JSON.stringify(mpPkgs)}:
+    try: await micropip.install(_p)
+    except: pass
+`);
+          }
+          addLine('success','Packages ready');
+        }catch{ addLine('info','Some packages unavailable in browser'); }
+      }
+
       py.globals.set('_stdin_data', py.toPy(stdinArr));
-
       py.runPython(`
-import sys, io, builtins
-
-_out = []; _err = []
-_sin = list(_stdin_data); _si = 0
-
+import sys,io,builtins
+_out=[];_err=[]
+_sin=list(_stdin_data);_si=0
 class _W(io.TextIOBase):
     def __init__(self,b): self._b=b
-    def write(self,s): self._b.append(str(s)); return len(s)
+    def write(self,s): self._b.append(str(s));return len(s)
     def flush(self): pass
-
 class _R(io.TextIOBase):
     def readline(self):
         global _si
-        if _si<len(_sin): v=_sin[_si]; _si+=1; return str(v)+'\\n'
+        if _si<len(_sin): v=_sin[_si];_si+=1;return str(v)+'\\n'
         return ''
-
-sys.stdout=_W(_out); sys.stderr=_W(_err); sys.stdin=_R()
-
-def _inp(prompt=''):
-    if prompt: sys.stdout.write(str(prompt)); sys.stdout.flush()
+sys.stdout=_W(_out);sys.stderr=_W(_err);sys.stdin=_R()
+def _inp(p=''):
+    if p: sys.stdout.write(str(p));sys.stdout.flush()
     return sys.stdin.readline().rstrip('\\n')
-
 builtins.input=_inp
+try:
+    import requests as _req
+    _o_get=_req.get;_o_post=_req.post
+    _P='https://corsproxy.io/?'
+    def _pg(url,**kw): return _o_get((_P+url if not url.startswith(_P) else url),**kw)
+    def _pp(url,**kw): return _o_post((_P+url if not url.startswith(_P) else url),**kw)
+    _req.get=_pg;_req.post=_pp
+except: pass
 `);
-
-      let hasError = false, errMsg = '';
+      let runErr=false, errMsg='';
       try { py.runPython(codeToRun); }
-      catch(e) { hasError=true; errMsg=String(e).replace(/^PythonError:\s*/,''); }
+      catch(e){ runErr=true; errMsg=String(e).replace(/^PythonError:\s*/,''); }
 
-      const elapsed = ((Date.now()-t0)/1000).toFixed(2);
+      const elapsed=((Date.now()-t0)/1000).toFixed(2);
       setExecTime(elapsed);
-
-      const fullOut = py.globals.get('_out').toJs().join('');
-      const fullErr = py.globals.get('_err').toJs().join('') + (hasError?errMsg:'');
-
-      const newLines = [];
-      if (fullOut) {
-        const parts = fullOut.split('\n');
-        parts.forEach((part,i)=>{ if(i<parts.length-1||part) newLines.push({type:'output',text:part}); });
-      }
-      if (fullErr) fullErr.split('\n').forEach(ln=>{ if(ln) newLines.push({type:'error',text:ln}); });
-      if (!fullOut&&!fullErr) newLines.push({type:'success',text:'✅ Ran successfully (no output)'});
-      newLines.push({type:'info',text:`\n⏱ Done in ${elapsed}s`});
-
-      addLines(newLines);
-      setStatus(hasError||fullErr?'error':'success');
-    } catch(err) {
-      addLines([{type:'error',text:`❌ ${err.message}`}]);
-      setStatus('error');
+      const fullOut=py.globals.get('_out').toJs().join('');
+      const fullErr=py.globals.get('_err').toJs().join('')+(runErr?errMsg:'');
+      const nl=[];
+      if(fullOut) fullOut.split('\n').forEach((l,i,a)=>{ if(i<a.length-1||l) nl.push({type:'output',text:l}); });
+      if(fullErr) fullErr.split('\n').forEach(l=>{ if(l) nl.push({type:'error',text:l}); });
+      if(!fullOut&&!fullErr) nl.push({type:'success',text:'Ran successfully (no output)'});
+      nl.push({type:'info',text:`⏱ ${elapsed}s`});
+      addLines(nl);
+      if(runErr||fullErr){ setStatus('error');setHasError(true);setFixMsg('Error found — click Fix 🔧');setShowFix(true); }
+      else { setStatus('success');setHasError(false);setShowFix(false); }
+    } catch(e) {
+      addLine('error',e.message);
+      setStatus('error');setHasError(true);
+      setFixMsg('Error found — click Fix 🔧');setShowFix(true);
     }
     setIsWaiting(false);
+    setPyLoading(false);
   },[]);
 
-  const runCode = useCallback(async (codeOverride) => {
+  // ═══════════════════════════════════════
+  //  ✅ RUN — lazy load Pyodide if needed
+  // ═══════════════════════════════════════
+  const runCode = useCallback(async(codeOverride) => {
     const raw = typeof codeOverride==='string' ? codeOverride : codeRef.current;
+    const detected = detectLang(raw);
+    const effectiveLang = detected||lang;
+    const effectiveRunner = LANGS[effectiveLang]?.runner||'python';
+    if(detected&&detected!==lang) setLang(detected);
+
+    // HTML preview
+    if(effectiveRunner==='html'){
+      setShowPreview(true); setStatus('success'); return;
+    }
+
+    // JavaScript
+    if(effectiveRunner==='js'){
+      resetTerminal();
+      setTermLines([{type:'info',text:'⚡ Running JavaScript...'}]);
+      setStatus('running');
+      const logs=[];
+      const oL=console.log,oE=console.error,oW=console.warn;
+      console.log  =(...a)=>logs.push({type:'output',text:a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' ')});
+      console.error=(...a)=>logs.push({type:'error', text:a.map(String).join(' ')});
+      console.warn =(...a)=>logs.push({type:'info',  text:a.map(String).join(' ')});
+      const t0=Date.now();
+      try{
+        // eslint-disable-next-line no-eval
+        eval(raw);
+        const el=((Date.now()-t0)/1000).toFixed(2);
+        setTermLines([...logs,...(logs.length===0?[{type:'success',text:'Ran (no output)'}]:[]),{type:'info',text:`⏱ ${el}s`}]);
+        setExecTime(el);setStatus('success');setHasError(false);
+      }catch(e){
+        const el=((Date.now()-t0)/1000).toFixed(2);
+        setTermLines([...logs,{type:'error',text:e.message},{type:'info',text:`⏱ ${el}s`}]);
+        setStatus('error');setHasError(true);setFixMsg('Error — click Fix 🔧');setShowFix(true);
+      }
+      console.log=oL;console.error=oE;console.warn=oW;
+      return;
+    }
+
+    // AI languages
+    if(effectiveRunner==='ai'){
+      resetTerminal();setStatus('running');
+      const cfg=LANGS[effectiveLang]||LANGS[lang];
+      setTermLines([{type:'system',text:`${cfg.icon} ${cfg.label} — AI simulating output...`}]);
+      try{
+        const resp=await fetch(AI_URL,{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({messages:[
+            {role:'system',content:`Simulate ${effectiveLang} output. Format: [one line what code does]\n\n[exact console output only]. No markdown.`},
+            {role:'user',content:`${effectiveLang}:\n\n${raw}`}
+          ],max_tokens:300,temperature:0.1})});
+        const reader=resp.body.getReader(),decoder=new TextDecoder();
+        let reply='',leftover='';
+        while(true){
+          const{done,value}=await reader.read();if(done)break;
+          const chunk=leftover+decoder.decode(value,{stream:true});
+          const ls=chunk.split('\n');leftover=ls.pop()||'';
+          for(const l of ls){
+            const t=l.trim();if(!t.startsWith('data: '))continue;
+            const d=t.slice(6).trim();if(d==='[DONE]'||!d)continue;
+            try{const p=JSON.parse(d);const delta=p.choices?.[0]?.delta?.content;if(delta)reply+=delta;}catch{}
+          }
+        }
+        const rlines=reply.trim().split('\n');
+        const nl=[];let outputSection=false;
+        for(let i=0;i<rlines.length;i++){
+          if(i===0){nl.push({type:'info',text:rlines[0]});continue;}
+          if(!outputSection&&rlines[i].trim()===''){outputSection=true;continue;}
+          if(outputSection) nl.push({type:'output',text:rlines[i]});
+        }
+        setTermLines(nl);setStatus('success');
+      }catch{
+        setTermLines([{type:'error',text:'AI offline. Check network.'}]);setStatus('error');
+      }
+      return;
+    }
+
+    // ✅ Python — lazy load Pyodide
     const toRun = normalizeIndent(raw);
     setCode(toRun); codeRef.current=toRun;
     resetTerminal();
-    setTermLines([{type:'info',text:'⚡ Running...'}]);
 
+    // If Pyodide not ready — show loading in output panel (not blocking UI)
+    if (!_pyodideReady) {
+      setPyLoading(true);
+      setPyProgress(5);
+      setPyLoadMsg('📦 Downloading Python runtime (~10MB)...');
+      setTermLines([{type:'system',text:'🐍 Loading Python for first run...'}]);
+      setStatus('booting');
+
+      try {
+        await loadPyodideLazy((s) => {
+          if(s==='downloading') { setPyLoadMsg('📦 Downloading Python (~10MB, only once)...'); setPyProgress(20); }
+          if(s==='starting')    { setPyLoadMsg('🐍 Starting Python 3.11...');                  setPyProgress(70); }
+          if(s==='packages')    { setPyLoadMsg('📦 Loading micropip...');                       setPyProgress(90); }
+          if(s==='ready')       { setPyLoadMsg('✅ Python ready!');                              setPyProgress(100); }
+        });
+      } catch(err) {
+        setPyLoading(false);
+        setTermLines([{type:'error',text:`Failed to load Python: ${err.message}`}]);
+        setStatus('error');
+        return;
+      }
+      setPyLoading(false);
+    }
+
+    setTermLines([{type:'info',text:'⚡ Running...'}]);
     const prompts = detectInputCalls(toRun);
-    if (prompts.length>0) {
+    if(prompts.length>0){
       setPending(toRun); setAllPrompts(prompts); setInputIdx(0); setInputQueue([]);
-      setTermLines([]);
-      setCurPrompt(prompts[0]);
-      setIsWaiting(true); setStatus('waiting');
+      setTermLines([]); setCurPrompt(prompts[0]); setIsWaiting(true); setStatus('waiting');
     } else {
       await doExecute(toRun,[]);
     }
-  },[doExecute]);
+  },[doExecute,lang]);
 
-  const handleInput = useCallback((val) => {
-    addLines([{type:'prompt', text:(curPrompt||'')+val}]);
-    const newQueue=[...inputQueue,val];
-    setInputQueue(newQueue);
-    const nextIdx=inputIdx+1;
-    if (nextIdx<allPrompts.length) {
-      setInputIdx(nextIdx); setCurPrompt(allPrompts[nextIdx]);
-    } else {
-      setIsWaiting(false); setCurPrompt('');
-      addLines([{type:'info',text:'⚡ Running...'}]);
-      doExecute(pendingCode,newQueue);
-    }
+  const handleInput = useCallback((val)=>{
+    addLine('input',(curPrompt||'')+val);
+    const nq=[...inputQueue,val], ni=inputIdx+1;
+    setInputQueue(nq);
+    if(ni<allPrompts.length){ setInputIdx(ni); setCurPrompt(allPrompts[ni]); }
+    else{ setIsWaiting(false); setCurPrompt(''); addLine('info','⚡ Running...'); doExecute(pendingCode,nq); }
   },[curPrompt,inputQueue,inputIdx,allPrompts,pendingCode,doExecute]);
 
-  const handleAutoFix = () => {
-    const {code:fixed,fixes:f}=autoFixCode(code);
-    setCode(fixed); setFixes(f); setShowFixes(true);
-    resetTerminal();
-    setTermLines([{type:'system',text:'🔧 Auto-fixed! Click Run to execute.'}]);
+  // AI Fix
+  const handleFix = useCallback(async()=>{
+    if(isFixing||!codeRef.current.trim()) return;
+    setIsFixing(true); setFixMsg('🤖 AI fixing...'); setShowFix(true);
+    const fixed=await aiAutoFix(codeRef.current,lang);
+    if(fixed){
+      const oL=codeRef.current.split('\n'), fL=fixed.split('\n');
+      let diff=0;
+      for(let i=0;i<Math.max(oL.length,fL.length);i++) if(oL[i]!==fL[i]) diff++;
+      setCode(fixed); codeRef.current=fixed;
+      setFixMsg(diff>0?`✅ Fixed ${diff} line${diff>1?'s':''}`:'✅ No changes needed');
+    } else {
+      const f=normalizeIndent(codeRef.current); setCode(f); codeRef.current=f;
+      setFixMsg('🔧 Indentation fixed');
+    }
+    setIsFixing(false); setHasError(false);
+    setTimeout(()=>setShowFix(false),4000);
+  },[isFixing,lang]);
+
+  const handleLangChange = (l) => {
+    setLang(l); setCode(SAMPLES[l]||''); codeRef.current=SAMPLES[l]||'';
+    resetTerminal(); setMenuOpen(false);
+    const c=LANGS[l];
+    setTermLines([{type:'system',text:`${c.icon} ${c.label} — Ready`},{type:'info',text:'▶ Run to execute\n'}]);
+    setStatus('idle');
   };
 
-  const handleCopy = () => { navigator.clipboard.writeText(code); setCopied(true); setTimeout(()=>setCopied(false),2000); };
-  const handleBack = () => { if (onClose) onClose(); else if (window.history.length>1) window.history.back(); else window.location.href='/'; };
-  const handleClear = () => {
+  const handleBack     = ()=>{ if(onClose) onClose(); else if(window.history.length>1) window.history.back(); else window.location.href='/'; };
+  const handleCopyCode = ()=>{
+    const el=document.createElement('textarea'); el.value=code;
+    document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+    navigator.clipboard?.writeText(code).catch(()=>{});
+    setCopied(true); setTimeout(()=>setCopied(false),2000);
+  };
+  const handleCopyOutput = ()=>{
+    const text=termLines.filter(l=>l.type!=='system').map(l=>l.text).join('\n').trim()||'(no output)';
+    const el=document.createElement('textarea'); el.value=text;
+    document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
+    navigator.clipboard?.writeText(text).catch(()=>{});
+    setTermCopied(true); setTimeout(()=>setTermCopied(false),2000);
+  };
+  const handleClear = ()=>{
     resetTerminal(); setStatus('idle');
-    setTermLines([{type:'system',text:'🐍 Python 3.11 — Ready'},{type:'info',text:'Click ▶ Run!\n'}]);
+    const c=LANGS[lang];
+    setTermLines([{type:'system',text:`${c.icon} ${c.label} — Ready`},{type:'info',text:'▶ Run\n'}]);
+  };
+  const handleDownload = ()=>{
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([code],{type:'text/plain'}));
+    a.download=LANGS[lang]?.file||'main.txt'; a.click();
   };
 
-  const lineCount = (code||'').split('\n').length;
-  const canRun = pyReady && status!=='running' && status!=='waiting' && status!=='booting';
-  const isRunning = status==='running';
+  const lineCount=(code||'').split('\n').length;
+  const runner=LANGS[lang]?.runner||'python';
+  // ✅ canRun — always true for non-python, always true for python (lazy loads)
+  const canRun = status!=='running'&&status!=='waiting'&&status!=='booting';
+  const isRunning=status==='running'||status==='booting';
+  const cfg=LANGS[lang]||LANGS.python;
 
-  const sColor = {
-    idle:'#0969da',booting:'#d97706',running:'#0969da',
-    waiting:'#6639ba',success:'#1a7f37',error:'#cf222e'
-  }[status]||'#0969da';
-  const sLabel = {
-    idle:'Ready',booting:'Loading...',running:'Running...',
-    waiting:'Waiting for input',success:'Done ✓',error:'Error'
-  }[status]||'Ready';
+  const sColor={idle:VS.accent,booting:'#d97706',running:VS.accent,waiting:VS.purple,success:VS.green,error:VS.red}[status]||VS.accent;
+  const sLabel={idle:'Ready',booting:'Loading...',running:'Running...',waiting:'Waiting',success:'Done ✓',error:'Error'}[status]||'Ready';
+
+  const fixBg   = fixMsg.startsWith('✅')?VS.greenBg : fixMsg.startsWith('🤖')?VS.accentBg : '#fef2f2';
+  const fixBord = fixMsg.startsWith('✅')?VS.green   : fixMsg.startsWith('🤖')?VS.accent   : VS.red;
+  const fixTxt  = fixMsg.startsWith('✅')?VS.green   : fixMsg.startsWith('🤖')?VS.accent   : VS.red;
 
   return (
-    <div style={{display:'flex',flexDirection:'column',position:'fixed',inset:0,background:'#ffffff',fontFamily:'"Segoe UI",system-ui,sans-serif',overflow:'hidden',zIndex:9999,color:'#24292f'}}>
+    <div style={{display:'flex',flexDirection:'column',position:'fixed',inset:0,background:VS.bg,color:VS.text,fontFamily:'"Segoe UI",system-ui,sans-serif',overflow:'hidden',zIndex:9999}}>
 
-      {/* BOOT OVERLAY */}
-      {status==='booting' && (
-        <div style={{position:'absolute',inset:0,background:'#ffffff',zIndex:99999,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:20}}>
-          <div style={{fontSize:52,animation:'bounce 1s ease infinite'}}>🐍</div>
-          <div style={{fontSize:15,color:'#0969da',fontFamily:MONO,fontWeight:600}}>{bootMsg}</div>
-          <div style={{fontSize:12,color:'#8c959f',fontFamily:MONO}}>First load only — then instant!</div>
-          <div style={{display:'flex',gap:8,marginTop:4}}>
-            {[0,1,2].map(i=>(
-              <div key={i} style={{width:9,height:9,borderRadius:'50%',background:'#0969da',animation:`bounce 0.7s ease ${i*0.15}s infinite`}}/>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* ── HEADER */}
+      <div style={{background:VS.bg2,borderBottom:`1px solid ${VS.border}`,display:'flex',alignItems:'center',height:isMobile?'48px':'46px',padding:isMobile?'0 8px':'0 10px',flexShrink:0,gap:isMobile?4:6,boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+        {/* Back */}
+        <button onClick={handleBack} style={{background:'transparent',border:`1px solid ${VS.border}`,color:VS.textDim,borderRadius:5,padding:'5px 10px',cursor:'pointer',fontSize:'13px',fontFamily:'inherit',flexShrink:0}}>←</button>
 
-      {/* HEADER */}
-      <div style={{background:'#ffffff',borderBottom:'1px solid #e8ecf0',display:'flex',alignItems:'center',height:isMobile?'50px':'44px',padding:'0 12px',flexShrink:0,gap:8,boxShadow:'0 1px 8px rgba(0,0,0,0.06)'}}>
-        <button onClick={handleBack}
-          style={{background:'#f6f8fa',border:'1px solid #e8ecf0',borderRadius:6,padding:'5px 12px',cursor:'pointer',fontSize:'12px',color:'#57606a',fontWeight:600,transition:'all 0.15s'}}
-          onMouseEnter={e=>{e.currentTarget.style.background='#eaeef2';e.currentTarget.style.borderColor='#0969da';e.currentTarget.style.color='#0969da';}}
-          onMouseLeave={e=>{e.currentTarget.style.background='#f6f8fa';e.currentTarget.style.borderColor='#e8ecf0';e.currentTarget.style.color='#57606a';}}>
-          ← Back
-        </button>
-
-        {!isMobile && (
-          <div style={{display:'flex',gap:5,marginLeft:4}}>
-            {['#ff5f57','#febc2e','#28c840'].map((c,i)=><span key={i} style={{width:11,height:11,borderRadius:'50%',background:c,display:'inline-block'}}/>)}
-          </div>
-        )}
-
-        <span style={{fontSize:isMobile?'13px':'14px',color:'#24292f',fontWeight:700,marginLeft:4}}>🐍 Python Compiler</span>
-
-        <div style={{marginLeft:'auto',display:'flex',gap:8,alignItems:'center'}}>
-          {!isMobile && (
-            <span style={{fontSize:'11px',color:'#0969da',fontWeight:600,background:'#ddf4ff',padding:'2px 10px',borderRadius:20,border:'1px solid #b6e3ff',fontFamily:MONO}}>
-              ⚡ Browser Engine
-            </span>
+        {/* Language dropdown */}
+        <div style={{position:'relative',flexShrink:0}}>
+          <button onClick={()=>setMenuOpen(o=>!o)} style={{background:VS.bg,border:`1px solid ${VS.border}`,color:VS.text,borderRadius:6,padding:'6px 10px',cursor:'pointer',fontFamily:VS.mono,fontSize:'12px',fontWeight:600,display:'flex',alignItems:'center',gap:5,boxShadow:'0 1px 3px rgba(0,0,0,0.08)'}}>
+            {cfg.icon}{!isMobile&&' '+cfg.label}
+            <span style={{fontSize:'9px',color:VS.textDim}}>▾</span>
+          </button>
+          {menuOpen&&(
+            <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:VS.bg,border:`1px solid ${VS.border}`,borderRadius:8,zIndex:1000,minWidth:'160px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',overflow:'hidden'}}>
+              {Object.entries(LANGS).map(([k,v])=>(
+                <button key={k} onClick={()=>handleLangChange(k)} style={{width:'100%',padding:'10px 14px',background:lang===k?VS.accentBg:'transparent',border:'none',color:lang===k?VS.accent:VS.text,cursor:'pointer',textAlign:'left',fontFamily:VS.mono,fontSize:'12px',display:'flex',alignItems:'center',gap:8}}>
+                  <span>{v.icon}</span>
+                  <span style={{flex:1}}>{v.label}</span>
+                  {lang===k&&<span style={{color:VS.accent,fontSize:'11px'}}>✓</span>}
+                </button>
+              ))}
+            </div>
           )}
-          <div style={{display:'flex',alignItems:'center',gap:5}}>
-            <span style={{width:7,height:7,borderRadius:'50%',background:sColor,display:'inline-block',boxShadow:`0 0 0 2px ${sColor}33`,animation:isRunning||status==='waiting'?'pulse 1s ease infinite':'none'}}/>
-            <span style={{fontSize:'11px',color:sColor,fontWeight:600,fontFamily:MONO}}>{sLabel}</span>
-          </div>
         </div>
+
+        {/* Run */}
+        <button onClick={()=>runCode()} disabled={!canRun} style={{background:canRun?VS.accent:'#f0f0f0',border:'none',color:canRun?'#fff':'#aaa',borderRadius:6,padding:isMobile?'7px 12px':'7px 18px',fontWeight:700,fontSize:isMobile?'12px':'13px',cursor:canRun?'pointer':'not-allowed',fontFamily:'inherit',flexShrink:0,transition:'all 0.15s',whiteSpace:'nowrap',boxShadow:canRun?'0 2px 6px rgba(0,102,184,0.3)':'none'}}>
+          {isRunning?'⟳ Running':'▶ Run'}
+        </button>
+
+        {/* Fix */}
+        <button onClick={handleFix} disabled={isFixing} style={{background:hasError?'#fef2f2':'transparent',border:`1px solid ${hasError?VS.red:VS.border}`,color:hasError?VS.red:VS.textDim,borderRadius:6,padding:isMobile?'7px 8px':'7px 11px',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',flexShrink:0,fontWeight:hasError?700:400,transition:'all 0.15s'}}>
+          {isFixing?'⟳':'🔧'}
+        </button>
+
+        {/* Status */}
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+          <span style={{width:6,height:6,borderRadius:'50%',background:sColor,animation:(isRunning||status==='waiting')?'pulse 1s ease infinite':'none',display:'inline-block'}}/>
+          <span style={{fontFamily:VS.mono,fontSize:'10px',color:sColor,fontWeight:600}}>{sLabel}</span>
+        </div>
+
+        <button onClick={handleCopyCode} style={{background:'transparent',border:'none',color:VS.textDim,cursor:'pointer',fontSize:'16px',padding:'4px',flexShrink:0}}>{copied?'✅':'⎘'}</button>
+        {!isMobile&&<button onClick={handleDownload} style={{background:'transparent',border:'none',color:VS.textDim,cursor:'pointer',fontSize:'16px',padding:'4px',flexShrink:0}}>↓</button>}
       </div>
 
-      {/* TAB BAR */}
-      <div style={{display:'flex',alignItems:'center',height:'32px',background:'#f6f8fa',borderBottom:'1px solid #e8ecf0',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:6,background:'#ffffff',borderTop:'2px solid #0969da',padding:'0 14px',height:'32px',fontSize:'12px',color:'#57606a',fontFamily:MONO}}>
-          main.py <span style={{width:5,height:5,borderRadius:'50%',background:'#f0883e',marginLeft:5,display:'inline-block'}}/>
+      {/* ── TAB BAR */}
+      <div style={{background:VS.bg2,borderBottom:`1px solid ${VS.border}`,display:'flex',alignItems:'flex-end',height:'28px',padding:'0 10px',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:5,background:VS.bg,borderTop:`2px solid ${VS.accent}`,padding:'0 12px',height:'26px',fontSize:'11px',color:VS.textDim,fontFamily:VS.mono}}>
+          {cfg.file}
+          <span style={{width:5,height:5,borderRadius:'50%',background:'#f0883e',marginLeft:3,display:'inline-block'}}/>
         </div>
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:4,paddingRight:10}}>
+        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3,paddingBottom:2}}>
           <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} style={S.tabBtn}>A-</button>
-          <span style={{fontSize:'10px',color:'#8c959f',minWidth:18,textAlign:'center',fontFamily:MONO}}>{fontSize}</span>
-          <button onClick={()=>setFontSize(f=>Math.min(22,f+1))} style={S.tabBtn}>A+</button>
+          <span style={{fontSize:'10px',color:VS.textMute,minWidth:16,textAlign:'center',fontFamily:VS.mono}}>{fontSize}</span>
+          <button onClick={()=>setFontSize(f=>Math.min(20,f+1))} style={S.tabBtn}>A+</button>
+          <button onClick={handleClear} style={{...S.tabBtn,marginLeft:6}}>🗑</button>
         </div>
       </div>
 
-      {/* TOOLBAR */}
-      <div style={{display:'flex',alignItems:'center',gap:isMobile?4:6,padding:isMobile?'6px 8px':'6px 12px',background:'#ffffff',borderBottom:'1px solid #e8ecf0',flexShrink:0}}>
-        <button onClick={runCode} disabled={!canRun}
-          style={{
-            background:canRun?'#0969da':'#f6f8fa',border:'none',
-            color:canRun?'#ffffff':'#8c959f',borderRadius:8,
-            padding:isMobile?'8px 16px':'6px 20px',fontSize:'13px',fontWeight:700,
-            cursor:canRun?'pointer':'not-allowed',fontFamily:'inherit',whiteSpace:'nowrap',
-            boxShadow:canRun?'0 2px 8px rgba(9,105,218,0.3)':'none',
-            transition:'all 0.15s',flexShrink:0,
-          }}
-          onMouseEnter={e=>{ if(canRun) e.currentTarget.style.background='#0860ca'; }}
-          onMouseLeave={e=>{ if(canRun) e.currentTarget.style.background='#0969da'; }}>
-          {isRunning ? '⟳ Running...' : '▶  Run'}
-        </button>
-
-        {status==='error' && (
-          <button onClick={handleAutoFix} style={{...S.toolBtn,color:'#cf222e',borderColor:'#ffa198',background:'#ffebe9',flexShrink:0}}>🔧 Fix</button>
-        )}
-
-        <button onClick={()=>setCode(normalizeIndent(code))} style={{...S.toolBtn,flexShrink:0}}>⇥ Indent</button>
-        <button onClick={()=>{setCode('');handleClear();}} style={{...S.toolBtn,flexShrink:0}}>🗑 Clear</button>
-        <button onClick={handleCopy} style={{...S.toolBtn,color:copied?'#1a7f37':'#57606a',flexShrink:0}}>{copied?'✅ Copied':'⎘ Copy'}</button>
-        {!isMobile && (
-          <button onClick={()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([code],{type:'text/plain'}));a.download='main.py';a.click();}} style={{...S.toolBtn,flexShrink:0}}>↓ .py</button>
-        )}
-        {execTime && <span style={{marginLeft:'auto',fontSize:'11px',color:'#8c959f',fontFamily:MONO,flexShrink:0}}>⏱ {execTime}s</span>}
-      </div>
-
-      {/* FIX BANNER */}
-      {showFixes && fixes.length>0 && (
-        <div style={{background:'#dafbe1',borderBottom:'1px solid #aceebb',padding:'4px 14px',display:'flex',alignItems:'center',gap:8,flexWrap:'wrap',flexShrink:0}}>
-          {fixes.map((f,i)=><span key={i} style={{fontSize:'11px',color:'#1a7f37',fontFamily:MONO}}>{f}</span>)}
-          <button onClick={()=>setShowFixes(false)} style={{marginLeft:'auto',background:'none',border:'none',color:'#8c959f',cursor:'pointer',fontSize:14}}>✕</button>
+      {/* ── FIX BANNER */}
+      {showFix&&(
+        <div style={{background:fixBg,borderBottom:`1px solid ${fixBord}`,padding:'5px 12px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
+          <span style={{fontFamily:VS.mono,fontSize:'11px',fontWeight:600,color:fixTxt}}>{fixMsg}</span>
+          {isFixing&&<span style={{display:'inline-flex',gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:'50%',background:VS.accent,display:'inline-block',animation:`bounce 0.6s ease ${i*0.13}s infinite`}}/>)}</span>}
+          <button onClick={()=>setShowFix(false)} style={{marginLeft:'auto',background:'none',border:'none',color:VS.textMute,cursor:'pointer',fontSize:'13px'}}>✕</button>
         </div>
       )}
 
-      {/* MAIN PANE */}
-      <div style={{flex:1,display:'flex',flexDirection:isMobile?'column':'row',overflow:'hidden',minHeight:0}}>
-
+      {/* ── MAIN PANE */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
         {/* EDITOR */}
-        <div style={{
-          flex:isMobile?'0 0 50%':'0 0 58%',
-          display:'flex',flexDirection:'column',overflow:'hidden',
-          borderRight:isMobile?'none':'1px solid #e8ecf0',
-          borderBottom:isMobile?'1px solid #e8ecf0':'none',
-          background:'#ffffff',
-        }}>
-          <CodeEditor value={code} onChange={setCode} fontSize={fontSize} isMobile={isMobile}/>
+        <div style={{flex:isMobile?'0 0 50%':'0 0 55%',display:'flex',flexDirection:'column',overflow:'hidden',borderBottom:`1px solid ${VS.border}`}}>
+          <CodeEditor value={code} onChange={v=>{setCode(v);codeRef.current=v;}} lang={lang} fontSize={fontSize} isMobile={isMobile}/>
         </div>
 
-        {/* TERMINAL */}
-        <div style={{flex:isMobile?'0 0 50%':'0 0 42%',display:'flex',flexDirection:'column',overflow:'hidden',background:'#ffffff'}}>
-          <div style={{display:'flex',alignItems:'center',gap:6,padding:'5px 12px',background:'#f6f8fa',borderBottom:'1px solid #e8ecf0',flexShrink:0}}>
-            <span style={{fontSize:'10px',color:'#57606a',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.1em',fontFamily:MONO}}>
-              {status==='waiting'?'⌨️ Input':'Output'}
-            </span>
-            {status==='waiting' && <span style={{fontSize:'10px',color:'#6639ba',animation:'pulse 1s ease infinite'}}>● Waiting for input</span>}
-            {status==='success' && <span style={{fontSize:'10px',color:'#1a7f37'}}>● Done</span>}
-            {status==='error'   && <span style={{fontSize:'10px',color:'#cf222e'}}>● Error</span>}
-            {isRunning          && <span style={{fontSize:'10px',color:'#0969da',animation:'pulse 0.8s ease infinite'}}>● Running</span>}
+        {/* OUTPUT HEADER */}
+        <div style={{background:VS.bg2,display:'flex',alignItems:'center',height:'24px',padding:'0 10px',flexShrink:0,gap:8,borderBottom:`1px solid ${VS.border}`}}>
+          <span style={{fontFamily:VS.mono,fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:VS.textDim}}>
+            {showPreview?'Preview':status==='waiting'?'Input':'Output'}
+          </span>
+          {status==='waiting' &&<span style={{fontSize:'10px',color:VS.purple,animation:'pulse 1s ease infinite'}}>● waiting</span>}
+          {status==='success' &&<span style={{fontSize:'10px',color:VS.green}}>● done</span>}
+          {status==='error'   &&<span style={{fontSize:'10px',color:VS.red}}>● error</span>}
+          {status==='running' &&<span style={{fontSize:'10px',color:VS.accent,animation:'pulse 0.8s ease infinite'}}>● running</span>}
+          {status==='booting' &&<span style={{fontSize:'10px',color:'#d97706',animation:'pulse 0.8s ease infinite'}}>● loading python</span>}
+          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
+            {!showPreview&&!isRunning&&termLines.length>0&&(
+              <button onClick={handleCopyOutput} style={{display:'flex',alignItems:'center',gap:3,background:termCopied?VS.greenBg:'transparent',border:`1px solid ${termCopied?VS.green:VS.border}`,color:termCopied?VS.green:VS.textDim,borderRadius:4,padding:'2px 8px',cursor:'pointer',fontSize:'10px',fontFamily:VS.mono}}>
+                {termCopied?'✅ Copied':'⎘ Copy'}
+              </button>
+            )}
+            {showPreview&&(
+              <button onClick={()=>setShowPreview(false)} style={{background:'none',border:'none',color:VS.textDim,cursor:'pointer',fontSize:'11px',fontFamily:VS.mono}}>← Code</button>
+            )}
           </div>
-          <Terminal lines={termLines} isWaiting={isWaiting} currentPrompt={curPrompt} onSubmit={handleInput} onClear={handleClear}/>
+        </div>
+
+        {/* OUTPUT */}
+        <div style={{flex:1,overflow:'hidden',minHeight:0}}>
+          {showPreview
+            ? <iframe title="preview" style={{width:'100%',height:'100%',border:'none',background:'#fff'}} srcDoc={code}/>
+            : pyLoading
+              ? <LoadingOverlay msg={pyLoadMsg} progress={pyProgress}/>
+              : <Terminal lines={termLines} isWaiting={isWaiting} currentPrompt={curPrompt} onSubmit={handleInput}/>
+          }
         </div>
       </div>
 
-      {/* STATUS BAR */}
-      <footer style={{background:'#0969da',display:'flex',alignItems:'center',gap:12,padding:'0 14px',height:'22px',flexShrink:0}}>
-        <span style={{fontSize:'10px',color:'#ffffff',fontWeight:700,fontFamily:MONO}}>🐍 Python 3.11</span>
-        <span style={{fontSize:'10px',color:'rgba(255,255,255,0.4)'}}>|</span>
-        <span style={{fontSize:'10px',color:'rgba(255,255,255,0.85)',fontFamily:MONO}}>Ln {lineCount}</span>
-        <span style={{fontSize:'10px',color:'rgba(255,255,255,0.4)'}}>|</span>
-        <span style={{fontSize:'10px',color:'rgba(255,255,255,0.85)',fontFamily:MONO}}>UTF-8</span>
-        {execTime && <><span style={{fontSize:'10px',color:'rgba(255,255,255,0.4)'}}>|</span><span style={{fontSize:'10px',color:'rgba(255,255,255,0.85)',fontFamily:MONO}}>⏱ {execTime}s</span></>}
-        <span style={{marginLeft:'auto',fontSize:'10px',color:'rgba(255,255,255,0.6)',fontFamily:MONO}}>No Server · No API · Runs in Browser</span>
-      </footer>
+      {/* ── STATUS BAR */}
+      <div style={{background:VS.accent,display:'flex',alignItems:'center',gap:10,padding:'0 12px',height:'20px',flexShrink:0}}>
+        <span style={{fontFamily:VS.mono,fontSize:'10px',color:'#fff',fontWeight:700}}>{cfg.icon}{!isMobile&&' '+cfg.label}</span>
+        <span style={{color:'rgba(255,255,255,0.4)'}}>|</span>
+        <span style={{fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.9)'}}>Ln {lineCount}</span>
+        {execTime&&<><span style={{color:'rgba(255,255,255,0.4)'}}>|</span><span style={{fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.9)'}}>⏱ {execTime}s</span></>}
+        {runner==='python'&&!_pyodideReady&&<span style={{fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.6)',marginLeft:4}}>· Python loads on first Run</span>}
+        <span style={{marginLeft:'auto',fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.5)'}}>PySkill</span>
+      </div>
 
-      {/* MOBILE FAB */}
-      {isMobile && (
-        <button onClick={runCode} disabled={!canRun}
-          style={{position:'fixed',bottom:24,right:16,zIndex:99999,width:56,height:56,borderRadius:'50%',
-            background:canRun?'#0969da':'#e8ecf0',border:'none',color:canRun?'#fff':'#8c959f',
-            fontSize:22,cursor:'pointer',boxShadow:canRun?'0 4px 16px rgba(9,105,218,0.4)':'none',
-            display:'flex',alignItems:'center',justifyContent:'center',transition:'all 0.2s'}}>
-          {isRunning?'⟳':'▶'}
-        </button>
-      )}
+      {menuOpen&&<div style={{position:'fixed',inset:0,zIndex:999}} onClick={()=>setMenuOpen(false)}/>}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
-        * { box-sizing:border-box; }
-        @keyframes pulse  { 0%,100%{opacity:1} 50%{opacity:0.3} }
-        @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
-        @keyframes fadeIn { from{opacity:0;transform:translateY(2px)} to{opacity:1;transform:none} }
-        ::-webkit-scrollbar{width:5px;height:5px}
-        ::-webkit-scrollbar-track{background:#f6f8fa}
-        ::-webkit-scrollbar-thumb{background:#d0d7de;border-radius:4px}
-        ::-webkit-scrollbar-thumb:hover{background:#b1bac4}
-        button:focus-visible{outline:2px solid #0969da;outline-offset:2px}
-        textarea{-webkit-tap-highlight-color:transparent}
+        *{box-sizing:border-box;}
+        @keyframes pulse  {0%,100%{opacity:1}50%{opacity:0.3}}
+        @keyframes bounce {0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+        @keyframes fadeIn {from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
+        ::-webkit-scrollbar{width:4px;height:4px}
+        ::-webkit-scrollbar-track{background:#f3f3f3}
+        ::-webkit-scrollbar-thumb{background:#c0c0c0;border-radius:2px}
+        textarea{-webkit-tap-highlight-color:transparent;}
+        *{-webkit-tap-highlight-color:transparent;}
+        body,html{overflow:hidden;position:fixed;width:100%;height:100%;}
+        input,textarea,select{font-size:16px !important;}
+        button:active{opacity:0.75;}
       `}</style>
     </div>
   );
 };
 
-// ── Styles
 const S = {
-  tabBtn: {background:'#f6f8fa',border:'1px solid #e8ecf0',color:'#57606a',borderRadius:4,padding:'2px 7px',fontSize:'10px',cursor:'pointer',fontFamily:'inherit'},
-  toolBtn: {background:'#f6f8fa',border:'1px solid #e8ecf0',color:'#57606a',borderRadius:6,padding:'5px 10px',fontSize:'12px',cursor:'pointer',fontFamily:'inherit',whiteSpace:'nowrap',transition:'all 0.15s'},
+  tabBtn:{background:'transparent',border:`1px solid #e4e4e4`,color:'#6e7681',borderRadius:4,padding:'2px 7px',fontSize:'10px',cursor:'pointer',fontFamily:'inherit'},
 };
 
 export default PythonCompiler;
