@@ -115,10 +115,11 @@ const Footer = ({ setCurrentPage }) => {
           </h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             {[
-              { page: 'home', label: '🏠 Home' },
-              { page: 'products', label: '📚 Browse Notes' },
-              { page: 'mocktests', label: '🐍 Mock Tests' },
-              { page: 'leaderboard', label: '🏆 Leaderboard' },
+              { page: 'home',           label: '🏠 Home' },
+              { page: 'products',       label: '📚 Browse Notes' },
+              { page: 'mocktests',      label: '🐍 Mock Tests' },
+              { page: 'leaderboard',    label: '🏆 Leaderboard' },
+              { page: 'blog-mock-test', label: '📝 Python Mock Test Blog' },
             ].map(({ page, label }) => (
               <button 
                 key={page}
