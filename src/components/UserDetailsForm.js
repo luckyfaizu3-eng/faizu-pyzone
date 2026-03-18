@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
 import { User, Mail, MapPin, Calendar, Award } from 'lucide-react';
 
+// ✅ Module-level flag — React Strict Mode ke double invoke se protect karta hai
+let _globalSubmitLock = false;
+
 function UserDetailsForm({ onSubmit }) {
   const { isDark } = useTheme();
   const [formData, setFormData] = useState({
@@ -11,10 +14,15 @@ function UserDetailsForm({ onSubmit }) {
     email: ''
   });
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submittedRef = useRef(false);
 
+  // Reset global lock when component mounts fresh
   useEffect(() => {
+    _globalSubmitLock = false;
+    submittedRef.current = false;
+
     window.onbeforeunload = null;
 
     const elementsToHide = [
@@ -47,7 +55,13 @@ function UserDetailsForm({ onSubmit }) {
     });
 
     return () => {
-      // Keep elements hidden — test is starting
+      // Restore on unmount
+      hiddenElements.forEach(({ element, display, visibility }) => {
+        if (element) {
+          element.style.display = display || '';
+          element.style.visibility = visibility || '';
+        }
+      });
     };
   }, []);
 
@@ -91,8 +105,9 @@ function UserDetailsForm({ onSubmit }) {
     e.preventDefault();
     e.stopPropagation();
 
-    if (submittedRef.current) {
-      console.log('⚠️ Already submitted — ignoring duplicate call');
+    // ✅ Triple guard — submittedRef + isSubmitting + global lock
+    if (submittedRef.current || isSubmitting || _globalSubmitLock) {
+      console.log('⚠️ Duplicate submit blocked');
       return;
     }
 
@@ -103,7 +118,10 @@ function UserDetailsForm({ onSubmit }) {
       return;
     }
 
+    // Lock immediately — before any async
     submittedRef.current = true;
+    _globalSubmitLock = true;
+    setIsSubmitting(true);
 
     console.log('✅ UserDetailsForm submitting ONCE:', formData);
     onSubmit(formData);
@@ -119,11 +137,12 @@ function UserDetailsForm({ onSubmit }) {
     fontSize: '1rem',
     outline: 'none',
     transition: 'border-color 0.2s',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    opacity: isSubmitting ? 0.7 : 1,
   });
 
   const focusHandler = (e, fieldError) => {
-    if (!fieldError) e.target.style.borderColor = '#6366f1';
+    if (!fieldError && !isSubmitting) e.target.style.borderColor = '#6366f1';
   };
 
   const blurHandler = (e, fieldError) => {
@@ -203,6 +222,7 @@ function UserDetailsForm({ onSubmit }) {
               type="text" name="fullName"
               value={formData.fullName} onChange={handleChange}
               placeholder="Enter your full name"
+              disabled={isSubmitting}
               style={inputStyle(errors.fullName)}
               onFocus={(e) => focusHandler(e, errors.fullName)}
               onBlur={(e) => blurHandler(e, errors.fullName)}
@@ -227,6 +247,7 @@ function UserDetailsForm({ onSubmit }) {
               type="number" name="age"
               value={formData.age} onChange={handleChange}
               placeholder="Enter your age" min="10" max="100"
+              disabled={isSubmitting}
               style={inputStyle(errors.age)}
               onFocus={(e) => focusHandler(e, errors.age)}
               onBlur={(e) => blurHandler(e, errors.age)}
@@ -251,6 +272,7 @@ function UserDetailsForm({ onSubmit }) {
               type="text" name="address"
               value={formData.address} onChange={handleChange}
               placeholder="City, State, Country"
+              disabled={isSubmitting}
               style={inputStyle(errors.address)}
               onFocus={(e) => focusHandler(e, errors.address)}
               onBlur={(e) => blurHandler(e, errors.address)}
@@ -275,6 +297,7 @@ function UserDetailsForm({ onSubmit }) {
               type="email" name="email"
               value={formData.email} onChange={handleChange}
               placeholder="your.email@example.com"
+              disabled={isSubmitting}
               style={inputStyle(errors.email)}
               onFocus={(e) => focusHandler(e, errors.email)}
               onBlur={(e) => blurHandler(e, errors.email)}
@@ -302,23 +325,35 @@ function UserDetailsForm({ onSubmit }) {
             • One certificate per month per level
           </div>
 
-          {/* ✅ Sirf Continue button — Cancel button HATA DIYA */}
+          {/* Submit Button */}
           <button
             type="submit"
+            disabled={isSubmitting}
             style={{
               width: '100%',
               padding: '1rem', borderRadius: '12px',
               border: 'none',
-              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-              color: '#fff', fontSize: '1rem', fontWeight: '700',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
+              background: isSubmitting
+                ? (isDark ? '#334155' : '#e2e8f0')
+                : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: isSubmitting ? (isDark ? '#64748b' : '#94a3b8') : '#fff',
+              fontSize: '1rem', fontWeight: '700',
+              cursor: isSubmitting ? 'not-allowed' : 'pointer',
+              boxShadow: isSubmitting ? 'none' : '0 4px 12px rgba(99,102,241,0.3)',
               transition: 'all 0.2s'
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(99,102,241,0.4)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(99,102,241,0.3)'; }}
+            onMouseEnter={(e) => {
+              if (!isSubmitting) {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 20px rgba(99,102,241,0.4)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = isSubmitting ? 'none' : '0 4px 12px rgba(99,102,241,0.3)';
+            }}
           >
-            Continue →
+            {isSubmitting ? '⏳ Starting test...' : 'Continue →'}
           </button>
         </form>
       </div>
