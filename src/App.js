@@ -43,6 +43,9 @@ import DailyPractice from './pages/DailyPractice';
 import StreakResult from './pages/StreakResult';
 import AdminStreak from './pages/AdminStreak';
 
+// ✅ Blog Post Import
+import BlogPostMockTest from './pages/BlogPostMockTest';
+
 // ✅ Streak price service
 import { getStreakPrice } from './streakService';
 
@@ -124,7 +127,8 @@ function App() {
       const validPages = [
         'home', 'products', 'cart', 'orders', 'admin', 'login',
         'mocktests', 'leaderboard', 'braintrap', 'aichat', 'compiler',
-        'streak', 'streak-practice', 'streak-result', 'admin-streak', 'verify'
+        'streak', 'streak-practice', 'streak-result', 'admin-streak', 'verify',
+        'blog-mock-test'
       ];
       return validPages.includes(hash) ? hash : 'home';
     };
@@ -612,6 +616,10 @@ function App() {
                       isMobile={window.innerWidth <= 768}
                       isDark={isDark}
                     />
+                  )}
+                  {/* ✅ Blog Post — Python Mock Test */}
+                  {currentPage === 'blog-mock-test' && (
+                    <BlogPostMockTest setCurrentPage={setCurrentPage} />
                   )}
                 </main>
                 
