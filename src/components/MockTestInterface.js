@@ -340,7 +340,7 @@ function WarningModal({ show, message, type, tabSwitches, onAcknowledge, isMobil
       window.removeEventListener('popstate', blockBack);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [show, type]);
+  }, [show, type, onAcknowledge]);
 
   if (!show) return null;
 
