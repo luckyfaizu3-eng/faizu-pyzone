@@ -149,7 +149,7 @@ function ActionCard({ card, isDark, isMobile, onClick }) {
 function MockTestSection({ isDark, isMobile, setCurrentPage }) {
   const [ref, visible] = useScrollReveal();
   const levels = [
-    { emoji: '🌱', level: 'Basic',    q: '60 Qs', t: '60 Min',  pill: 'FREE ✓', pillBg: '#dcfce7', pillTc: '#16a34a', bg1: isDark ? 'rgba(34,197,94,0.12)' : '#f0fdf4', bg2: isDark ? 'rgba(34,197,94,0.06)' : '#dcfce7', border: isDark ? 'rgba(34,197,94,0.3)' : '#86efac', nameColor: '#16a34a', descColor: isDark ? '#86efac' : '#166534', barBg: isDark ? 'rgba(34,197,94,0.15)' : '#dcfce7' },
+    { emoji: '🌱', level: 'Basic',    q: '60 Qs', t: '60 Min',  pill: 'STARTER 🌱', pillBg: '#dcfce7', pillTc: '#16a34a', bg1: isDark ? 'rgba(34,197,94,0.12)' : '#f0fdf4', bg2: isDark ? 'rgba(34,197,94,0.06)' : '#dcfce7', border: isDark ? 'rgba(34,197,94,0.3)' : '#86efac', nameColor: '#16a34a', descColor: isDark ? '#86efac' : '#166534', barBg: isDark ? 'rgba(34,197,94,0.15)' : '#dcfce7' },
     { emoji: '🔥', level: 'Advanced', q: '60 Qs', t: '120 Min', pill: 'HOT 🔥',  pillBg: '#dbeafe', pillTc: '#1d4ed8', bg1: isDark ? 'rgba(59,130,246,0.12)' : '#eff6ff', bg2: isDark ? 'rgba(59,130,246,0.06)' : '#dbeafe', border: isDark ? 'rgba(59,130,246,0.3)' : '#93c5fd', nameColor: '#3b82f6', descColor: isDark ? '#93c5fd' : '#1e40af', barBg: isDark ? 'rgba(59,130,246,0.15)' : '#dbeafe' },
     { emoji: '⭐', level: 'Pro',      q: '60 Qs', t: '180 Min', pill: 'PRO ⭐',  pillBg: '#fef3c7', pillTc: '#b45309', bg1: isDark ? 'rgba(245,158,11,0.12)' : '#fffbeb', bg2: isDark ? 'rgba(245,158,11,0.06)' : '#fef3c7', border: isDark ? 'rgba(245,158,11,0.3)' : '#fcd34d', nameColor: '#f59e0b', descColor: isDark ? '#fcd34d' : '#92400e', barBg: isDark ? 'rgba(245,158,11,0.15)' : '#fef3c7' },
   ];

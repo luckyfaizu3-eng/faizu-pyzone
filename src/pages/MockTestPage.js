@@ -29,7 +29,32 @@ import {
 
 const isAdmin = (email) => email === 'luckyfaizu3@gmail.com';
 
+/* ── Python Official Logo ── */
+function PythonLogo({ size = 24, style = {} }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 255"
+      width={size} height={size} style={{ display: 'inline-block', flexShrink: 0, verticalAlign: 'middle', ...style }}>
+      <defs>
+        <linearGradient id="plBlue" x1="12.959%" y1="12.039%" x2="79.639%" y2="78.201%" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#387EB8"/><stop offset="100%" stopColor="#366994"/>
+        </linearGradient>
+        <linearGradient id="plYellow" x1="19.128%" y1="20.579%" x2="90.742%" y2="88.429%" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#FFE052"/><stop offset="100%" stopColor="#FFC331"/>
+        </linearGradient>
+      </defs>
+      <path fill="#4584B6" d="M126.916.072c-64.832 0-60.784 28.115-60.784 28.115l.072 29.128h61.868v8.745H41.631S.145 61.355.145 126.77c0 65.417 36.21 63.097 36.21 63.097h21.61v-30.356s-1.165-36.21 35.632-36.21h61.362s34.475.557 34.475-33.319V33.97S194.67.072 126.916.072zm-34.054 19.474a11.05 11.05 0 0 1 11.063 11.064A11.05 11.05 0 0 1 92.862 41.674a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064z"/>
+      <path fill="#FFDE57" d="M128.757 254.126c64.832 0 60.784-28.115 60.784-28.115l-.072-29.127H127.6v-8.745h86.441s41.486 4.705 41.486-60.712c0-65.416-36.21-63.096-36.21-63.096h-21.61v30.355s1.165 36.21-35.632 36.21h-61.362s-34.475-.557-34.475 33.32v56.013s-5.235 33.897 62.518 33.897zm34.055-19.474a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064 11.05 11.05 0 0 1 11.063 11.064 11.05 11.05 0 0 1-11.063 11.064z"/>
+    </svg>
+  );
+}
+
 const DEFAULT_PRICES = { basic: 99, advanced: 199, pro: 299 };
+
+// Helper: agar price 0 ya 'Free' ho toh "Free" return karo
+const formatPrice = (price, symbol = '₹') => {
+  if (price === 0 || price === '0' || price === 'Free' || price === 'free') return 'Free';
+  return `${symbol}${price}`;
+};
 
 const formatTimeRemaining = (milliseconds) => {
   if (milliseconds <= 0) return 'Expired';
@@ -107,15 +132,15 @@ function CouponModal({ plan, prices, isDark, onClose, onFreeAccess, onProceedPay
     else onProceedPayment(couponResult.finalPrice, couponResult);
   };
 
-  // If original price is 0, skip modal entirely — free unlock
+  // If original price is 0 or 'Free', skip modal entirely — free unlock
   useEffect(() => {
-    if (originalPrice === 0) {
+    if (originalPrice === 0 || originalPrice === 'Free' || originalPrice === 'free') {
       onFreeAccess({ isFree: true, discountAmount: 0, couponData: null, couponId: null });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (originalPrice === 0) return null;
+  if (originalPrice === 0 || originalPrice === 'Free' || originalPrice === 'free') return null;
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, backdropFilter: 'blur(8px)', padding: '1rem' }}>
@@ -234,7 +259,7 @@ function MockTestPage() {
     } catch { setPrices(DEFAULT_PRICES); }
   };
 
-  const calculateTestStatus = (payment, level, userEmail) => {
+  const calculateTestStatus = (payment, level, userEmail, currentPrices) => {
     if (isAdmin(userEmail)) return { canTake: true, status: 'available', message: 'Admin — Free & Unlimited Access', color: '#10b981' };
     if (!payment?.hasPaid) return { canTake: true, status: 'available', message: 'Purchase to start test', color: '#10b981' };
     const now = new Date();
@@ -245,7 +270,15 @@ function MockTestPage() {
     if (payment.testStartedAt && !payment.testSubmittedAt) return { canTake: true, status: 'in_progress', message: 'Resume your test', color: '#f59e0b' };
     if (payment.lockEndsAt) {
       const lockEnd = new Date(payment.lockEndsAt);
-      if (now < lockEnd) return { canTake: false, status: 'locked', message: `Locked — Available in ${formatTimeRemaining(lockEnd - now)}`, color: '#ef4444', timeRemaining: lockEnd - now };
+      if (now < lockEnd) {
+        if (payment.paidAmount === 0 || payment.paidAmount === 'Free') {
+          const currentPrice = currentPrices?.[level] ?? 0;
+          const isStillFree = currentPrice === 0 || currentPrice === 'Free' || currentPrice === 'free';
+          if (isStillFree) return { canTake: false, status: 'free_locked', message: 'Free trial used — Price change needed to unlock', color: '#8b5cf6', timeRemaining: lockEnd - now };
+          return { canTake: true, status: 'available', message: 'Price updated — Purchase to take test again', color: '#10b981' };
+        }
+        return { canTake: false, status: 'locked', message: `Locked — Available in ${formatTimeRemaining(lockEnd - now)}`, color: '#ef4444', timeRemaining: lockEnd - now };
+      }
     }
     return { canTake: true, status: 'available', message: 'Purchase to take test again', color: '#10b981' };
   };
@@ -260,6 +293,7 @@ function MockTestPage() {
       const historyResult = await getTestHistory(user.uid);
       if (historyResult.success) setTestHistory(historyResult.tests);
       const statusData = {}, paymentData = {};
+      const currentPrices = await getDoc(doc(db, 'settings', 'testPrices')).then(d => d.exists() ? d.data() : DEFAULT_PRICES).catch(() => DEFAULT_PRICES);
       for (const level of ['basic', 'advanced', 'pro', 'neet']) {
         if (isAdmin(user.email)) {
           paymentData[level] = { hasPaid: false };
@@ -267,7 +301,7 @@ function MockTestPage() {
         } else {
           const payment = await getPaymentDetails(user.uid, level);
           paymentData[level] = payment;
-          statusData[level] = calculateTestStatus(payment, level, user.email);
+          statusData[level] = calculateTestStatus(payment, level, user.email, currentPrices);
         }
       }
       setPaymentDetails(paymentData);
@@ -301,11 +335,12 @@ function MockTestPage() {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
     if (!window.Razorpay) { window.showToast?.('⚠️ Payment system loading... Please wait!', 'warning'); return; }
 
-    const dynamicPrice = finalPrice ?? (prices[plan.level] || plan.price);
+    const rawPrice = prices[plan.level] ?? plan.price;
+    const dynamicPrice = finalPrice ?? rawPrice;
 
     // Free price — skip Razorpay
-    if (dynamicPrice === 0) {
-      handleFreeUnlock(plan, couponResult || { isFree: true, discountAmount: prices[plan.level] || plan.price, couponData: null, couponId: null });
+    if (dynamicPrice === 0 || dynamicPrice === 'Free' || dynamicPrice === 'free') {
+      handleFreeUnlock(plan, couponResult || { isFree: true, discountAmount: rawPrice, couponData: null, couponId: null });
       return;
     }
 
@@ -321,8 +356,8 @@ function MockTestPage() {
         const now = new Date();
         const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000);
         const paymentData = {
-          level: plan.level, amount: dynamicPrice, originalAmount: prices[plan.level] || plan.price,
-          paymentId: response.razorpay_payment_id, couponCode: couponResult?.couponData?.code || null,
+          level: plan.level, amount: dynamicPrice, originalAmount: rawPrice,
+          paymentId: response.razorpay_payment_id, paidAmount: dynamicPrice, couponCode: couponResult?.couponData?.code || null,
           couponDiscount: couponResult?.discountAmount || 0, paidAt: now.toISOString(),
           purchaseValidUntil: purchaseValidUntil.toISOString(), testStartedAt: null,
           testSubmittedAt: null, resultsViewedAt: null, lockStartsAt: null, lockEndsAt: null
@@ -351,13 +386,13 @@ function MockTestPage() {
 
   const handleFreeUnlock = async (plan, couponResult) => {
     setShowCouponModal(false);
-    window.showToast?.('🆓 Free Python Test unlocked via coupon!', 'success');
+    window.showToast?.('🆓 Free Python Test unlocked!', 'success');
     const now = new Date();
     const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000);
     const paymentData = {
-      level: plan.level, amount: 0, originalAmount: prices[plan.level] || plan.price,
+      level: plan.level, amount: 0, paidAmount: 0, originalAmount: prices[plan.level] ?? plan.price,
       paymentId: 'FREE_COUPON', couponCode: couponResult?.couponData?.code || null,
-      couponDiscount: couponResult?.discountAmount || 0, isFree: true,
+      couponDiscount: couponResult?.discountAmount || 0, isFree: true, usedFreeTrial: true,
       paidAt: now.toISOString(), purchaseValidUntil: purchaseValidUntil.toISOString(),
       testStartedAt: null, testSubmittedAt: null, resultsViewedAt: null, lockStartsAt: null, lockEndsAt: null
     };
@@ -527,17 +562,29 @@ function MockTestPage() {
   const handleSelectPlan = async (plan) => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
     setSelectedPlan(plan);
+
     if (isAdmin(user.email)) {
       window.showToast?.('🔓 Admin access — Free & Unlimited Python test!', 'success');
       if (!userDetails) { setCurrentStep('form'); return; }
       await startTest(plan); return;
     }
+
     const status = testStatus[plan.level];
     if (status?.status === 'locked') { window.showToast?.(status.message, 'warning'); return; }
+    if (status?.status === 'free_locked') { window.showToast?.('🔒 Free trial already used. Unlock hoga jab admin price change kare.', 'warning'); return; }
+
     if (paymentDetails[plan.level]?.hasPaid && status?.status !== 'available') {
       if (!userDetails) { setCurrentStep('form'); return; }
       await startTest(plan); return;
     }
+
+    // Agar plan price 0 ya Free hai — seedha free unlock
+    const planPrice = prices[plan.level] ?? plan.price;
+    if (planPrice === 0 || planPrice === 'Free' || planPrice === 'free') {
+      await handleFreeUnlock(plan, { isFree: true, discountAmount: 0, couponData: null, couponId: null });
+      return;
+    }
+
     setCouponPlan(plan);
     setShowCouponModal(true);
   };
@@ -590,7 +637,7 @@ function MockTestPage() {
   }
 
   const TABS = [
-    { key: 'tests',        emoji: '🐍', label: 'Python Tests' },
+    { key: 'tests',        emoji: null, label: 'Python Tests', logo: true },
     { key: 'neet',         emoji: '🧬', label: 'NEET'         },
     { key: 'certificates', emoji: '🏆', label: 'Certs',        badge: userCertificates.length },
     { key: 'results',      emoji: '📊', label: 'Results',      badge: testHistory.length },
@@ -631,7 +678,9 @@ function MockTestPage() {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '2rem', animation: 'fadeInUp 0.6s ease' }}>
           <h1 style={{ fontSize: 'clamp(2rem, 6vw, 4rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', marginBottom: '1rem', textShadow: isDark ? '0 4px 20px rgba(0,0,0,0.3)' : 'none' }}>
-            🐍 Python Mock Tests
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <PythonLogo size={48} /> Python Mock Tests
+            </span>
           </h1>
           <p style={{ fontSize: 'clamp(0.9rem, 3vw, 1.2rem)', color: isDark ? '#94a3b8' : '#64748b', maxWidth: '600px', margin: '0 auto 2rem', padding: '0 1rem' }}>
             Professional certification tests with instant results
@@ -644,11 +693,13 @@ function MockTestPage() {
           </button>
         </div>
 
-        {/* Tab Navigation — click only, no swipe */}
+        {/* Tab Navigation */}
         <div style={{ display: 'flex', gap: '0.35rem', background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)', borderRadius: '16px', padding: '5px', marginBottom: '2rem', border: `1px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`, maxWidth: '640px', margin: '0 auto 2rem', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
           {TABS.map(tab => (
             <button key={tab.key} style={tabStyle(tab.key)} onClick={() => handleTabChange(tab.key)}>
-              <span style={{ fontSize: 'clamp(1rem, 3vw, 1.15rem)', lineHeight: 1 }}>{tab.emoji}</span>
+              <span style={{ fontSize: 'clamp(1rem, 3vw, 1.15rem)', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {tab.logo ? <PythonLogo size={18} /> : tab.emoji}
+              </span>
               <span style={{ lineHeight: 1 }}>{tab.label}</span>
               {tab.badge > 0 && (
                 <span style={{ position: 'absolute', top: '4px', right: '4px', background: activeTab === tab.key ? 'rgba(255,255,255,0.35)' : 'rgba(99,102,241,0.25)', color: activeTab === tab.key ? '#fff' : '#6366f1', borderRadius: '20px', padding: '0 5px', fontSize: '0.6rem', fontWeight: '800', lineHeight: '1.4', minWidth: '14px', textAlign: 'center' }}>
@@ -662,6 +713,78 @@ function MockTestPage() {
         {/* Tests Tab */}
         {activeTab === 'tests' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
+            {/* Plans Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '2rem', marginBottom: '3rem' }}>
+              {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
+                const status = testStatus[plan.level] || {};
+                const hasCert = userCertificates.find(c => c.level === plan.level);
+                const userIsAdmin = isAdmin(user?.email);
+                const timeRemainingDisplay = status.timeRemaining ? formatTimeRemaining(status.timeRemaining) : '';
+                // Price display: admin pannel se 0 set kiya ho toh "Free" dikhao
+                const rawPlanPrice = prices[plan.level] ?? plan.price;
+                const isFreeplan = rawPlanPrice === 0 || rawPlanPrice === 'Free' || rawPlanPrice === 'free';
+                const priceDisplay = userIsAdmin
+                  ? 'FREE'
+                  : isIndia
+                    ? (isFreeplan ? 'Free' : `₹${rawPlanPrice}`)
+                    : (isFreeplan ? 'Free' : `${geoData?.symbol || '$'}${geoData?.[plan.level] || geoData?.basic || 2.99}`);
+
+                return (
+                  <div key={plan.id} style={{ background: isDark ? '#1e293b' : '#fff', borderRadius: '24px', padding: 'clamp(1.5rem, 4vw, 2rem)', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', position: 'relative', overflow: 'hidden', animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`, border: plan.badge ? '3px solid #fbbf24' : userIsAdmin ? '3px solid #10b981' : 'none' }}>
+                    {userIsAdmin && (<div style={{ position: 'absolute', top: '1rem', left: '1rem', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: 'clamp(0.65rem, 2vw, 0.75rem)', fontWeight: '700', boxShadow: '0 4px 12px rgba(16,185,129,0.4)' }}>🔓 ADMIN FREE & UNLIMITED</div>)}
+                    {plan.badge && !userIsAdmin && (<div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: 'clamp(0.65rem, 2vw, 0.75rem)', fontWeight: '700', boxShadow: '0 4px 12px rgba(251,191,36,0.4)' }}>{plan.badge}</div>)}
+                    <div style={{ textAlign: 'center', marginBottom: '1.5rem', marginTop: userIsAdmin || plan.badge ? '2.5rem' : '0' }}>
+                      <div style={{ width: 'clamp(60px, 15vw, 80px)', height: 'clamp(60px, 15vw, 80px)', background: plan.level === 'basic' ? 'linear-gradient(135deg, #10b981, #059669)' : plan.level === 'advanced' ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'linear-gradient(135deg, #f59e0b, #d97706)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: 'clamp(1.5rem, 5vw, 2.5rem)', boxShadow: '0 8px 20px rgba(0,0,0,0.15)' }}>
+                        {plan.level === 'basic' ? '🌱' : plan.level === 'advanced' ? '🔥' : '⭐'}
+                      </div>
+                      <h2 style={{ fontSize: 'clamp(1.3rem, 4vw, 1.8rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                        <PythonLogo size={28} /> {plan.level}
+                      </h2>
+                      <p style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 'clamp(0.8rem, 2.5vw, 0.95rem)', marginBottom: '1rem' }}>{plan.description}</p>
+                      {/* ✅ PRICE DISPLAY — 0 set kiya toh "Free" show hoga */}
+                      <div style={{ fontSize: 'clamp(2rem, 6vw, 2.5rem)', fontWeight: '900', color: userIsAdmin ? '#10b981' : isFreeplan ? '#10b981' : '#6366f1', marginBottom: '0.5rem' }}>
+                        {priceDisplay}
+                      </div>
+                      {isFreeplan && !userIsAdmin && (
+                        <div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '700' }}>🆓 No payment needed</div>
+                      )}
+                      {userIsAdmin && (<div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}>Admin Privilege — Unlimited Access</div>)}
+                    </div>
+                    <div style={{ background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+                      {plan.features.map((feature, idx) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: idx === plan.features.length - 1 ? 0 : '0.75rem', fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)', color: isDark ? '#cbd5e1' : '#475569' }}>
+                          <CheckCircle size={18} color="#10b981" style={{ flexShrink: 0 }} /><span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {userIsAdmin && (<div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}><CheckCircle size={16} />🔓 Admin — Unlimited Free Access — No Lock</div>)}
+                    {!userIsAdmin && status.status === 'grace_period' && (<div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}><Unlock size={16} />✅ Available — Grace Period: {timeRemainingDisplay}</div>)}
+                    {!userIsAdmin && status.status === 'in_progress' && (<div style={{ padding: '0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#f59e0b', fontWeight: '600' }}><TrendingUp size={16} />📝 Python Test In Progress — Resume</div>)}
+                    {hasCert && (<div style={{ padding: '0.75rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#6366f1', fontWeight: '600' }}><Award size={16} />Python Certificate Earned (One per level)</div>)}
+                    {!userIsAdmin && status.status === 'locked' && (<div style={{ padding: '0.75rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#ef4444', fontWeight: '600' }}><Lock size={16} />🔒 Locked — {timeRemainingDisplay}</div>)}
+                    {!userIsAdmin && status.status === 'free_locked' && (<div style={{ padding: '0.75rem', background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#8b5cf6', fontWeight: '600' }}><Lock size={16} />🎁 Free trial used — Admin must update price to unlock</div>)}
+                    <button onClick={() => handleSelectPlan(plan)} disabled={!userIsAdmin && (status.status === 'locked' || status.status === 'free_locked')}
+                      style={{ width: '100%', background: (!userIsAdmin && status.status === 'locked') ? 'rgba(99,102,241,0.3)' : userIsAdmin || isFreeplan ? 'linear-gradient(135deg, #10b981, #059669)' : status.status === 'grace_period' || status.status === 'in_progress' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', padding: 'clamp(1rem, 3vw, 1.25rem)', borderRadius: '16px', fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)', fontWeight: '700', cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: (!userIsAdmin && status.status === 'locked') ? 'none' : '0 4px 20px rgba(99,102,241,0.4)', textTransform: 'uppercase', letterSpacing: '1px', opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1 }}
+                      onMouseEnter={(e) => { if (userIsAdmin || status.status !== 'locked') e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}>
+                      {userIsAdmin
+                        ? <><Zap size={24} /> 🔓 Start Free Python Test (Unlimited)</>
+                        : status.status === 'free_locked'
+                          ? <><Lock size={24} /> 🎁 Free Trial Used — Price Change Required</>
+                          : isFreeplan
+                            ? <><Zap size={24} /> 🆓 Start Free Test</>
+                            : status.status === 'grace_period' || status.status === 'in_progress'
+                              ? <><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Python Test' : 'Start Python Test'}</>
+                              : status.status === 'locked'
+                                ? <><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</>
+                                : <><Zap size={24} /> Buy / Coupon ({priceDisplay})</>
+                      }
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
             {/* Guidelines Banner */}
             <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))', border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '3rem', animation: 'fadeInUp 0.8s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -690,51 +813,6 @@ function MockTestPage() {
                   <div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: isDark ? '#cbd5e1' : '#475569', lineHeight: '1.5' }}>Browser Menu (⋮) → "Desktop site" → Enable → Refresh page</div>
                 </div>
               </div>
-            </div>
-
-            {/* Plans Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '2rem', marginBottom: '3rem' }}>
-              {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
-                const status = testStatus[plan.level] || {};
-                const hasCert = userCertificates.find(c => c.level === plan.level);
-                const userIsAdmin = isAdmin(user?.email);
-                const timeRemainingDisplay = status.timeRemaining ? formatTimeRemaining(status.timeRemaining) : '';
-                return (
-                  <div key={plan.id} style={{ background: isDark ? '#1e293b' : '#fff', borderRadius: '24px', padding: 'clamp(1.5rem, 4vw, 2rem)', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', position: 'relative', overflow: 'hidden', animation: `fadeInUp 0.6s ease ${index * 0.1}s backwards`, border: plan.badge ? '3px solid #fbbf24' : userIsAdmin ? '3px solid #10b981' : 'none' }}>
-                    {userIsAdmin && (<div style={{ position: 'absolute', top: '1rem', left: '1rem', background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: 'clamp(0.65rem, 2vw, 0.75rem)', fontWeight: '700', boxShadow: '0 4px 12px rgba(16,185,129,0.4)' }}>🔓 ADMIN FREE & UNLIMITED</div>)}
-                    {plan.badge && !userIsAdmin && (<div style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'linear-gradient(135deg, #fbbf24, #f59e0b)', color: '#fff', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: 'clamp(0.65rem, 2vw, 0.75rem)', fontWeight: '700', boxShadow: '0 4px 12px rgba(251,191,36,0.4)' }}>{plan.badge}</div>)}
-                    <div style={{ textAlign: 'center', marginBottom: '1.5rem', marginTop: userIsAdmin || plan.badge ? '2.5rem' : '0' }}>
-                      <div style={{ width: 'clamp(60px, 15vw, 80px)', height: 'clamp(60px, 15vw, 80px)', background: plan.level === 'basic' ? 'linear-gradient(135deg, #10b981, #059669)' : plan.level === 'advanced' ? 'linear-gradient(135deg, #6366f1, #4f46e5)' : 'linear-gradient(135deg, #f59e0b, #d97706)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem', fontSize: 'clamp(1.5rem, 5vw, 2.5rem)', boxShadow: '0 8px 20px rgba(0,0,0,0.15)' }}>
-                        {plan.level === 'basic' ? '🌱' : plan.level === 'advanced' ? '🔥' : '⭐'}
-                      </div>
-                      <h2 style={{ fontSize: 'clamp(1.3rem, 4vw, 1.8rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '1px' }}>{plan.level}</h2>
-                      <p style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 'clamp(0.8rem, 2.5vw, 0.95rem)', marginBottom: '1rem' }}>{plan.description}</p>
-                      <div style={{ fontSize: 'clamp(2rem, 6vw, 2.5rem)', fontWeight: '900', color: userIsAdmin ? '#10b981' : '#6366f1', marginBottom: '0.5rem' }}>
-                        {userIsAdmin ? 'FREE' : isIndia ? `₹${prices[plan.level] || plan.price}` : `${geoData?.symbol || '$'}${geoData?.[plan.level] || geoData?.basic || 2.99}`}
-                      </div>
-                      {userIsAdmin && (<div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}>Admin Privilege — Unlimited Access</div>)}
-                    </div>
-                    <div style={{ background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
-                      {plan.features.map((feature, idx) => (
-                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: idx === plan.features.length - 1 ? 0 : '0.75rem', fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)', color: isDark ? '#cbd5e1' : '#475569' }}>
-                          <CheckCircle size={18} color="#10b981" style={{ flexShrink: 0 }} /><span>{feature}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {userIsAdmin && (<div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}><CheckCircle size={16} />🔓 Admin — Unlimited Free Access — No Lock</div>)}
-                    {!userIsAdmin && status.status === 'grace_period' && (<div style={{ padding: '0.75rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}><Unlock size={16} />✅ Available — Grace Period: {timeRemainingDisplay}</div>)}
-                    {!userIsAdmin && status.status === 'in_progress' && (<div style={{ padding: '0.75rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#f59e0b', fontWeight: '600' }}><TrendingUp size={16} />📝 Python Test In Progress — Resume</div>)}
-                    {hasCert && (<div style={{ padding: '0.75rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#6366f1', fontWeight: '600' }}><Award size={16} />Python Certificate Earned (One per level)</div>)}
-                    {!userIsAdmin && status.status === 'locked' && (<div style={{ padding: '0.75rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#ef4444', fontWeight: '600' }}><Lock size={16} />🔒 Locked — {timeRemainingDisplay}</div>)}
-                    <button onClick={() => handleSelectPlan(plan)} disabled={!userIsAdmin && status.status === 'locked'}
-                      style={{ width: '100%', background: (!userIsAdmin && status.status === 'locked') ? 'rgba(99,102,241,0.3)' : userIsAdmin ? 'linear-gradient(135deg, #10b981, #059669)' : status.status === 'grace_period' || status.status === 'in_progress' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', padding: 'clamp(1rem, 3vw, 1.25rem)', borderRadius: '16px', fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)', fontWeight: '700', cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: (!userIsAdmin && status.status === 'locked') ? 'none' : '0 4px 20px rgba(99,102,241,0.4)', textTransform: 'uppercase', letterSpacing: '1px', opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1 }}
-                      onMouseEnter={(e) => { if (userIsAdmin || status.status !== 'locked') e.currentTarget.style.transform = 'translateY(-2px)'; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}>
-                      {userIsAdmin ? <><Zap size={24} /> 🔓 Start Free Python Test (Unlimited)</> : status.status === 'grace_period' || status.status === 'in_progress' ? <><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Python Test' : 'Start Python Test'}</> : status.status === 'locked' ? <><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</> : <><Zap size={24} /> Buy / Coupon ({isIndia ? `₹${prices[plan.level] || plan.price}` : `${geoData?.symbol || '$'}${geoData?.[plan.level] || geoData?.basic || 2.99}`})</>}
-                    </button>
-                  </div>
-                );
-              })}
             </div>
           </div>
         )}
@@ -955,7 +1033,6 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
   const handlePayment = (finalPrice, couponResult) => {
     setShowCoupon(false);
 
-    // Free price — skip Razorpay
     if (finalPrice === 0) { handleFreeAccess(couponResult || { isFree: true, discountAmount: getOriginalPrice(), couponData: null, couponId: null }); return; }
 
     if (!window.Razorpay) { window.showToast?.('⚠️ Payment system loading... Please try again!', 'warning'); return; }
@@ -1018,7 +1095,7 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             {!userIsAdmin && onSale && (<span style={{ fontSize: isMobile ? '1.1rem' : '1.3rem', fontWeight: '700', color: '#94a3b8', textDecoration: 'line-through' }}>₹{originalPrice}</span>)}
             <span style={{ fontSize: isMobile ? '2rem' : '2.5rem', fontWeight: '900', color: userIsAdmin ? '#10b981' : (isDark ? '#e2e8f0' : '#dc2626') }}>
-              {userIsAdmin ? '🆓 FREE' : (isIndia !== false ? `₹${price}` : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`)}
+              {userIsAdmin ? '🆓 FREE' : (isIndia !== false ? formatPrice(price) : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`)}
             </span>
           </div>
           {userIsAdmin && (<div style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: '700', marginTop: '0.3rem' }}>Admin Privilege — No Lock, No Payment, Unlimited Tests</div>)}
@@ -1050,7 +1127,7 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
               {!userIsAdmin && isLocked && (<div style={{ padding: '0.65rem 1rem', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: '10px', color: '#ef4444', fontWeight: '700', fontSize: '0.82rem', maxWidth: '420px', margin: '0 auto 0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}>🔒 Locked — Available in {formatTimeRemaining(nStatus.timeRemaining)}</div>)}
               <button onClick={handleStartClick} disabled={isDisabled && !userIsAdmin}
                 style={{ width: '100%', maxWidth: '420px', padding: isMobile ? '1rem' : '1.25rem', background: (isDisabled && !userIsAdmin) ? (isLocked ? 'rgba(239,68,68,0.3)' : '#e2e8f0') : userIsAdmin ? 'linear-gradient(135deg,#10b981,#059669)' : (isGrace || isInProgress) ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#dc2626,#b91c1c)', border: 'none', borderRadius: '16px', color: (isDisabled && !userIsAdmin) && !isLocked ? '#94a3b8' : '#fff', fontSize: isMobile ? '1rem' : '1.15rem', fontWeight: '900', cursor: (isDisabled && !userIsAdmin) ? 'not-allowed' : 'pointer', opacity: (isLocked && !userIsAdmin) ? 0.7 : 1, boxShadow: (isDisabled && !userIsAdmin) ? 'none' : userIsAdmin ? '0 8px 24px rgba(16,185,129,0.4)' : (isGrace || isInProgress) ? '0 8px 24px rgba(16,185,129,0.4)' : '0 8px 24px rgba(220,38,38,0.4)', letterSpacing: '0.03em', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', margin: '0 auto' }}>
-                {neetLoading ? '⏳ Loading Questions...' : !settingsLoaded && !userIsAdmin ? '⏳ Loading...' : userIsAdmin ? '🚀 Start Free NEET Test (Admin — Unlimited)' : isLocked ? `🔒 Locked — ${formatTimeRemaining(nStatus.timeRemaining)}` : (isGrace || isInProgress) ? `🚀 ${isInProgress ? 'Resume' : 'Start'} NEET Test` : `🚀 Start NEET Test — ${isIndia !== false ? `₹${price}` : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`}`}
+                {neetLoading ? '⏳ Loading Questions...' : !settingsLoaded && !userIsAdmin ? '⏳ Loading...' : userIsAdmin ? '🚀 Start Free NEET Test (Admin — Unlimited)' : isLocked ? `🔒 Locked — ${formatTimeRemaining(nStatus.timeRemaining)}` : (isGrace || isInProgress) ? `🚀 ${isInProgress ? 'Resume' : 'Start'} NEET Test` : `🚀 Start NEET Test — ${isIndia !== false ? formatPrice(price) : `${geoData?.symbol || '$'}${geoData?.basic || 2.99}`}`}
               </button>
             </>
           );

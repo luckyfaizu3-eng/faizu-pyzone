@@ -5,11 +5,11 @@ export const SUBSCRIPTION_PLANS = {
     id: 'mock-basic',
     name: 'Basic Python Test',
     level: 'basic',
-    price: 0,
+    price: 'Free',
     timeLimit: 60,
     totalQuestions: 60,
     description: 'Foundation level Python for beginners',
-    badge: '🆓 Free',
+    badge: '🌱 Starter',
     features: [
       '60 Basic Python questions',
       '60 minutes (1 min per question)',
@@ -74,5 +74,5 @@ export const isAdmin = (userEmail) => {
 
 // Free plan check helper
 export const isFreePlan = (plan) => {
-  return plan?.price === 0;
+  return plan?.price === 'Free';
 };
