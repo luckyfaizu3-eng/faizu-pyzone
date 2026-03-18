@@ -1,5 +1,5 @@
 // @ts-nocheck
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, useTheme, RAZORPAY_KEY_ID } from '../App';
 import { useGeo } from '../App';
 import { Clock, Trophy, Award, Zap, Loader, CheckCircle, XCircle, Monitor, Smartphone, Lock, Unlock, TrendingUp, AlertTriangle } from 'lucide-react';
@@ -252,6 +252,9 @@ function MockTestPage() {
   const [overlayCountdown, setOverlayCountdown] = useState(10);
   const [slideDir, setSlideDir] = React.useState('none');
 
+  // ✅ FIX: Double submit guard
+  const formSubmittedRef = useRef(false);
+
   const fetchPrices = async () => {
     try {
       const priceDoc = await getDoc(doc(db, 'settings', 'testPrices'));
@@ -331,6 +334,13 @@ function MockTestPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  // ✅ FIX: Reset form submitted ref when form step is shown
+  useEffect(() => {
+    if (currentStep === 'form') {
+      formSubmittedRef.current = false;
+    }
+  }, [currentStep]);
+
   const handlePayment = (plan, finalPrice = null, couponResult = null) => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
     if (!window.Razorpay) { window.showToast?.('⚠️ Payment system loading... Please wait!', 'warning'); return; }
@@ -404,17 +414,37 @@ function MockTestPage() {
     } else { window.showToast?.('❌ Free unlock failed', 'error'); }
   };
 
-  const handleFormSubmit = async (formData) => {
+  // ✅ FIX: useCallback + ref guard — double submit permanently fixed
+  const handleFormSubmit = useCallback(async (formData) => {
+    if (formSubmittedRef.current) {
+      console.log('⛔ MockTestPage: duplicate form submit blocked');
+      return;
+    }
+    formSubmittedRef.current = true;
+
     setLoading(true);
     try {
       const result = await saveUserDetails(user.uid, formData);
-      if (result.success) { setUserDetails(formData); window.showToast?.('✅ Details saved!', 'success'); await startTest(selectedPlan); }
-      else window.showToast?.('❌ Failed to save details', 'error');
-    } catch (error) { console.error('Error saving details:', error); window.showToast?.('❌ Error occurred', 'error'); }
-    finally { setLoading(false); }
-  };
+      if (result.success) {
+        setUserDetails(formData);
+        window.showToast?.('✅ Details saved!', 'success');
+        await startTest(selectedPlan);
+      } else {
+        window.showToast?.('❌ Failed to save details', 'error');
+        formSubmittedRef.current = false; // reset on failure so user can retry
+      }
+    } catch (error) {
+      console.error('Error saving details:', error);
+      window.showToast?.('❌ Error occurred', 'error');
+      formSubmittedRef.current = false; // reset on error so user can retry
+    } finally {
+      setLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, selectedPlan]);
 
   const startTest = async (plan) => {
+    setCurrentStep('loading'); // ✅ Form turant hide karo — dobara submit na ho sake
     setLoading(true);
     window.showToast?.('⏳ Loading Python test questions...', 'info');
     try {
@@ -435,7 +465,7 @@ function MockTestPage() {
     } finally { setLoading(false); }
   };
 
-  // ✅ UPDATED: Certificate sirf tab mile jab user ne review likha ho
+  // ✅ Certificate logic — sirf tab mile jab user ne review likha ho
   const handleTestComplete = useCallback(async (results) => {
     if (!selectedPlan) return;
     setLoading(true);
@@ -459,45 +489,30 @@ function MockTestPage() {
       };
       await saveTestResult(user.uid, testData);
 
-      // Certificate requires 55%+ score
       const shouldIssueCert = results.percentage >= 55;
       if (shouldIssueCert) {
         let reviewsFull = false;
         let hasReview = false;
-
         try {
           const { collection, query, where, getDocs } = await import('firebase/firestore');
-
-          // Check total reviews count
           const allReviewsSnap = await getDocs(collection(db, 'studentReviews'));
           reviewsFull = allReviewsSnap.size >= 200;
-
           if (!reviewsFull) {
-            const reviewQuery = query(
-              collection(db, 'studentReviews'),
-              where('userEmail', '==', user.email)
-            );
+            const reviewQuery = query(collection(db, 'studentReviews'), where('userEmail', '==', user.email));
             const reviewSnap = await getDocs(reviewQuery);
             hasReview = !reviewSnap.empty;
           }
         } catch (e) {
           console.error('Review check failed:', e);
-          reviewsFull = false;
-          hasReview = false;
+          reviewsFull = false; hasReview = false;
         }
 
         const canGetCert = reviewsFull || hasReview;
-
         if (!canGetCert) {
-          // Reviews not full and user hasn't written one — block certificate
           setNeedsReview(true);
-          window.showToast?.(
-            '📝 Congratulations! You scored 55%+! To get your certificate, please write a review first in the "What Students Say" section on the Home page.',
-            'warning'
-          );
+          window.showToast?.('📝 Congratulations! You scored 55%+! To get your certificate, please write a review first in the "What Students Say" section on the Home page.', 'warning');
         } else {
           setNeedsReview(false);
-          // Proceed with certificate
           const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
           if (!certCheck.hasCertificate) {
             const certificateData = {
@@ -664,7 +679,7 @@ function MockTestPage() {
   };
   const handleCancelCertDelete = () => { setShowDeleteCertDialog(false); setCertToDelete(null); };
 
-  if (loading && currentStep === 'plans') {
+  if (loading && (currentStep === 'plans' || currentStep === 'loading')) {
     return (
       <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
         <div style={{ textAlign: 'center' }}>
@@ -757,13 +772,8 @@ function MockTestPage() {
           ))}
         </div>
 
-        {/* ══════════════════════════════════════════
-            TESTS TAB
-        ══════════════════════════════════════════ */}
         {activeTab === 'tests' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
-
-            {/* ✅ IMPORTANT GUIDELINES — PLANS SE UPAR (PEHLE) */}
             <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))', border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2.5rem', animation: 'fadeInUp 0.8s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <div style={{ width: 'clamp(50px, 12vw, 70px)', height: 'clamp(50px, 12vw, 70px)', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
@@ -777,7 +787,6 @@ function MockTestPage() {
                   { icon: <Clock size={18} />, title: '12-Hour Window', desc: 'After purchase, you have 12 hours to start the Python test. No refunds if time expires.', color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.2)', bgDark: 'rgba(16,185,129,0.2)', borderDark: 'rgba(16,185,129,0.3)' },
                   { icon: <Lock size={18} />, title: '7-Day Lock', desc: 'After viewing results, the Python test locks for 7 days. Repurchase to try again.', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)', bgDark: 'rgba(239,68,68,0.2)', borderDark: 'rgba(239,68,68,0.3)' },
                   { icon: <Trophy size={18} />, title: 'Pass Mark: 55%', desc: 'Score 55% or above to earn your Python certificate. Writing a review is required before downloading your certificate.', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)', bgDark: 'rgba(245,158,11,0.2)', borderDark: 'rgba(245,158,11,0.3)' },
-                  // ✅ NEW: Review required guideline
                   { icon: <Award size={18} />, title: '✍️ Review Required', desc: 'You must write a review on the Home page before you can download your certificate. No certificate will be issued without a review.', color: '#a855f7', bg: 'rgba(168,85,247,0.1)', border: 'rgba(168,85,247,0.2)', bgDark: 'rgba(168,85,247,0.2)', borderDark: 'rgba(168,85,247,0.3)' },
                 ].map((item, i) => (
                   <div key={i} style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', background: isDark ? item.bgDark : item.bg, borderRadius: '12px', border: `1px solid ${isDark ? item.borderDark : item.border}` }}>
@@ -795,7 +804,6 @@ function MockTestPage() {
               </div>
             </div>
 
-            {/* ✅ PLANS GRID — Guidelines ke BAAD */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '2rem', marginBottom: '3rem' }}>
               {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
                 const status = testStatus[plan.level] || {};
@@ -825,9 +833,7 @@ function MockTestPage() {
                       <div style={{ fontSize: 'clamp(2rem, 6vw, 2.5rem)', fontWeight: '900', color: userIsAdmin ? '#10b981' : isFreeplan ? '#10b981' : '#6366f1', marginBottom: '0.5rem' }}>
                         {priceDisplay}
                       </div>
-                      {isFreeplan && !userIsAdmin && (
-                        <div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '700' }}>🆓 No payment needed</div>
-                      )}
+                      {isFreeplan && !userIsAdmin && (<div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '700' }}>🆓 No payment needed</div>)}
                       {userIsAdmin && (<div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: '#10b981', fontWeight: '600' }}>Admin Privilege — Unlimited Access</div>)}
                     </div>
                     <div style={{ background: isDark ? 'rgba(99,102,241,0.05)' : 'rgba(99,102,241,0.03)', borderRadius: '16px', padding: '1.5rem', marginBottom: '1.5rem' }}>
@@ -847,24 +853,18 @@ function MockTestPage() {
                       style={{ width: '100%', background: (!userIsAdmin && status.status === 'locked') ? 'rgba(99,102,241,0.3)' : userIsAdmin || isFreeplan ? 'linear-gradient(135deg, #10b981, #059669)' : status.status === 'grace_period' || status.status === 'in_progress' ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', padding: 'clamp(1rem, 3vw, 1.25rem)', borderRadius: '16px', fontSize: 'clamp(0.9rem, 2.5vw, 1.1rem)', fontWeight: '700', cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer', transition: 'all 0.3s ease', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: (!userIsAdmin && status.status === 'locked') ? 'none' : '0 4px 20px rgba(99,102,241,0.4)', textTransform: 'uppercase', letterSpacing: '1px', opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1 }}
                       onMouseEnter={(e) => { if (userIsAdmin || status.status !== 'locked') e.currentTarget.style.transform = 'translateY(-2px)'; }}
                       onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}>
-                      {userIsAdmin
-                        ? <><Zap size={24} /> 🔓 Start Free Python Test (Unlimited)</>
-                        : status.status === 'free_locked'
-                          ? <><Lock size={24} /> 🎁 Free Trial Used — Price Change Required</>
-                          : isFreeplan
-                            ? <><Zap size={24} /> 🆓 Start Free Test</>
-                            : status.status === 'grace_period' || status.status === 'in_progress'
-                              ? <><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Python Test' : 'Start Python Test'}</>
-                              : status.status === 'locked'
-                                ? <><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</>
-                                : <><Zap size={24} /> Buy / Coupon ({priceDisplay})</>
+                      {userIsAdmin ? <><Zap size={24} /> 🔓 Start Free Python Test (Unlimited)</>
+                        : status.status === 'free_locked' ? <><Lock size={24} /> 🎁 Free Trial Used — Price Change Required</>
+                        : isFreeplan ? <><Zap size={24} /> 🆓 Start Free Test</>
+                        : status.status === 'grace_period' || status.status === 'in_progress' ? <><Zap size={24} /> {status.status === 'in_progress' ? 'Resume Python Test' : 'Start Python Test'}</>
+                        : status.status === 'locked' ? <><Lock size={24} /> 🔒 Locked — {timeRemainingDisplay}</>
+                        : <><Zap size={24} /> Buy / Coupon ({priceDisplay})</>
                       }
                     </button>
                   </div>
                 );
               })}
             </div>
-
           </div>
         )}
 
@@ -876,8 +876,6 @@ function MockTestPage() {
 
         {activeTab === 'results' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
-
-            {/* Review required banner — shown when user scored 55%+ but has no review */}
             {needsReview && (
               <div style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(99,102,241,0.15))', border: '2px solid rgba(168,85,247,0.5)', borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2rem', animation: 'fadeInUp 0.5s ease', textAlign: 'center' }}>
                 <div style={{ fontSize: 'clamp(2rem, 6vw, 2.8rem)', marginBottom: '0.75rem' }}>🎉</div>
@@ -885,17 +883,14 @@ function MockTestPage() {
                 <p style={{ fontSize: 'clamp(0.82rem, 2.5vw, 0.95rem)', color: isDark ? '#cbd5e1' : '#475569', margin: '0 0 1.25rem', lineHeight: 1.6 }}>
                   Write a review on the Home page to unlock your certificate download.
                 </p>
-                <button
-                  onClick={() => { window.location.href = '/#student-reviews'; }}
+                <button onClick={() => { window.location.href = '/#student-reviews'; }}
                   style={{ background: 'linear-gradient(135deg, #a855f7, #6366f1)', border: 'none', color: '#fff', padding: 'clamp(0.75rem, 2.5vw, 1rem) clamp(1.5rem, 4vw, 2.5rem)', borderRadius: '50px', fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 20px rgba(168,85,247,0.45)', transition: 'all 0.25s', display: 'inline-flex', alignItems: 'center', gap: '0.6rem', letterSpacing: '0.5px' }}
                   onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                >
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                   ✍️ Write a Review → Get Certificate
                 </button>
               </div>
             )}
-
             <Certificatesection userCertificates={[]} testHistory={testHistory} isDark={isDark} onViewCertificate={setSelectedCertificate} onDeleteCertificate={handleDeleteCertificate} onDeleteTest={handleDeleteClick} />
           </div>
         )}
@@ -906,7 +901,6 @@ function MockTestPage() {
 
         {selectedCertificate && <CertificateViewer certificate={selectedCertificate} onClose={() => setSelectedCertificate(null)} user={user} />}
 
-        {/* Delete Test Result Dialog */}
         {showDeleteDialog && testToDelete && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, backdropFilter: 'blur(8px)', animation: 'fadeIn 0.3s ease', padding: '1rem' }}>
             <div style={{ background: isDark ? '#1e293b' : '#fff', padding: 'clamp(2rem, 5vw, 3rem)', borderRadius: '24px', maxWidth: '500px', width: '100%', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', animation: 'scaleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)', border: `3px solid ${isDark ? '#ef4444' : '#fecaca'}` }}>
@@ -931,7 +925,6 @@ function MockTestPage() {
           </div>
         )}
 
-        {/* Delete Certificate Dialog */}
         {showDeleteCertDialog && certToDelete && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 99999, backdropFilter: 'blur(8px)', animation: 'fadeIn 0.3s ease', padding: '1rem' }}>
             <div style={{ background: isDark ? '#1e293b' : '#fff', padding: 'clamp(2rem, 5vw, 3rem)', borderRadius: '24px', maxWidth: '500px', width: '100%', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', animation: 'scaleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55)', border: `3px solid ${isDark ? '#f59e0b' : '#fbbf24'}` }}>
@@ -1103,9 +1096,7 @@ function NEETTab({ user, isDark, neetStep, setNeetStep, neetQuestions, setNeetQu
 
   const handlePayment = (finalPrice, couponResult) => {
     setShowCoupon(false);
-
     if (finalPrice === 0) { handleFreeAccess(couponResult || { isFree: true, discountAmount: getOriginalPrice(), couponData: null, couponId: null }); return; }
-
     if (!window.Razorpay) { window.showToast?.('⚠️ Payment system loading... Please try again!', 'warning'); return; }
     const options = {
       key: RAZORPAY_KEY_ID, amount: finalPrice * 100, currency: 'INR',
