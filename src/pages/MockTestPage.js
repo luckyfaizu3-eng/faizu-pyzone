@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth, useTheme, RAZORPAY_KEY_ID } from '../App';
 import { useGeo } from '../App';
@@ -50,7 +51,6 @@ function PythonLogo({ size = 24, style = {} }) {
 
 const DEFAULT_PRICES = { basic: 99, advanced: 199, pro: 299 };
 
-// Helper: agar price 0 ya 'Free' ho toh "Free" return karo
 const formatPrice = (price, symbol = '₹') => {
   if (price === 0 || price === '0' || price === 'Free' || price === 'free') return 'Free';
   return `${symbol}${price}`;
@@ -132,7 +132,6 @@ function CouponModal({ plan, prices, isDark, onClose, onFreeAccess, onProceedPay
     else onProceedPayment(couponResult.finalPrice, couponResult);
   };
 
-  // If original price is 0 or 'Free', skip modal entirely — free unlock
   useEffect(() => {
     if (originalPrice === 0 || originalPrice === 'Free' || originalPrice === 'free') {
       onFreeAccess({ isFree: true, discountAmount: 0, couponData: null, couponId: null });
@@ -239,6 +238,7 @@ function MockTestPage() {
   const [selectedCertificate, setSelectedCertificate] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const [testResults, setTestResults] = useState(null);
+  const [needsReview, setNeedsReview] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState({});
   const [testStatus, setTestStatus] = useState({});
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -338,7 +338,6 @@ function MockTestPage() {
     const rawPrice = prices[plan.level] ?? plan.price;
     const dynamicPrice = finalPrice ?? rawPrice;
 
-    // Free price — skip Razorpay
     if (dynamicPrice === 0 || dynamicPrice === 'Free' || dynamicPrice === 'free') {
       handleFreeUnlock(plan, couponResult || { isFree: true, discountAmount: rawPrice, couponData: null, couponId: null });
       return;
@@ -436,6 +435,7 @@ function MockTestPage() {
     } finally { setLoading(false); }
   };
 
+  // ✅ UPDATED: Certificate sirf tab mile jab user ne review likha ho
   const handleTestComplete = useCallback(async (results) => {
     if (!selectedPlan) return;
     setLoading(true);
@@ -458,24 +458,72 @@ function MockTestPage() {
         completedAt: now.toISOString()
       };
       await saveTestResult(user.uid, testData);
-      const shouldIssueCert = isAdmin(user.email) || results.percentage >= 55;
+
+      // Certificate requires 55%+ score
+      const shouldIssueCert = results.percentage >= 55;
       if (shouldIssueCert) {
-        const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
-        if (!certCheck.hasCertificate || isAdmin(user.email)) {
-          const certificateData = {
-            userName: results.studentInfo?.fullName || userDetails?.fullName || user.displayName || user.email,
-            userAge: results.studentInfo?.age || userDetails?.age || 'N/A',
-            userAddress: results.studentInfo?.address || userDetails?.address || 'N/A',
-            userEmail: user.email, testName: selectedPlan.name, level: selectedPlan.level,
-            score: results.percentage, date: now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }), founderName: 'Faizan Tariq'
-          };
-          const certResult = await issueCertificate(user.uid, certificateData);
-          if (certResult.success) {
-            window.showToast?.(isAdmin(user.email) ? '🔓 Admin Certificate issued!' : '🎉 Certificate issued!', 'success');
-            setUserCertificates(prev => [...prev, certResult.certificate]);
-          } else window.showToast?.(`❌ ${certResult.error || 'Certificate issue failed'}`, 'error');
-        } else window.showToast?.('ℹ️ You already have a certificate for this level', 'info');
-      } else window.showToast?.('💪 Score 55% or above to earn a certificate!', 'info');
+        let reviewsFull = false;
+        let hasReview = false;
+
+        try {
+          const { collection, query, where, getDocs } = await import('firebase/firestore');
+
+          // Check total reviews count
+          const allReviewsSnap = await getDocs(collection(db, 'studentReviews'));
+          reviewsFull = allReviewsSnap.size >= 200;
+
+          if (!reviewsFull) {
+            const reviewQuery = query(
+              collection(db, 'studentReviews'),
+              where('userEmail', '==', user.email)
+            );
+            const reviewSnap = await getDocs(reviewQuery);
+            hasReview = !reviewSnap.empty;
+          }
+        } catch (e) {
+          console.error('Review check failed:', e);
+          reviewsFull = false;
+          hasReview = false;
+        }
+
+        const canGetCert = reviewsFull || hasReview;
+
+        if (!canGetCert) {
+          // Reviews not full and user hasn't written one — block certificate
+          setNeedsReview(true);
+          window.showToast?.(
+            '📝 Congratulations! You scored 55%+! To get your certificate, please write a review first in the "What Students Say" section on the Home page.',
+            'warning'
+          );
+        } else {
+          setNeedsReview(false);
+          // Proceed with certificate
+          const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
+          if (!certCheck.hasCertificate) {
+            const certificateData = {
+              userName: results.studentInfo?.fullName || userDetails?.fullName || user.displayName || user.email,
+              userAge: results.studentInfo?.age || userDetails?.age || 'N/A',
+              userAddress: results.studentInfo?.address || userDetails?.address || 'N/A',
+              userEmail: user.email, testName: selectedPlan.name, level: selectedPlan.level,
+              score: results.percentage,
+              date: now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }),
+              founderName: 'Faizan Tariq'
+            };
+            const certResult = await issueCertificate(user.uid, certificateData);
+            if (certResult.success) {
+              window.showToast?.('🎉 Certificate issued successfully!', 'success');
+              setUserCertificates(prev => [...prev, certResult.certificate]);
+            } else {
+              window.showToast?.(`❌ ${certResult.error || 'Certificate issue failed'}`, 'error');
+            }
+          } else {
+            window.showToast?.('ℹ️ You already have a certificate for this level', 'info');
+          }
+        }
+      } else {
+        window.showToast?.('💪 Score 55% or above to earn your certificate!', 'info');
+      }
+
       setTestResults(results);
       loadUserData();
       const isPassed = results.percentage >= 55;
@@ -571,14 +619,13 @@ function MockTestPage() {
 
     const status = testStatus[plan.level];
     if (status?.status === 'locked') { window.showToast?.(status.message, 'warning'); return; }
-    if (status?.status === 'free_locked') { window.showToast?.('🔒 Free trial already used. Unlock hoga jab admin price change kare.', 'warning'); return; }
+    if (status?.status === 'free_locked') { window.showToast?.('🔒 Free trial already used. Please contact admin to unlock.', 'warning'); return; }
 
     if (paymentDetails[plan.level]?.hasPaid && status?.status !== 'available') {
       if (!userDetails) { setCurrentStep('form'); return; }
       await startTest(plan); return;
     }
 
-    // Agar plan price 0 ya Free hai — seedha free unlock
     const planPrice = prices[plan.level] ?? plan.price;
     if (planPrice === 0 || planPrice === 'Free' || planPrice === 'free') {
       await handleFreeUnlock(plan, { isFree: true, discountAmount: 0, couponData: null, couponId: null });
@@ -710,17 +757,51 @@ function MockTestPage() {
           ))}
         </div>
 
-        {/* Tests Tab */}
+        {/* ══════════════════════════════════════════
+            TESTS TAB
+        ══════════════════════════════════════════ */}
         {activeTab === 'tests' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
-            {/* Plans Grid */}
+
+            {/* ✅ IMPORTANT GUIDELINES — PLANS SE UPAR (PEHLE) */}
+            <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))', border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2.5rem', animation: 'fadeInUp 0.8s ease' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                <div style={{ width: 'clamp(50px, 12vw, 70px)', height: 'clamp(50px, 12vw, 70px)', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
+                  <Monitor size={window.innerWidth < 768 ? 24 : 32} color="#fff" />
+                </div>
+                <h3 style={{ fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', margin: 0 }}>⚠️ Important Guidelines</h3>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: '1rem', marginBottom: '1rem' }}>
+                {[
+                  { icon: <Monitor size={18} />, title: 'Desktop Mode', desc: 'For best experience, use desktop site mode on mobile or a laptop/computer.', color: '#6366f1', bg: 'rgba(99,102,241,0.1)', border: 'rgba(99,102,241,0.2)', bgDark: 'rgba(99,102,241,0.2)', borderDark: 'rgba(99,102,241,0.3)' },
+                  { icon: <Clock size={18} />, title: '12-Hour Window', desc: 'After purchase, you have 12 hours to start the Python test. No refunds if time expires.', color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.2)', bgDark: 'rgba(16,185,129,0.2)', borderDark: 'rgba(16,185,129,0.3)' },
+                  { icon: <Lock size={18} />, title: '7-Day Lock', desc: 'After viewing results, the Python test locks for 7 days. Repurchase to try again.', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)', bgDark: 'rgba(239,68,68,0.2)', borderDark: 'rgba(239,68,68,0.3)' },
+                  { icon: <Trophy size={18} />, title: 'Pass Mark: 55%', desc: 'Score 55% or above to earn your Python certificate. Writing a review is required before downloading your certificate.', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)', bgDark: 'rgba(245,158,11,0.2)', borderDark: 'rgba(245,158,11,0.3)' },
+                  // ✅ NEW: Review required guideline
+                  { icon: <Award size={18} />, title: '✍️ Review Required', desc: 'You must write a review on the Home page before you can download your certificate. No certificate will be issued without a review.', color: '#a855f7', bg: 'rgba(168,85,247,0.1)', border: 'rgba(168,85,247,0.2)', bgDark: 'rgba(168,85,247,0.2)', borderDark: 'rgba(168,85,247,0.3)' },
+                ].map((item, i) => (
+                  <div key={i} style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', background: isDark ? item.bgDark : item.bg, borderRadius: '12px', border: `1px solid ${isDark ? item.borderDark : item.border}` }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: item.color, fontWeight: '700', fontSize: 'clamp(0.85rem, 2.5vw, 1rem)' }}>{item.icon}{item.title}</div>
+                    <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: isDark ? '#cbd5e1' : '#475569', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
+                  </div>
+                ))}
+              </div>
+              <div style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', background: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)', borderRadius: '12px', border: `2px dashed ${isDark ? 'rgba(245,158,11,0.4)' : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+                <Smartphone size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
+                <div>
+                  <div style={{ fontWeight: '700', color: '#f59e0b', marginBottom: '0.5rem', fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)' }}>📱 How to Enable Desktop Mode on Mobile:</div>
+                  <div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: isDark ? '#cbd5e1' : '#475569', lineHeight: '1.5' }}>Browser Menu (⋮) → "Desktop site" → Enable → Refresh page</div>
+                </div>
+              </div>
+            </div>
+
+            {/* ✅ PLANS GRID — Guidelines ke BAAD */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '2rem', marginBottom: '3rem' }}>
               {Object.values(SUBSCRIPTION_PLANS).map((plan, index) => {
                 const status = testStatus[plan.level] || {};
                 const hasCert = userCertificates.find(c => c.level === plan.level);
                 const userIsAdmin = isAdmin(user?.email);
                 const timeRemainingDisplay = status.timeRemaining ? formatTimeRemaining(status.timeRemaining) : '';
-                // Price display: admin pannel se 0 set kiya ho toh "Free" dikhao
                 const rawPlanPrice = prices[plan.level] ?? plan.price;
                 const isFreeplan = rawPlanPrice === 0 || rawPlanPrice === 'Free' || rawPlanPrice === 'free';
                 const priceDisplay = userIsAdmin
@@ -741,7 +822,6 @@ function MockTestPage() {
                         <PythonLogo size={28} /> {plan.level}
                       </h2>
                       <p style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 'clamp(0.8rem, 2.5vw, 0.95rem)', marginBottom: '1rem' }}>{plan.description}</p>
-                      {/* ✅ PRICE DISPLAY — 0 set kiya toh "Free" show hoga */}
                       <div style={{ fontSize: 'clamp(2rem, 6vw, 2.5rem)', fontWeight: '900', color: userIsAdmin ? '#10b981' : isFreeplan ? '#10b981' : '#6366f1', marginBottom: '0.5rem' }}>
                         {priceDisplay}
                       </div>
@@ -785,35 +865,6 @@ function MockTestPage() {
               })}
             </div>
 
-            {/* Guidelines Banner */}
-            <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))', border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '3rem', animation: 'fadeInUp 0.8s ease' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-                <div style={{ width: 'clamp(50px, 12vw, 70px)', height: 'clamp(50px, 12vw, 70px)', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
-                  <Monitor size={window.innerWidth < 768 ? 24 : 32} color="#fff" />
-                </div>
-                <h3 style={{ fontSize: 'clamp(1.2rem, 3.5vw, 1.8rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', margin: 0 }}>⚠️ Important Guidelines</h3>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: '1rem', marginBottom: '1rem' }}>
-                {[
-                  { icon: <Monitor size={18} />, title: 'Desktop Mode', desc: 'For best experience, use desktop site mode on mobile or a laptop/computer.', color: '#6366f1', bg: 'rgba(99,102,241,0.1)', border: 'rgba(99,102,241,0.2)', bgDark: 'rgba(99,102,241,0.2)', borderDark: 'rgba(99,102,241,0.3)' },
-                  { icon: <Clock size={18} />, title: '12-Hour Window', desc: 'After purchase, you have 12 hours to start the Python test. No refunds if time expires.', color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.2)', bgDark: 'rgba(16,185,129,0.2)', borderDark: 'rgba(16,185,129,0.3)' },
-                  { icon: <Lock size={18} />, title: '7-Day Lock', desc: 'After viewing results, the Python test locks for 7 days. Repurchase to try again.', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)', bgDark: 'rgba(239,68,68,0.2)', borderDark: 'rgba(239,68,68,0.3)' },
-                  { icon: <Trophy size={18} />, title: 'Pass Mark: 55%', desc: 'Score 55% or above to receive your Python certificate (one per level, lifetime).', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)', bgDark: 'rgba(245,158,11,0.2)', borderDark: 'rgba(245,158,11,0.3)' },
-                ].map((item, i) => (
-                  <div key={i} style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', background: isDark ? item.bgDark : item.bg, borderRadius: '12px', border: `1px solid ${isDark ? item.borderDark : item.border}` }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: item.color, fontWeight: '700', fontSize: 'clamp(0.85rem, 2.5vw, 1rem)' }}>{item.icon}{item.title}</div>
-                    <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: isDark ? '#cbd5e1' : '#475569', margin: 0, lineHeight: '1.5' }}>{item.desc}</p>
-                  </div>
-                ))}
-              </div>
-              <div style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', background: isDark ? 'rgba(245,158,11,0.15)' : 'rgba(245,158,11,0.1)', borderRadius: '12px', border: `2px dashed ${isDark ? 'rgba(245,158,11,0.4)' : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
-                <Smartphone size={20} color="#f59e0b" style={{ flexShrink: 0, marginTop: '2px' }} />
-                <div>
-                  <div style={{ fontWeight: '700', color: '#f59e0b', marginBottom: '0.5rem', fontSize: 'clamp(0.8rem, 2.5vw, 0.9rem)' }}>📱 How to Enable Desktop Mode on Mobile:</div>
-                  <div style={{ fontSize: 'clamp(0.75rem, 2vw, 0.85rem)', color: isDark ? '#cbd5e1' : '#475569', lineHeight: '1.5' }}>Browser Menu (⋮) → "Desktop site" → Enable → Refresh page</div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -825,6 +876,26 @@ function MockTestPage() {
 
         {activeTab === 'results' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
+
+            {/* Review required banner — shown when user scored 55%+ but has no review */}
+            {needsReview && (
+              <div style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(99,102,241,0.15))', border: '2px solid rgba(168,85,247,0.5)', borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2rem', animation: 'fadeInUp 0.5s ease', textAlign: 'center' }}>
+                <div style={{ fontSize: 'clamp(2rem, 6vw, 2.8rem)', marginBottom: '0.75rem' }}>🎉</div>
+                <h3 style={{ fontSize: 'clamp(1.1rem, 3.5vw, 1.5rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', margin: '0 0 0.5rem' }}>You Passed! One Step Left</h3>
+                <p style={{ fontSize: 'clamp(0.82rem, 2.5vw, 0.95rem)', color: isDark ? '#cbd5e1' : '#475569', margin: '0 0 1.25rem', lineHeight: 1.6 }}>
+                  Write a review on the Home page to unlock your certificate download.
+                </p>
+                <button
+                  onClick={() => { window.location.href = '/#student-reviews'; }}
+                  style={{ background: 'linear-gradient(135deg, #a855f7, #6366f1)', border: 'none', color: '#fff', padding: 'clamp(0.75rem, 2.5vw, 1rem) clamp(1.5rem, 4vw, 2.5rem)', borderRadius: '50px', fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 20px rgba(168,85,247,0.45)', transition: 'all 0.25s', display: 'inline-flex', alignItems: 'center', gap: '0.6rem', letterSpacing: '0.5px' }}
+                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
+                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+                >
+                  ✍️ Write a Review → Get Certificate
+                </button>
+              </div>
+            )}
+
             <Certificatesection userCertificates={[]} testHistory={testHistory} isDark={isDark} onViewCertificate={setSelectedCertificate} onDeleteCertificate={handleDeleteCertificate} onDeleteTest={handleDeleteClick} />
           </div>
         )}
@@ -833,7 +904,7 @@ function MockTestPage() {
           <NEETTab user={user} isDark={isDark} neetStep={neetStep} setNeetStep={setNeetStep} neetQuestions={neetQuestions} setNeetQuestions={setNeetQuestions} neetLoading={neetLoading} setNeetLoading={setNeetLoading} onNeetComplete={handleNeetTestComplete} geoData={geoData} isIndia={isIndia} />
         )}
 
-        {selectedCertificate && <CertificateViewer certificate={selectedCertificate} onClose={() => setSelectedCertificate(null)} />}
+        {selectedCertificate && <CertificateViewer certificate={selectedCertificate} onClose={() => setSelectedCertificate(null)} user={user} />}
 
         {/* Delete Test Result Dialog */}
         {showDeleteDialog && testToDelete && (

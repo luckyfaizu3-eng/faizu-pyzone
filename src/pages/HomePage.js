@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Download, Shield, Zap, BookOpen, Star } from 'lucide-react';
 import { useTheme, useAuth } from '../App';
@@ -354,19 +355,6 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   HELPERS
-───────────────────────────────────────── */
-function BlueTick() {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0, marginLeft: '3px' }}>
-      <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 40 40">
-        <circle cx="20" cy="20" r="20" fill="#3897f0" />
-        <polyline points="10,21 17,28 30,13" fill="none" stroke="white" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
-  );
-}
 
 function timeAgo(ts) {
   if (!ts) return '';
@@ -387,7 +375,6 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting] = useState(false);
   const [hov, setHov] = useState(false);
-  const [press, setPress] = useState(false);
 
   const fetchComments = useCallback(async () => {
     try {
@@ -403,72 +390,260 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
     if (!commentText.trim() || !user) return;
     setPosting(true);
     try {
-      await addDoc(collection(db, 'studentReviews', review.id, 'comments'), { text: commentText.trim(), userName: user.displayName || user.email?.split('@')[0] || 'User', userPhoto: user.photoURL || '', userId: user.uid, createdAt: Date.now() });
+      await addDoc(collection(db, 'studentReviews', review.id, 'comments'), {
+        text: commentText.trim(),
+        userName: user.displayName || user.email?.split('@')[0] || 'User',
+        userPhoto: user.photoURL || '', userId: user.uid, createdAt: Date.now()
+      });
       setCommentText(''); await fetchComments(); setShowCmts(true);
     } catch { window.showToast?.('❌ Comment failed', 'error'); }
     finally { setPosting(false); }
   };
 
+  const stars = review.stars || 5;
+  const palettes = [
+    { from: '#6366f1', to: '#8b5cf6' },
+    { from: '#10b981', to: '#0ea5e9' },
+    { from: '#f59e0b', to: '#ef4444' },
+    { from: '#ec4899', to: '#a855f7' },
+    { from: '#3b82f6', to: '#6366f1' },
+    { from: '#14b8a6', to: '#6366f1' },
+  ];
+  const pal = palettes[(review.name?.charCodeAt(0) || 0) % palettes.length];
+  const igHandle = review.instagram ? review.instagram.replace(/^@/, '') : null;
+
   return (
     <div
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => { setHov(false); setPress(false); }}
-      onMouseDown={() => setPress(true)} onMouseUp={() => setPress(false)}
-      onTouchStart={() => setPress(true)} onTouchEnd={() => setPress(false)}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
       style={{
-        background: isDark ? 'rgba(15,23,42,0.95)' : '#fff',
-        border: (hov || press)
-          ? isDark ? '1.5px solid rgba(99,102,241,0.5)' : '1.5px solid rgba(99,102,241,0.35)'
-          : isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
+        position: 'relative',
         borderRadius: '20px',
-        padding: isMobile ? '15px' : '20px',
-        position: 'relative', overflow: 'hidden',
-        transform: press ? 'scale(0.98)' : hov ? 'translateY(-5px)' : 'none',
-        boxShadow: press
-          ? `0 0 0 3px rgba(99,102,241,0.3), 0 8px 30px rgba(99,102,241,0.2)`
-          : hov
-          ? `0 12px 40px rgba(99,102,241,0.18), 0 0 0 2px rgba(99,102,241,0.15)`
-          : isDark ? '0 2px 12px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.05)',
-        transition: 'all 0.2s cubic-bezier(0.34,1.56,0.64,1)',
+        overflow: 'hidden',
+        background: isDark ? '#0f172a' : '#ffffff',
+        border: hov
+          ? `1.5px solid ${pal.from}55`
+          : isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+        boxShadow: hov
+          ? `0 24px 64px ${pal.from}22, 0 0 0 1px ${pal.from}22`
+          : isDark ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.06)',
+        transform: hov ? 'translateY(-5px)' : 'translateY(0)',
+        transition: 'all 0.35s cubic-bezier(0.22,1,0.36,1)',
       }}>
-      {/* top gradient line — HTML rcard::before */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)' }} />
-      <div style={{ paddingTop: '4px' }}>
-        {isAdmin && <div style={{ textAlign: 'right', marginBottom: '8px' }}><button onClick={onDeleteClick} style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', padding: '3px 10px', fontSize: '0.65rem', fontWeight: '800', color: '#ef4444', cursor: 'pointer' }}>🗑️ Delete</button></div>}
-        {/* header — HTML .rch style */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '9px' }}>
-          <div style={{ width: '36px', height: '36px', borderRadius: '50%', background: isDark ? 'rgba(34,197,94,0.15)' : 'linear-gradient(135deg,rgba(34,197,94,0.15),rgba(59,130,246,0.1))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', flexShrink: 0, border: isDark ? '1.5px solid rgba(34,197,94,0.3)' : '1.5px solid #86efac', overflow: 'hidden' }}>
-            {review.photo ? <img src={review.photo} alt={review.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} /> : '👤'}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '3px', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.83rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#111827' }}>{review.name}</span>
-              <BlueTick />
-              {review.instagram && <a href={`https://instagram.com/${review.instagram.replace('@', '')}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.7rem', fontWeight: '700', color: '#3897f0', textDecoration: 'none', marginLeft: '4px' }}>@{review.instagram.replace('@', '')}</a>}
+
+      {/* Top gradient line */}
+      <div style={{ height: '3px', background: `linear-gradient(90deg, ${pal.from}, ${pal.to})` }} />
+
+      {/* Subtle bg glow */}
+      <div style={{
+        position: 'absolute', top: 0, right: 0, width: '180px', height: '180px',
+        background: `radial-gradient(circle at top right, ${pal.from}0d, transparent 70%)`,
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{ padding: isMobile ? '16px 14px 12px' : '20px 20px 14px', position: 'relative' }}>
+
+        {/* Admin delete */}
+        {isAdmin && (
+          <button onClick={onDeleteClick} style={{
+            position: 'absolute', top: '12px', right: '12px',
+            background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: '8px', padding: '3px 9px', fontSize: '0.62rem',
+            fontWeight: '800', color: '#ef4444', cursor: 'pointer',
+          }}>🗑️</button>
+        )}
+
+        {/* ── HEADER ── */}
+        <div style={{ display: 'flex', gap: '13px', alignItems: 'flex-start', marginBottom: '14px' }}>
+
+          {/* Avatar */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div style={{
+              width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px',
+              borderRadius: '16px',
+              background: `linear-gradient(135deg, ${pal.from}, ${pal.to})`,
+              overflow: 'hidden',
+              boxShadow: `0 6px 20px ${pal.from}40`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {review.photo
+                ? <img src={review.photo} alt={review.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+                : <span style={{ color: '#fff', fontWeight: '900', fontSize: isMobile ? '1.2rem' : '1.4rem', fontFamily: 'system-ui' }}>
+                    {(review.name || 'U')[0].toUpperCase()}
+                  </span>
+              }
             </div>
-            <div style={{ fontSize: '0.62rem', color: isDark ? '#6b7280' : '#6b7280', fontWeight: '600', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '5px', flexWrap: 'wrap' }}>
-              <span style={{ color: '#eab308' }}>{[1,2,3,4,5].map(s => s <= (review.stars||5) ? '★' : '☆').join('')}</span>
-              · {timeAgo(review.createdAt)}
-              {review.address && <> · 📍 {review.address}</>}
-              {review.course && <> · 🎓 {review.course}</>}
+            {/* Verified dot */}
+            <div style={{
+              position: 'absolute', bottom: '-3px', right: '-3px',
+              width: '18px', height: '18px', borderRadius: '50%',
+              background: 'linear-gradient(135deg,#3b82f6,#6366f1)',
+              border: '2px solid ' + (isDark ? '#0f172a' : '#fff'),
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 2px 8px rgba(59,130,246,0.6)',
+            }}>
+              <svg width="8" height="8" viewBox="0 0 10 8" fill="none">
+                <path d="M1 4l2.5 2.5L9 1" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* Name block */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Name row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', marginBottom: '4px' }}>
+              <span style={{
+                fontSize: isMobile ? '0.92rem' : '1rem',
+                fontWeight: '800',
+                color: isDark ? '#f1f5f9' : '#0f172a',
+                letterSpacing: '-0.02em',
+                lineHeight: 1.2,
+              }}>{review.name}</span>
+
+              {/* Instagram pill — real design */}
+            </div>
+
+            {/* Instagram — separate line below name */}
+            {igHandle && (
+              <a
+                href={`https://instagram.com/${igHandle}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '4px',
+                  padding: '3px 10px 3px 7px',
+                  borderRadius: '20px',
+                  background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)',
+                  textDecoration: 'none',
+                  marginBottom: '5px',
+                  flexShrink: 0,
+                }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none">
+                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="#fff" strokeWidth="2"/>
+                  <circle cx="12" cy="12" r="5" stroke="#fff" strokeWidth="2"/>
+                  <circle cx="17.5" cy="6.5" r="1.2" fill="#fff"/>
+                </svg>
+                <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#fff', letterSpacing: '0.2px' }}>
+                  {igHandle}
+                </span>
+              </a>
+            )}
+
+            {/* Stars */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1px', marginBottom: '6px' }}>
+              {[1,2,3,4,5].map(s => (
+                <svg key={s} width="13" height="13" viewBox="0 0 24 24"
+                  fill={s <= stars ? '#f59e0b' : 'none'}
+                  stroke={s <= stars ? '#f59e0b' : isDark ? '#1e293b' : '#e2e8f0'}
+                  strokeWidth="2">
+                  <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26"/>
+                </svg>
+              ))}
+              <span style={{ fontSize: '0.68rem', fontWeight: '800', color: '#f59e0b', marginLeft: '4px' }}>{stars}.0</span>
+              <span style={{ fontSize: '0.62rem', color: isDark ? '#334155' : '#cbd5e1', margin: '0 4px' }}>·</span>
+              <span style={{ fontSize: '0.65rem', color: isDark ? '#475569' : '#94a3b8', fontWeight: '500' }}>{timeAgo(review.createdAt)}</span>
+            </div>
+
+            {/* Tags */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+              {review.course && (
+                <span style={{
+                  fontSize: '0.6rem', fontWeight: '700',
+                  padding: '2px 8px', borderRadius: '6px',
+                  background: isDark ? `${pal.from}20` : `${pal.from}12`,
+                  color: isDark ? pal.from : pal.from,
+                  border: `1px solid ${pal.from}30`,
+                  letterSpacing: '0.2px',
+                }}>🎓 {review.course}</span>
+              )}
+              {review.address && (
+                <span style={{
+                  fontSize: '0.6rem', fontWeight: '700',
+                  padding: '2px 8px', borderRadius: '6px',
+                  background: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.07)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16,185,129,0.2)',
+                  letterSpacing: '0.2px',
+                }}>📍 {review.address}</span>
+              )}
             </div>
           </div>
         </div>
-        {/* review text — HTML .rct style */}
-        <p style={{ fontSize: '0.8rem', color: isDark ? '#cbd5e1' : '#374151', lineHeight: 1.65, fontStyle: 'italic', fontWeight: '600', margin: 0 }}>"{review.text}"</p>
+
+        {/* ── REVIEW TEXT ── */}
+        <div style={{
+          position: 'relative',
+          background: isDark ? 'rgba(255,255,255,0.03)' : `${pal.from}08`,
+          borderRadius: '12px',
+          padding: '12px 14px 12px 16px',
+          marginBottom: '12px',
+          borderLeft: `3px solid ${pal.from}`,
+        }}>
+          {/* Big open-quote */}
+          <span style={{
+            position: 'absolute', top: '-6px', left: '10px',
+            fontSize: '2.2rem', lineHeight: 1,
+            color: pal.from,
+            fontFamily: 'Georgia, serif',
+            opacity: 0.35,
+            pointerEvents: 'none',
+          }}>"</span>
+          <p style={{
+            margin: 0,
+            fontSize: isMobile ? '0.82rem' : '0.875rem',
+            color: isDark ? '#cbd5e1' : '#374151',
+            lineHeight: 1.72,
+            fontWeight: '500',
+            fontStyle: 'italic',
+            paddingTop: '4px',
+          }}>{review.text}</p>
+        </div>
+
+        {/* ── VERIFIED BADGE ── */}
+        <div style={{
+          display: 'inline-flex', alignItems: 'center', gap: '5px',
+          background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.07)',
+          border: '1px solid rgba(16,185,129,0.22)',
+          borderRadius: '8px', padding: '3px 9px',
+        }}>
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5">
+            <polyline points="20,6 9,17 4,12"/>
+          </svg>
+          <span style={{ fontSize: '0.6rem', fontWeight: '800', color: '#10b981', letterSpacing: '0.4px' }}>
+            Verified PySkill Student
+          </span>
+        </div>
+
       </div>
-      {/* comments */}
-      <div style={{ borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f5f5f5', paddingTop: '10px', marginTop: '12px' }}>
-        {!loadingCmts && comments.length > 0 && <button onClick={() => setShowCmts(s => !s)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', fontWeight: '700', color: '#22c55e', padding: '0 0 8px', display: 'block' }}>💬 {showCmts ? 'Hide' : 'View'} {comments.length} comment{comments.length !== 1 ? 's' : ''}</button>}
+
+      {/* ── COMMENTS ── */}
+      <div style={{
+        borderTop: isDark ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(0,0,0,0.05)',
+        padding: isMobile ? '10px 14px 13px' : '10px 20px 14px',
+      }}>
+        {!loadingCmts && comments.length > 0 && (
+          <button onClick={() => setShowCmts(s => !s)} style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontSize: '0.72rem', fontWeight: '700', color: pal.from,
+            padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: '4px',
+          }}>
+            <span style={{ fontSize: '0.6rem' }}>{showCmts ? '▲' : '▼'}</span>
+            {showCmts ? 'Hide' : 'View'} {comments.length} comment{comments.length !== 1 ? 's' : ''}
+          </button>
+        )}
         {showCmts && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginBottom: '10px' }}>
             {comments.map(c => (
               <div key={c.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                <div style={{ width: '26px', height: '26px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: 'rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.78rem' }}>
+                <div style={{ width: '24px', height: '24px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: `${pal.from}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem' }}>
                   {c.userPhoto ? <img src={c.userPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} /> : '👤'}
                 </div>
-                <div style={{ flex: 1, background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', borderRadius: '10px', border: isDark ? '1px solid rgba(255,255,255,0.07)' : '1px solid #f0f0f0', padding: '6px 10px' }}>
-                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '2px' }}><span style={{ fontSize: '0.72rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#111827' }}>{c.userName}</span><span style={{ fontSize: '0.6rem', color: isDark ? '#475569' : '#9ca3af' }}>{timeAgo(c.createdAt)}</span></div>
-                  <p style={{ margin: 0, fontSize: '0.76rem', color: isDark ? '#cbd5e1' : '#374151', lineHeight: 1.5 }}>{c.text}</p>
+                <div style={{ flex: 1, background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '10px', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f4f8', padding: '6px 11px' }}>
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '2px' }}>
+                    <span style={{ fontSize: '0.7rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#0f172a' }}>{c.userName}</span>
+                    <span style={{ fontSize: '0.58rem', color: isDark ? '#334155' : '#94a3b8' }}>{timeAgo(c.createdAt)}</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: '0.74rem', color: isDark ? '#cbd5e1' : '#374151', lineHeight: 1.5 }}>{c.text}</p>
                 </div>
               </div>
             ))}
@@ -476,21 +651,42 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
         )}
         {user ? (
           <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
-            <div style={{ width: '24px', height: '24px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: 'rgba(34,197,94,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem' }}>
+            <div style={{ width: '26px', height: '26px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: `${pal.from}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem' }}>
               {user.photoURL ? <img src={user.photoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
             </div>
-            <input value={commentText} onChange={e => setCommentText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postComment(); } }} placeholder="Write a comment..." style={{ flex: 1, padding: '6px 12px', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #f0f0f0', borderRadius: '20px', fontSize: '0.78rem', fontWeight: '500', background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', color: isDark ? '#e2e8f0' : '#111827', outline: 'none' }} />
-            <button onClick={postComment} disabled={posting || !commentText.trim()} style={{ padding: '6px 12px', borderRadius: '20px', background: commentText.trim() ? '#22c55e' : isDark ? 'rgba(255,255,255,0.06)' : '#f0f0f0', border: 'none', color: commentText.trim() ? '#fff' : isDark ? '#475569' : '#9ca3af', fontWeight: '800', fontSize: '0.72rem', cursor: commentText.trim() ? 'pointer' : 'default', transition: 'all 0.2s' }}>{posting ? '...' : 'Post'}</button>
+            <input
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postComment(); } }}
+              placeholder="Add a comment..."
+              style={{
+                flex: 1, padding: '7px 13px',
+                border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e8edf3',
+                borderRadius: '20px', fontSize: '0.76rem', fontWeight: '500',
+                background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc',
+                color: isDark ? '#e2e8f0' : '#0f172a', outline: 'none',
+              }}
+            />
+            <button
+              onClick={postComment}
+              disabled={posting || !commentText.trim()}
+              style={{
+                padding: '7px 13px', borderRadius: '20px',
+                background: commentText.trim() ? `linear-gradient(135deg,${pal.from},${pal.to})` : isDark ? 'rgba(255,255,255,0.05)' : '#f0f0f0',
+                border: 'none',
+                color: commentText.trim() ? '#fff' : isDark ? '#334155' : '#94a3b8',
+                fontWeight: '800', fontSize: '0.7rem',
+                cursor: commentText.trim() ? 'pointer' : 'default',
+                transition: 'all 0.2s',
+                boxShadow: commentText.trim() ? `0 3px 12px ${pal.from}40` : 'none',
+              }}>{posting ? '...' : 'Post'}</button>
           </div>
-        ) : <p style={{ margin: 0, fontSize: '0.7rem', color: isDark ? '#475569' : '#9ca3af' }}>🔐 Login to comment</p>}
+        ) : <p style={{ margin: 0, fontSize: '0.68rem', color: isDark ? '#334155' : '#94a3b8' }}>🔐 Login to comment</p>}
       </div>
     </div>
   );
 }
 
-/* ─────────────────────────────────────────
-   ADD REVIEW FORM
-───────────────────────────────────────── */
 function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
   const [form, setForm] = useState({ name: user?.displayName || '', address: '', course: '', text: '', stars: 5, instagram: '' });
   const [photoFile, setPhotoFile] = useState(null);
@@ -560,10 +756,13 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
     await deleteDoc(doc(db, 'studentReviews', deleteTarget.id));
     window.showToast?.('✅ Deleted!', 'success'); setDeleteTarget(null); await fetchReviews();
   };
+
+  // ✅ canAddMore — 200 se kam reviews hon tabhi button dikhao
   const canAddMore = reviews.length < MAX_REVIEWS;
+
   if (!loading && reviews.length === 0 && !canAdd) return null;
   return (
-    <section ref={ref} style={{ padding: isMobile ? '0 16px 48px' : '0 24px 64px', maxWidth: '960px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(22px)', transition: 'opacity 0.55s ease, transform 0.55s ease' }}>
+    <section id="student-reviews" ref={ref} style={{ padding: isMobile ? '0 16px 48px' : '0 24px 64px', maxWidth: '960px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(22px)', transition: 'opacity 0.55s ease, transform 0.55s ease' }}>
       {deleteTarget && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ ...baseCard(isDark, { padding: '2rem', maxWidth: '380px', width: '100%', textAlign: 'center' }) }}>
@@ -585,7 +784,23 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
       {loading ? <div style={{ textAlign: 'center', padding: '40px', color: isDark ? '#475569' : '#94a3b8' }}>Loading...</div>
         : reviews.length === 0 ? canAdd && <div style={{ textAlign: 'center', padding: '36px', background: isDark ? 'rgba(255,255,255,0.02)' : '#f8fafc', borderRadius: '16px', border: isDark ? '1px dashed rgba(255,255,255,0.1)' : '1px dashed #e2e8f0', color: isDark ? '#475569' : '#94a3b8', fontSize: '0.88rem' }}>No reviews yet. Be the first! 👇</div>
         : <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '14px' : '20px' }}>{reviews.map(rev => <ReviewCard key={rev.id} review={rev} isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} onDeleteClick={() => setDeleteTarget(rev)} />)}</div>}
-      {canAdd && canAddMore && <div style={{ textAlign: 'center', marginTop: '24px' }}><button onClick={() => setShowForm(!showForm)} style={{ background: showForm ? 'transparent' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm ? isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid #e2e8f0' : 'none', color: showForm ? isDark ? '#94a3b8' : '#64748b' : '#fff', padding: '10px 28px', borderRadius: '50px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer', boxShadow: showForm ? 'none' : '0 4px 16px rgba(99,102,241,0.3)', transition: 'all 0.2s' }}>{showForm ? '✕ Cancel' : '✍️ Write a Review'}</button></div>}
+
+      {/* Write Review button — only show when review limit not reached */}
+      {canAdd && canAddMore && (
+        <div style={{ textAlign: 'center', marginTop: '24px' }}>
+          <button onClick={() => setShowForm(!showForm)} style={{ background: showForm ? 'transparent' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm ? isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid #e2e8f0' : 'none', color: showForm ? isDark ? '#94a3b8' : '#64748b' : '#fff', padding: '10px 28px', borderRadius: '50px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer', boxShadow: showForm ? 'none' : '0 4px 16px rgba(99,102,241,0.3)', transition: 'all 0.2s' }}>{showForm ? '✕ Cancel' : '✍️ Write a Review'}</button>
+        </div>
+      )}
+
+      {/* 200 reviews complete — sirf admin ko dikhao */}
+      {isAdmin && !canAddMore && (
+        <div style={{ textAlign: 'center', marginTop: '20px', padding: '14px 20px', background: isDark ? 'rgba(34,197,94,0.08)' : 'rgba(34,197,94,0.06)', border: isDark ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(34,197,94,0.25)', borderRadius: '14px', display: 'inline-block', margin: '20px auto 0', width: 'auto' }}>
+          <p style={{ margin: 0, fontSize: '0.82rem', color: isDark ? '#86efac' : '#16a34a', fontWeight: '700' }}>
+            ✅ All 200 review spots are filled — Thank you everyone! 🎉
+          </p>
+        </div>
+      )}
+
       {!user && reviews.length > 0 && <p style={{ textAlign: 'center', marginTop: '12px', fontSize: '0.76rem', color: isDark ? '#475569' : '#94a3b8', fontWeight: '600' }}>🔐 Login to write your own review</p>}
       {canAdd && showForm && canAddMore && <AddReviewForm isDark={isDark} isMobile={isMobile} user={user} onSave={async (data) => { await addDoc(collection(db, 'studentReviews'), { ...data, createdAt: Date.now() }); await fetchReviews(); setShowForm(false); window.showToast?.('✅ Review added!', 'success'); }} onCancel={() => setShowForm(false)} />}
     </section>
@@ -748,6 +963,15 @@ export default function HomePage({ setCurrentPage }) {
   const isAdmin = user?.email === 'luckyfaizu3@gmail.com';
 
   useEffect(() => { setTimeout(() => setMounted(true), 60); }, []);
+  useEffect(() => {
+    // Auto-scroll to review section if navigated via /#student-reviews
+    if (window.location.hash === '#student-reviews') {
+      setTimeout(() => {
+        const el = document.getElementById('student-reviews');
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 600);
+    }
+  }, []);
   useEffect(() => {
     const h = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', h); return () => window.removeEventListener('resize', h);

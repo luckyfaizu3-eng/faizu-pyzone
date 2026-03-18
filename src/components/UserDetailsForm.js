@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useTheme } from '../App';
 import { User, Mail, MapPin, Calendar, Award } from 'lucide-react';
 
-function UserDetailsForm({ onSubmit, onCancel }) {
+function UserDetailsForm({ onSubmit }) {
   const { isDark } = useTheme();
   const [formData, setFormData] = useState({
     fullName: '',
@@ -12,7 +12,6 @@ function UserDetailsForm({ onSubmit, onCancel }) {
   });
   const [errors, setErrors] = useState({});
 
-  // ✅ FIX: Guard ref — form sirf 1 baar submit hoga
   const submittedRef = useRef(false);
 
   useEffect(() => {
@@ -88,13 +87,10 @@ function UserDetailsForm({ onSubmit, onCancel }) {
     return newErrors;
   };
 
-  // ✅ FIX: Sirf form onSubmit use karo — button type="submit" rakho
-  // submittedRef se double call permanently block hoga
   const handleSubmit = (e) => {
     e.preventDefault();
-    e.stopPropagation(); // ✅ bubble band karo
+    e.stopPropagation();
 
-    // ✅ DOUBLE SUBMIT GUARD
     if (submittedRef.current) {
       console.log('⚠️ Already submitted — ignoring duplicate call');
       return;
@@ -107,7 +103,6 @@ function UserDetailsForm({ onSubmit, onCancel }) {
       return;
     }
 
-    // ✅ Lock immediately — koi bhi aur call block
     submittedRef.current = true;
 
     console.log('✅ UserDetailsForm submitting ONCE:', formData);
@@ -193,7 +188,6 @@ function UserDetailsForm({ onSubmit, onCancel }) {
           </p>
         </div>
 
-        {/* ✅ form — sirf onSubmit, button pe koi onClick nahi */}
         <form onSubmit={handleSubmit} noValidate>
 
           {/* Full Name */}
@@ -308,43 +302,24 @@ function UserDetailsForm({ onSubmit, onCancel }) {
             • One certificate per month per level
           </div>
 
-          {/* Buttons */}
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <button
-              type="button"
-              onClick={onCancel}
-              style={{
-                flex: 1, padding: '1rem', borderRadius: '12px',
-                border: `2px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-                background: isDark ? 'rgba(51,65,85,0.5)' : 'transparent',
-                color: isDark ? '#e2e8f0' : '#1e293b',
-                fontSize: '1rem', fontWeight: '700', cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.borderColor = '#6366f1'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = isDark ? '#334155' : '#e2e8f0'; }}
-            >
-              Cancel
-            </button>
-
-            {/* ✅ type="submit" — onClick NAHI, sirf form onSubmit fire karega */}
-            <button
-              type="submit"
-              style={{
-                flex: 1, padding: '1rem', borderRadius: '12px',
-                border: 'none',
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-                color: '#fff', fontSize: '1rem', fontWeight: '700',
-                cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
-                transition: 'all 0.2s'
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(99,102,241,0.4)'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(99,102,241,0.3)'; }}
-            >
-              Continue
-            </button>
-          </div>
+          {/* ✅ Sirf Continue button — Cancel button HATA DIYA */}
+          <button
+            type="submit"
+            style={{
+              width: '100%',
+              padding: '1rem', borderRadius: '12px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+              color: '#fff', fontSize: '1rem', fontWeight: '700',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(99,102,241,0.3)',
+              transition: 'all 0.2s'
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(99,102,241,0.4)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(99,102,241,0.3)'; }}
+          >
+            Continue →
+          </button>
         </form>
       </div>
 
