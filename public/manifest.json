@@ -1,25 +1,59 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "Pyskill",
+  "name": "Pyskill — Free Python Mock Test with Certificate",
+  "description": "India's best free Python mock test platform. Basic free, Advanced 99 INR, Pro 199 INR. Instant QR-verified certificate.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0A1628",
+  "background_color": "#0A1628",
+  "lang": "en-IN",
+  "dir": "ltr",
+  "categories": ["education", "productivity"],
   "icons": [
     {
       "src": "favicon.ico",
       "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "type": "image/x-icon",
+      "purpose": "any"
     },
     {
       "src": "logo192.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
       "src": "logo512.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
-  "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "shortcuts": [
+    {
+      "name": "Free Python Mock Test",
+      "short_name": "Mock Test",
+      "description": "Start free Python basic mock test",
+      "url": "/#mocktests",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Python Notes PDF",
+      "short_name": "Notes",
+      "description": "Download Python study material PDF",
+      "url": "/#products",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "30-Day Streak Challenge",
+      "short_name": "Streak",
+      "description": "Daily Python practice questions",
+      "url": "/#streak",
+      "icons": [{ "src": "logo192.png", "sizes": "192x192" }]
+    }
+  ],
+  "related_applications": [],
+  "prefer_related_applications": false
 }

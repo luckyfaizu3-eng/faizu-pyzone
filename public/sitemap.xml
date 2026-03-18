@@ -1,39 +1,96 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+<urlset
+  xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+  xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+  xmlns:xhtml="http://www.w3.org/1999/xhtml">
 
+  <!-- ✅ Homepage — highest priority -->
   <url>
     <loc>https://faizupyzone.shop/</loc>
-    <lastmod>2026-03-14</lastmod>
-    <changefreq>weekly</changefreq>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>daily</changefreq>
     <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://faizupyzone.shop/logo512.png</image:loc>
+      <image:title>Pyskill — Free Python Mock Test with Certificate</image:title>
+      <image:caption>India's best free Python mock test platform with instant QR-verified certificate</image:caption>
+    </image:image>
+    <xhtml:link rel="alternate" hreflang="en-IN" href="https://faizupyzone.shop/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://faizupyzone.shop/"/>
   </url>
 
+  <!-- ✅ Mock Tests section -->
   <url>
-    <loc>https://faizupyzone.shop/#products</loc>
-    <lastmod>2026-03-14</lastmod>
-    <changefreq>daily</changefreq>
+    <loc>https://faizupyzone.shop/#mocktests</loc>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.95</priority>
+    <image:image>
+      <image:loc>https://faizupyzone.shop/logo512.png</image:loc>
+      <image:title>Free Python Mock Test 2026 — Basic, Advanced, Pro</image:title>
+      <image:caption>60 questions, anti-cheat proctored, instant certificate on 55% or above</image:caption>
+    </image:image>
+  </url>
+
+  <!-- ✅ Mock Test page (duplicate removed, kept best slug) -->
+  <url>
+    <loc>https://faizupyzone.shop/#mock-test</loc>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
 
+  <!-- ✅ Products / Notes PDF -->
   <url>
-    <loc>https://faizupyzone.shop/#mocktests</loc>
-    <lastmod>2026-03-14</lastmod>
+    <loc>https://faizupyzone.shop/#products</loc>
+    <lastmod>2026-03-18</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <priority>0.9</priority>
+    <image:image>
+      <image:loc>https://faizupyzone.shop/logo512.png</image:loc>
+      <image:title>Python Notes PDF, Ethical Hacking, AI ML, Web Dev Study Material</image:title>
+      <image:caption>Download Python notes PDF, Ethical Hacking notes, AI &amp; ML, Web Development study material</image:caption>
+    </image:image>
   </url>
 
+  <!-- ✅ Leaderboard -->
   <url>
     <loc>https://faizupyzone.shop/#leaderboard</loc>
-    <lastmod>2026-03-14</lastmod>
+    <lastmod>2026-03-18</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
 
+  <!-- ✅ 30-Day Streak Challenge — was MISSING! -->
   <url>
-    <loc>https://faizupyzone.shop/#mock-test</loc>
-    <lastmod>2026-03-14</lastmod>
+    <loc>https://faizupyzone.shop/#streak</loc>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- ✅ Python Compiler — was MISSING! -->
+  <url>
+    <loc>https://faizupyzone.shop/#compiler</loc>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <!-- ✅ Blog — was MISSING! -->
+  <url>
+    <loc>https://faizupyzone.shop/#blog-mock-test</loc>
+    <lastmod>2026-03-18</lastmod>
     <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <priority>0.75</priority>
+  </url>
+
+  <!-- ✅ Certificate Verify page — was MISSING! -->
+  <url>
+    <loc>https://faizupyzone.shop/#verify</loc>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.65</priority>
   </url>
 
 </urlset>

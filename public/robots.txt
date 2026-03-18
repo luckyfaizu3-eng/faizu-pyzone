@@ -1,6 +1,5 @@
 User-agent: *
 Allow: /
+Disallow: /admin
 
 Sitemap: https://faizupyzone.shop/sitemap.xml
-
-Disallow: /admin
