@@ -833,7 +833,6 @@ export default function MockTestInterface({ questions, testTitle, timeLimit, use
   const [stage, setStage]             = useState('instructions');
   const [studentInfo, setStudentInfo] = useState(null);
   const stageRef         = useRef('instructions');
-  const formSubmittedRef = useRef(false);
 
   useEffect(() => {
     if (userEmail !== APP_CONFIG.ADMIN_EMAIL) FullscreenManager.enter();
@@ -853,18 +852,22 @@ export default function MockTestInterface({ questions, testTitle, timeLimit, use
     return () => window.removeEventListener('popstate', handler);
   }, [onExit]);
 
-  // ✅ Form submit — stageRef se guarantee karo sirf ek baar chalega
+  // ✅ Form submit — stageRef ONLY check karo (single source of truth)
   const handleFormSubmit = useCallback((info) => {
-    if (formSubmittedRef.current) return;
-    if (stageRef.current !== 'form') return;
-    formSubmittedRef.current = true;
-    stageRef.current = 'test';
+    if (stageRef.current !== 'form') {
+      console.log('⛔ Form submit blocked — stage:', stageRef.current);
+      return;
+    }
+    stageRef.current = 'test'; // immediately set — koi aur call nahi ho sakta
     setStudentInfo(info);
     setStage('test');
   }, []);
 
   const handleTestComplete = useCallback((testResults) => {
     CleanupManager.performFullCleanup();
+    // ✅ Stage 'done' pe set karo — form/instructions dobara nahi dikhenge
+    stageRef.current = 'done';
+    setStage('done');
     const data = {
       ...testResults,
       studentInfo,
