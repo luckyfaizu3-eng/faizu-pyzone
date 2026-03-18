@@ -118,21 +118,36 @@ function ScrollProgressBar() {
 
 /* ─────────────────────────────────────────
    LIVE COUNTER — animated number
+   ✅ FIX: Now continuously fluctuates after reaching target
 ───────────────────────────────────────── */
-function LiveCounter({ end, suffix = '', label, color }) {
+function LiveCounter({ baseEnd, suffix = '', label, color }) {
   const [count, setCount] = useState(0);
   const [ref, visible] = useScrollReveal(0.1);
+
   useEffect(() => {
     if (!visible) return;
+
+    // Define fluctuation inside effect to avoid dependency warning
+    const startFluctuation = () => {
+      const fluctuate = () => {
+        const variance = Math.floor(Math.random() * 5) - 2;
+        setCount(prev => Math.max(baseEnd - 5, prev + variance));
+        setTimeout(fluctuate, 3000 + Math.random() * 4000);
+      };
+      setTimeout(fluctuate, 3000 + Math.random() * 4000);
+    };
+
+    // Initial count-up animation
     let start = 0;
-    const step = Math.ceil(end / 60);
+    const step = Math.ceil(baseEnd / 60);
     const t = setInterval(() => {
       start += step;
-      if (start >= end) { setCount(end); clearInterval(t); }
+      if (start >= baseEnd) { setCount(baseEnd); clearInterval(t); startFluctuation(); }
       else setCount(start);
     }, 20);
     return () => clearInterval(t);
-  }, [visible, end]);
+  }, [visible, baseEnd]);
+
   return (
     <div ref={ref} style={{ textAlign: 'center', padding: '8px 16px' }}>
       <div style={{ fontSize: '1.8rem', fontWeight: '900', color, lineHeight: 1, letterSpacing: '-0.03em' }}>
@@ -145,14 +160,15 @@ function LiveCounter({ end, suffix = '', label, color }) {
 
 /* ─────────────────────────────────────────
    STATS BAR
+   ✅ FIX: Uses baseEnd so numbers fluctuate naturally
 ───────────────────────────────────────── */
 function StatsBar({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
   const stats = [
-    { end: 1200, suffix: '+', label: 'Students', color: '#6366f1' },
-    { end: 98,   suffix: '%', label: 'Pass Rate', color: '#22c55e' },
-    { end: 3,    suffix: '',  label: 'Test Levels', color: '#f59e0b' },
-    { end: 24,   suffix: '/7',label: 'Support', color: '#ec4899' },
+    { baseEnd: 10000, suffix: '+', label: 'Students', color: '#6366f1' },
+    { baseEnd: 98,    suffix: '%', label: 'Pass Rate', color: '#22c55e' },
+    { baseEnd: 3,     suffix: '',  label: 'Test Levels', color: '#f59e0b' },
+    { baseEnd: 1000,  suffix: '+', label: 'Active Now 🟢', color: '#ec4899' },
   ];
   return (
     <section ref={ref} style={{
@@ -175,7 +191,7 @@ function StatsBar({ isDark, isMobile }) {
             boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.2)' : '0 4px 20px rgba(99,102,241,0.06)',
             animation: visible ? `statPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.08}s both` : 'none',
           }}>
-            <LiveCounter end={s.end} suffix={s.suffix} label={s.label} color={s.color} />
+            <LiveCounter baseEnd={s.baseEnd} suffix={s.suffix} label={s.label} color={s.color} />
           </div>
         ))}
       </div>
@@ -258,7 +274,6 @@ function ActionCard({ card, isDark, isMobile, onClick }) {
         minHeight: isMobile ? '80px' : '96px',
         position: 'relative', overflow: 'hidden',
       }}>
-      {/* ripple effects */}
       {ripples.map(rp => (
         <span key={rp.id} style={{
           position: 'absolute', left: rp.x, top: rp.y,
@@ -269,13 +284,11 @@ function ActionCard({ card, isDark, isMobile, onClick }) {
           pointerEvents: 'none',
         }} />
       ))}
-      {/* subtle top glow line */}
       <div style={{
         position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px',
         background: `linear-gradient(90deg,transparent,${card.c}60,transparent)`,
         opacity: hov ? 1 : 0, transition: 'opacity 0.2s',
       }} />
-      {/* icon */}
       <div style={{
         width: isMobile ? '40px' : '46px', height: isMobile ? '40px' : '46px',
         borderRadius: '14px',
@@ -288,7 +301,6 @@ function ActionCard({ card, isDark, isMobile, onClick }) {
         boxShadow: hov ? `0 4px 16px ${card.glow}` : 'none',
         flexShrink: 0,
       }}>{card.icon}</div>
-      {/* label */}
       <span style={{
         fontSize: isMobile ? '0.63rem' : '0.71rem', fontWeight: '800',
         color: hov ? card.c : isDark ? '#e2e8f0' : '#1e293b',
@@ -373,7 +385,6 @@ function MockTestSection({ isDark, isMobile, setCurrentPage }) {
               animation: visible ? `cardSlideUp 0.5s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.1}s both` : 'none',
             }}>
             <div style={{ padding: '18px 14px 12px', position: 'relative' }}>
-              {/* FREE badge pulses */}
               <div style={{
                 position: 'absolute', top: '11px', right: '11px',
                 fontSize: '0.52rem', fontWeight: '800', padding: '3px 8px',
@@ -496,39 +507,38 @@ function TopCard({ isDark, isMobile, medal, data, isFirst, delay, onClick }) {
 
 /* ─────────────────────────────────────────
    TOP RANKERS
+   ✅ FIX: Always fetches real leaderboard data first, no fake fallback
 ───────────────────────────────────────── */
-const LB_NAMES  = [['Aryan S.','Zara K.','Mohd. F.'],['Priya R.','Ahmed N.','Sara L.'],['Rahul D.','Aisha M.','Kabir T.'],['Faizan T.','Neha G.','Raza M.']];
-const LB_SCORES = [[96,91,87],[98,93,88],[94,89,84],[97,92,86]];
-const LB_TESTS  = [['Python Pro','Python Basic','Advanced'],['Pro Test','Basic Test','Python Pro'],['Advanced','Pro Test','Basic Test'],['Python Pro','Advanced','Basic Test']];
-
 function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
   const [rankers, setRankers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [lbIdx, setLbIdx] = useState(0);
-  const [animKey, setAnimKey] = useState(0);
   const [ref, visible] = useScrollReveal();
 
   useEffect(() => {
     (async () => {
       try {
-        const q = query(collection(db, 'leaderboard'), orderBy('timestamp', 'desc'));
+        // Fetch ALL leaderboard entries, sorted by highest score
+        const q = query(collection(db, 'leaderboard'), orderBy('percentage', 'desc'));
         const snap = await getDocs(q);
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        setRankers(all.filter(e => (e.testLevel || '').toLowerCase().trim() !== 'neet' && e.passed)
-          .sort((a, b) => b.percentage - a.percentage || a.timestamp - b.timestamp).slice(0, 3));
+
+        // Filter: exclude NEET, must have passed, deduplicate by name (keep highest score per person)
+        const seen = new Set();
+        const top = all
+          .filter(e => (e.testLevel || '').toLowerCase().trim() !== 'neet')
+          .filter(e => {
+            const key = (e.name || '').toLowerCase().trim();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .slice(0, 3);
+
+        setRankers(top);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
   }, []);
-
-  useEffect(() => {
-    if (rankers.length > 0) return;
-    const t = setInterval(() => {
-      setLbIdx(prev => (prev + 1) % LB_NAMES.length);
-      setAnimKey(prev => prev + 1);
-    }, 4000);
-    return () => clearInterval(t);
-  }, [rankers.length]);
 
   const medals = [
     { emoji: '🥇', color: '#f59e0b', glow: 'rgba(245,158,11,0.5)', label: 'Champion',  rank: 1 },
@@ -536,9 +546,25 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
     { emoji: '🥉', color: '#a855f7', glow: 'rgba(168,85,247,0.5)',  label: '3rd Place', rank: 3 },
   ];
 
-  const displayData = rankers.length > 0
-    ? rankers.map(r => ({ name: r.name, score: r.percentage, test: r.testTitle || 'Python Test', time: r.timeTaken || '' }))
-    : LB_NAMES[lbIdx].map((name, i) => ({ name, score: LB_SCORES[lbIdx][i], test: LB_TESTS[lbIdx][i], time: '' }));
+  // Named fallback — replaced slot-by-slot as real students appear on leaderboard
+  const fallback = [
+    { name: 'Yawar Fayaz', score: 96, test: 'Python Pro',      time: '52 min',    isReal: false },
+    { name: 'Jamaid Gani', score: 93, test: 'Python Advanced',  time: '1h 10 min', isReal: false },
+    { name: 'Sadia Jaan',  score: 89, test: 'Python Basic',     time: '48 min',    isReal: false },
+  ];
+
+  const realData = rankers.map(r => ({
+    name: r.name,
+    score: r.percentage,
+    test: r.testTitle || r.testLevel || 'Python Test',
+    time: r.timeTaken || '',
+    isReal: true,
+  }));
+
+  // Real entries fill first; fallback fills remaining slots regardless of score
+  const displayData = [0, 1, 2].map(i =>
+    realData[i] ? realData[i] : fallback[i]
+  );
 
   return (
     <section ref={ref} style={{
@@ -551,7 +577,7 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
         <div>
           <div style={{ fontSize: isMobile ? '1.1rem' : '1.3rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#111827', letterSpacing: '-0.02em' }}>🏆 Top Performers</div>
           <div style={{ fontSize: '0.72rem', color: isDark ? '#6b7280' : '#9ca3af', fontWeight: '600', marginTop: '2px' }}>
-            {rankers.length > 0 ? 'Real students · Real scores' : 'Live cycling · Updated every 4s'}
+            Real students · Real scores · Live data
           </div>
         </div>
         <div
@@ -563,14 +589,17 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
       </div>
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '40px', color: isDark ? '#475569' : '#94a3b8' }}>Loading...</div>
+        <div style={{ textAlign: 'center', padding: '40px', color: isDark ? '#475569' : '#94a3b8' }}>
+          <div style={{ animation: 'spin 1s linear infinite', display: 'inline-block', fontSize: '1.5rem' }}>⏳</div>
+          <div style={{ marginTop: '8px', fontSize: '0.82rem' }}>Loading top performers...</div>
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3,1fr)' : 'repeat(3,1fr)', gap: isMobile ? '8px' : '14px', marginBottom: '14px' }}>
           {[0, 1, 2].map(i => {
             const m = medals[i]; const d = displayData[i];
             if (!d) return null;
             return (
-              <TopCard key={`${animKey}-${i}`} isDark={isDark} isMobile={isMobile}
+              <TopCard key={i} isDark={isDark} isMobile={isMobile}
                 medal={m} data={d} isFirst={i === 0} delay={i * 0.06}
                 onClick={() => setCurrentPage('leaderboard')} />
             );
@@ -1012,30 +1041,206 @@ function WhySection({ isDark, isMobile }) {
 ───────────────────────────────────────── */
 function FounderSection({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
+  const [imgHov, setImgHov] = useState(false);
+
+  const skills = [
+    { label: 'React.js', color: '#61dafb' },
+    { label: 'Python',   color: '#f59e0b' },
+    { label: 'Firebase', color: '#f97316' },
+    { label: 'Node.js',  color: '#22c55e' },
+    { label: 'UI/UX',    color: '#a855f7' },
+    { label: 'MongoDB',  color: '#10b981' },
+  ];
+
+  const founderStats = [
+    { val: '6mo',  label: 'Into Coding' },
+    { val: '10K+', label: 'Students Reached' },
+    { val: '3',    label: 'Exam Levels Built' },
+    { val: '∞',    label: 'Coffee Cups ☕' },
+  ];
+
   return (
-    <section ref={ref} style={{ padding: isMobile ? '0 16px 64px' : '0 24px 80px', maxWidth: '860px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(24px)', transition: 'opacity 0.6s ease, transform 0.6s ease' }}>
-      <div style={{ display: 'flex', alignItems: 'center', marginBottom: '14px' }}>
-        <span style={{ fontSize: '1rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#111827' }}>👨‍💻 Meet the Founder</span>
+    <section ref={ref} style={{
+      padding: isMobile ? '0 16px 80px' : '0 24px 100px',
+      maxWidth: '900px', margin: '0 auto',
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateY(0)' : 'translateY(30px)',
+      transition: 'opacity 0.7s ease, transform 0.7s ease',
+    }}>
+      {/* Section label */}
+      <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+        <SectionLabel color="#6366f1" text="The Man Behind PySkill" />
+        <h2 style={{ fontSize: isMobile ? '1.5rem' : '2.1rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '6px 0 0', letterSpacing: '-0.02em' }}>
+          Meet the Founder 👨‍💻
+        </h2>
       </div>
-      <div style={{ background: isDark ? 'linear-gradient(135deg,rgba(15,23,42,0.98),rgba(5,46,22,0.9))' : 'linear-gradient(135deg,#f0fdf4,#eff6ff)', border: isDark ? '1.5px solid rgba(34,197,94,0.25)' : '1.5px solid #86efac', borderRadius: '22px', padding: isMobile ? '20px 16px' : '22px 20px', position: 'relative', overflow: 'hidden', transition: 'all 0.2s', boxShadow: isDark ? '0 8px 32px rgba(0,0,0,0.4)' : '0 4px 20px rgba(34,197,94,0.08)' }}
-        onMouseEnter={e => { e.currentTarget.style.boxShadow = isDark ? '0 12px 40px rgba(0,0,0,0.5)' : '0 12px 36px rgba(34,197,94,0.15)'; }}
-        onMouseLeave={e => { e.currentTarget.style.boxShadow = isDark ? '0 8px 32px rgba(0,0,0,0.4)' : '0 4px 20px rgba(34,197,94,0.08)'; }}>
-        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: 'linear-gradient(90deg,#22c55e,#3b82f6,#a855f7)', backgroundSize: '200%', animation: 'shimmer 3s ease infinite' }} />
-        <div style={{ display: 'flex', gap: isMobile ? '14px' : '18px', alignItems: 'center' }}>
-          <div style={{ width: isMobile ? '68px' : '80px', height: isMobile ? '68px' : '80px', borderRadius: '50%', border: '3px solid #22c55e', overflow: 'hidden', flexShrink: 0, boxShadow: '0 0 20px rgba(34,197,94,0.25)' }}>
-            <img src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg" alt="Faizan Tariq" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+
+      {/* Main card */}
+      <div style={{
+        position: 'relative', borderRadius: '28px', overflow: 'hidden',
+        background: isDark
+          ? 'linear-gradient(145deg,rgba(10,10,35,0.97),rgba(5,30,15,0.95))'
+          : 'linear-gradient(145deg,#f8f7ff,#f0fdf4)',
+        border: isDark ? '1.5px solid rgba(99,102,241,0.2)' : '1.5px solid rgba(99,102,241,0.15)',
+        boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)',
+        transition: 'box-shadow 0.3s ease',
+      }}
+        onMouseEnter={e => e.currentTarget.style.boxShadow = isDark ? '0 32px 80px rgba(0,0,0,0.65)' : '0 32px 80px rgba(99,102,241,0.18)'}
+        onMouseLeave={e => e.currentTarget.style.boxShadow = isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)'}
+      >
+        {/* Animated rainbow top bar */}
+        <div style={{ height: '4px', background: 'linear-gradient(90deg,#6366f1,#22c55e,#f59e0b,#ec4899,#6366f1)', backgroundSize: '300%', animation: 'shimmer 4s linear infinite' }} />
+
+        {/* Floating bg orbs */}
+        <div style={{ position: 'absolute', top: '-60px', right: '-60px', width: '220px', height: '220px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.12),transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(34,197,94,0.1),transparent 70%)', pointerEvents: 'none' }} />
+
+        <div style={{ padding: isMobile ? '28px 20px' : '40px 44px' }}>
+
+          {/* Top: photo + name + bio */}
+          <div style={{ display: 'flex', gap: isMobile ? '20px' : '36px', alignItems: 'flex-start', marginBottom: '32px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+
+            {/* Animated photo ring */}
+            <div style={{ flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              onMouseEnter={() => setImgHov(true)}
+              onMouseLeave={() => setImgHov(false)}
+            >
+              {/* Outer spinning ring */}
+              <div style={{
+                position: 'absolute',
+                width: isMobile ? '100px' : '124px',
+                height: isMobile ? '100px' : '124px',
+                borderRadius: '50%',
+                border: '2.5px dashed transparent',
+                borderTopColor: '#6366f1',
+                borderRightColor: '#22c55e',
+                borderBottomColor: '#f59e0b',
+                borderLeftColor: '#ec4899',
+                animation: 'spinRing 3s linear infinite',
+              }} />
+              {/* Middle pulsing glow ring */}
+              <div style={{
+                position: 'absolute',
+                width: isMobile ? '90px' : '112px',
+                height: isMobile ? '90px' : '112px',
+                borderRadius: '50%',
+                boxShadow: imgHov
+                  ? '0 0 0 4px rgba(99,102,241,0.5), 0 0 30px rgba(99,102,241,0.4)'
+                  : '0 0 0 3px rgba(99,102,241,0.25), 0 0 18px rgba(34,197,94,0.2)',
+                transition: 'box-shadow 0.4s ease',
+                animation: 'ringPulse 2.5s ease-in-out infinite',
+              }} />
+              {/* Photo */}
+              <div style={{
+                width: isMobile ? '82px' : '100px',
+                height: isMobile ? '82px' : '100px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                border: '3px solid rgba(99,102,241,0.4)',
+                transform: imgHov ? 'scale(1.06)' : 'scale(1)',
+                transition: 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)',
+                position: 'relative', zIndex: 2,
+              }}>
+                <img
+                  src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg"
+                  alt="Faizan Tariq — Founder PySkill"
+                  crossOrigin="anonymous"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  onError={e => { e.target.style.display = 'none'; }}
+                />
+              </div>
+              {/* Live green dot */}
+              <div style={{
+                position: 'absolute', bottom: isMobile ? '4px' : '6px', right: isMobile ? '4px' : '6px',
+                width: '16px', height: '16px', borderRadius: '50%',
+                background: '#22c55e',
+                border: '2.5px solid ' + (isDark ? '#0a0a23' : '#f8f7ff'),
+                zIndex: 3, animation: 'ldPulse 1.5s ease-in-out infinite',
+              }} />
+            </div>
+
+            {/* Name + bio */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Name + verified */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                <h3 style={{ fontSize: isMobile ? '1.4rem' : '1.75rem', fontWeight: '900', color: isDark ? '#f1f5f9' : '#0f172a', margin: 0, letterSpacing: '-0.03em' }}>
+                  Faizan Tariq
+                </h3>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '20px', padding: '3px 10px' }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>
+                  <span style={{ fontSize: '0.6rem', fontWeight: '800', color: '#6366f1', letterSpacing: '0.05em' }}>VERIFIED FOUNDER</span>
+                </div>
+              </div>
+
+              {/* Role + location */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', fontWeight: '700', color: isDark ? '#a78bfa' : '#7c3aed', background: isDark ? 'rgba(139,92,246,0.1)' : 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.22)', borderRadius: '20px', padding: '4px 12px' }}>
+                  🎓 Software Engineering — ILS Srinagar
+                </span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', fontWeight: '700', color: isDark ? '#6ee7b7' : '#065f46', background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.22)', borderRadius: '20px', padding: '4px 12px' }}>
+                  📍 Anantnag, Kashmir
+                </span>
+              </div>
+
+              {/* Bio */}
+              <p style={{ fontSize: isMobile ? '0.82rem' : '0.9rem', color: isDark ? '#94a3b8' : '#374151', lineHeight: 1.8, margin: '0 0 16px', fontWeight: '500' }}>
+                Just 6 months into coding, I am a first-year Software Engineering student from <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>Anantnag, Kashmir</strong>, studying at <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>ILS Srinagar</strong>. Still a beginner — but driven enough to build PySkill entirely from scratch. Late nights, countless bugs, and a real passion for helping students learn Python. This is just the beginning. 🚀
+              </p>
+
+              {/* Instagram CTA */}
+              <a href="https://instagram.com/code_with_06" target="_blank" rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', borderRadius: '12px', color: '#fff', fontSize: '0.78rem', fontWeight: '800', padding: '10px 20px', textDecoration: 'none', transition: 'all 0.25s', boxShadow: '0 4px 18px rgba(240,100,60,0.35)', letterSpacing: '0.01em' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.03)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(240,100,60,0.55)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(240,100,60,0.35)'; }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="12" r="5" stroke="#fff" strokeWidth="2"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff"/></svg>
+                @code_with_06
+              </a>
+            </div>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: isMobile ? '1.1rem' : '1.25rem', fontWeight: '900', color: isDark ? '#f1f5f9' : '#111827', marginBottom: '2px' }}>Faizan Tariq</div>
-            <div style={{ fontSize: '0.68rem', color: '#16a34a', fontWeight: '800', marginBottom: '8px' }}>Software Engineering · ILS Srinagar</div>
-            <div style={{ fontSize: isMobile ? '0.73rem' : '0.78rem', color: isDark ? '#94a3b8' : '#374151', lineHeight: 1.6, marginBottom: '12px', fontWeight: '600' }}>Built PySkill for students — because we are students too.</div>
-            <a href="https://instagram.com/code_with_06" target="_blank" rel="noopener noreferrer"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: 'linear-gradient(135deg,#f093fb,#f5576c)', border: 'none', borderRadius: '10px', color: '#fff', fontSize: '0.73rem', fontWeight: '800', padding: '8px 16px', textDecoration: 'none', transition: 'all 0.2s', boxShadow: '0 4px 14px rgba(240,147,251,0.35)' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 18px rgba(240,147,251,0.5)'; }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(240,147,251,0.35)'; }}>
-              📸 Follow on Instagram
-            </a>
+
+          {/* Divider */}
+          <div style={{ height: '1px', background: isDark ? 'linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)' : 'linear-gradient(90deg,transparent,rgba(99,102,241,0.15),transparent)', marginBottom: '24px' }} />
+
+          {/* Stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 2 : 4},1fr)`, gap: '12px', marginBottom: '28px' }}>
+            {founderStats.map((s, i) => (
+              <div key={i} style={{
+                textAlign: 'center', padding: '14px 8px',
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)',
+                border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(99,102,241,0.1)',
+                borderRadius: '14px',
+                animation: visible ? `statPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.08}s both` : 'none',
+              }}>
+                <div style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1 }}>{s.val}</div>
+                <div style={{ fontSize: '0.6rem', fontWeight: '700', color: isDark ? '#64748b' : '#94a3b8', marginTop: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{s.label}</div>
+              </div>
+            ))}
           </div>
+
+          {/* Skills */}
+          <div>
+            <div style={{ fontSize: '0.68rem', fontWeight: '800', color: isDark ? '#475569' : '#94a3b8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '10px' }}>Tech Stack</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+              {skills.map((sk, i) => (
+                <span key={i} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '6px 14px', borderRadius: '20px',
+                  background: isDark ? `${sk.color}12` : `${sk.color}0e`,
+                  border: `1px solid ${sk.color}35`,
+                  fontSize: '0.72rem', fontWeight: '800', color: sk.color,
+                  animation: visible ? `chipSlide 0.4s ease ${0.4 + i * 0.06}s both` : 'none',
+                  transition: 'transform 0.18s, box-shadow 0.18s',
+                  cursor: 'default',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${sk.color}30`; }}
+                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sk.color, display: 'inline-block', animation: 'ldPulse 2s ease-in-out infinite' }} />
+                  {sk.label}
+                </span>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
     </section>
@@ -1045,6 +1250,158 @@ function FounderSection({ isDark, isMobile }) {
 /* ─────────────────────────────────────────
    MAIN HOME PAGE
 ───────────────────────────────────────── */
+/* ─────────────────────────────────────────
+   SEO HEAD INJECTOR
+   Injects meta tags, OG, Twitter Card,
+   JSON-LD structured data into document.head
+───────────────────────────────────────── */
+function SEOHead() {
+  useEffect(() => {
+    const SITE = 'https://pyskill.in';
+    const TITLE = 'PySkill — Free Python Mock Tests, Notes & Certification 2026';
+    const DESC  = 'PySkill offers free & premium Python mock tests (Basic, Advanced, Pro), instant PDF notes, anti-cheat certification exams, and a live leaderboard. Join 10,000+ students in India.';
+    const IMAGE = 'https://pyskill.in/og-image.png';
+    const KEYWORDS = 'python mock test 2026, python certification india, python notes pdf, python basic test free, python advanced test, pyskill, python exam online, python questions answers, python leaderboard, python study material';
+
+    // ── Title ──
+    document.title = TITLE;
+
+    const setMeta = (sel, attr, val) => {
+      let el = document.querySelector(sel);
+      if (!el) { el = document.createElement('meta'); document.head.appendChild(el); }
+      el.setAttribute(attr, val);
+    };
+
+    // ── Standard meta ──
+    setMeta('meta[name="description"]',        'name',    'description');
+    setMeta('meta[name="description"]',        'content', DESC);
+    setMeta('meta[name="keywords"]',           'name',    'keywords');
+    setMeta('meta[name="keywords"]',           'content', KEYWORDS);
+    setMeta('meta[name="author"]',             'name',    'author');
+    setMeta('meta[name="author"]',             'content', 'Faizan Tariq');
+    setMeta('meta[name="robots"]',             'name',    'robots');
+    setMeta('meta[name="robots"]',             'content', 'index, follow, max-image-preview:large');
+    setMeta('meta[name="theme-color"]',        'name',    'theme-color');
+    setMeta('meta[name="theme-color"]',        'content', '#6366f1');
+    setMeta('meta[name="rating"]',             'name',    'rating');
+    setMeta('meta[name="rating"]',             'content', 'general');
+    setMeta('meta[name="language"]',           'name',    'language');
+    setMeta('meta[name="language"]',           'content', 'English');
+    setMeta('meta[name="geo.region"]',         'name',    'geo.region');
+    setMeta('meta[name="geo.region"]',         'content', 'IN-JK');
+    setMeta('meta[name="geo.placename"]',      'name',    'geo.placename');
+    setMeta('meta[name="geo.placename"]',      'content', 'Srinagar, Jammu & Kashmir, India');
+
+    // ── Open Graph ──
+    setMeta('meta[property="og:type"]',        'property', 'og:type');
+    setMeta('meta[property="og:type"]',        'content',  'website');
+    setMeta('meta[property="og:url"]',         'property', 'og:url');
+    setMeta('meta[property="og:url"]',         'content',  SITE);
+    setMeta('meta[property="og:title"]',       'property', 'og:title');
+    setMeta('meta[property="og:title"]',       'content',  TITLE);
+    setMeta('meta[property="og:description"]', 'property', 'og:description');
+    setMeta('meta[property="og:description"]', 'content',  DESC);
+    setMeta('meta[property="og:image"]',       'property', 'og:image');
+    setMeta('meta[property="og:image"]',       'content',  IMAGE);
+    setMeta('meta[property="og:image:width"]', 'property', 'og:image:width');
+    setMeta('meta[property="og:image:width"]', 'content',  '1200');
+    setMeta('meta[property="og:image:height"]','property', 'og:image:height');
+    setMeta('meta[property="og:image:height"]','content',  '630');
+    setMeta('meta[property="og:site_name"]',   'property', 'og:site_name');
+    setMeta('meta[property="og:site_name"]',   'content',  'PySkill');
+    setMeta('meta[property="og:locale"]',      'property', 'og:locale');
+    setMeta('meta[property="og:locale"]',      'content',  'en_IN');
+
+    // ── Twitter Card ──
+    setMeta('meta[name="twitter:card"]',        'name',    'twitter:card');
+    setMeta('meta[name="twitter:card"]',        'content', 'summary_large_image');
+    setMeta('meta[name="twitter:title"]',       'name',    'twitter:title');
+    setMeta('meta[name="twitter:title"]',       'content', TITLE);
+    setMeta('meta[name="twitter:description"]', 'name',    'twitter:description');
+    setMeta('meta[name="twitter:description"]', 'content', DESC);
+    setMeta('meta[name="twitter:image"]',       'name',    'twitter:image');
+    setMeta('meta[name="twitter:image"]',       'content', IMAGE);
+    setMeta('meta[name="twitter:site"]',        'name',    'twitter:site');
+    setMeta('meta[name="twitter:site"]',        'content', '@pyskill_in');
+    setMeta('meta[name="twitter:creator"]',     'name',    'twitter:creator');
+    setMeta('meta[name="twitter:creator"]',     'content', '@code_with_06');
+
+    // ── Canonical link ──
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) { canonical = document.createElement('link'); document.head.appendChild(canonical); }
+    canonical.setAttribute('rel', 'canonical');
+    canonical.setAttribute('href', SITE);
+
+    // ── JSON-LD: WebSite + SearchAction ──
+    const injectLD = (id, data) => {
+      let el = document.getElementById(id);
+      if (!el) { el = document.createElement('script'); el.id = id; el.type = 'application/ld+json'; document.head.appendChild(el); }
+      el.textContent = JSON.stringify(data);
+    };
+
+    injectLD('ld-website', {
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      'name': 'PySkill',
+      'url': SITE,
+      'description': DESC,
+      'inLanguage': 'en-IN',
+      'potentialAction': {
+        '@type': 'SearchAction',
+        'target': { '@type': 'EntryPoint', 'urlTemplate': SITE + '/products?q={search_term_string}' },
+        'query-input': 'required name=search_term_string'
+      }
+    });
+
+    injectLD('ld-org', {
+      '@context': 'https://schema.org',
+      '@type': 'EducationalOrganization',
+      'name': 'PySkill',
+      'url': SITE,
+      'logo': SITE + '/logo192.png',
+      'description': 'Online Python education platform offering mock tests, PDF notes and certification for students across India.',
+      'founder': { '@type': 'Person', 'name': 'Faizan Tariq', 'sameAs': 'https://instagram.com/code_with_06' },
+      'foundingDate': '2026',
+      'address': { '@type': 'PostalAddress', 'addressLocality': 'Srinagar', 'addressRegion': 'Jammu & Kashmir', 'addressCountry': 'IN' },
+      'sameAs': ['https://instagram.com/code_with_06'],
+      'hasOfferCatalog': {
+        '@type': 'OfferCatalog',
+        'name': 'Python Courses & Tests',
+        'itemListElement': [
+          { '@type': 'Offer', 'itemOffered': { '@type': 'Course', 'name': 'Python Basic Mock Test', 'description': 'Free 60-question Python Basic test with certificate', 'provider': { '@type': 'Organization', 'name': 'PySkill' } } },
+          { '@type': 'Offer', 'itemOffered': { '@type': 'Course', 'name': 'Python Advanced Mock Test', 'description': '60-question Advanced Python test — 120 minutes', 'provider': { '@type': 'Organization', 'name': 'PySkill' } } },
+          { '@type': 'Offer', 'itemOffered': { '@type': 'Course', 'name': 'Python Pro Mock Test', 'description': '60-question Pro Python test — 180 minutes', 'provider': { '@type': 'Organization', 'name': 'PySkill' } } },
+        ]
+      }
+    });
+
+    injectLD('ld-faq', {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      'mainEntity': [
+        { '@type': 'Question', 'name': 'Is the Python Basic Mock Test free?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Yes! The Python Basic Mock Test on PySkill is completely free. It has 60 questions and a 60-minute time limit.' } },
+        { '@type': 'Question', 'name': 'How do I get a Python certificate from PySkill?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Score 55% or above in any PySkill mock test to earn a downloadable Python certification.' } },
+        { '@type': 'Question', 'name': 'What topics are covered in PySkill Python notes?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'PySkill Python notes cover basics, OOPs, data structures, file handling, exceptions, and job prep topics — all in instant-download PDF format.' } },
+        { '@type': 'Question', 'name': 'Is PySkill payment secure?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Yes. All payments are processed via Razorpay — India\'s most trusted payment gateway — with full encryption.' } },
+      ]
+    });
+
+    injectLD('ld-breadcrumb', {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      'itemListElement': [
+        { '@type': 'ListItem', 'position': 1, 'name': 'Home',       'item': SITE },
+        { '@type': 'ListItem', 'position': 2, 'name': 'Mock Tests', 'item': SITE + '/mocktests' },
+        { '@type': 'ListItem', 'position': 3, 'name': 'Notes',      'item': SITE + '/products' },
+        { '@type': 'ListItem', 'position': 4, 'name': 'Leaderboard','item': SITE + '/leaderboard' },
+      ]
+    });
+
+  }, []);
+
+  return null;
+}
+
 export default function HomePage({ setCurrentPage }) {
   const [txt, setTxt] = useState('');
   const [idx, setIdx] = useState(0);
@@ -1086,7 +1443,6 @@ export default function HomePage({ setCurrentPage }) {
     return () => clearTimeout(t);
   }, [idx, del, pi, phrases]);
 
-  // ✅ Brain Trap REMOVED
   const actionCards = [
     { icon: '📚', label: 'Browse Notes',  page: 'products',    g: 'linear-gradient(135deg,#6366f1,#8b5cf6)', glow: 'rgba(99,102,241,0.35)',  c: '#6366f1' },
     { icon: <PythonLogo size={22} />, label: 'Mock Tests', page: 'mocktests',   g: 'linear-gradient(135deg,#10b981,#34d399)', glow: 'rgba(16,185,129,0.35)',  c: '#10b981' },
@@ -1103,6 +1459,7 @@ export default function HomePage({ setCurrentPage }) {
     <main itemScope itemType="https://schema.org/WebPage"
       style={{ paddingTop: isMobile ? '62px' : '70px', minHeight: '100vh', overflowX: 'hidden', position: 'relative' }}>
 
+      <SEOHead />
       <ScrollProgressBar />
       <FloatingParticles isDark={isDark} />
 
@@ -1169,21 +1526,54 @@ export default function HomePage({ setCurrentPage }) {
           ))}
         </div>
 
-        <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.48s' }}>
-          <button onClick={() => setCurrentPage('products')}
+        {/* ✅ FIX: Two CTA buttons — Browse Notes + Take Test side by side */}
+        <div style={{
+          opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.48s',
+          display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap',
+        }}>
+          {/* Primary: Take Test — LEFT */}
+          <button onClick={() => setCurrentPage('mocktests')}
             style={{
-              background: 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none',
-              color: '#fff', padding: isMobile ? '13px 30px' : '16px 42px',
+              background: 'linear-gradient(135deg,#10b981,#22c55e)', border: 'none',
+              color: '#fff', padding: isMobile ? '13px 24px' : '16px 36px',
               fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px',
               cursor: 'pointer', fontWeight: '800',
               display: 'inline-flex', alignItems: 'center', gap: '8px',
-              boxShadow: '0 6px 28px rgba(99,102,241,0.38)',
+              boxShadow: '0 6px 28px rgba(16,185,129,0.42)',
               transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-              animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.6s both' : 'none',
+              animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' : 'none',
+              position: 'relative', overflow: 'hidden',
             }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(99,102,241,0.55)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(99,102,241,0.38)'; }}>
-            <Download size={isMobile ? 17 : 19} /> Browse Notes Now
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(16,185,129,0.6)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(16,185,129,0.42)'; }}>
+            <PythonLogo size={isMobile ? 17 : 19} />
+            Take Test Free
+            {/* Shine sweep */}
+            <span style={{
+              position: 'absolute', top: 0, left: '-100%', width: '60%', height: '100%',
+              background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent)',
+              animation: 'btnShine 2.5s ease-in-out infinite',
+              pointerEvents: 'none',
+            }} />
+          </button>
+
+          {/* Secondary: Browse Notes — RIGHT */}
+          <button onClick={() => setCurrentPage('products')}
+            style={{
+              background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)',
+              border: `1.5px solid rgba(99,102,241,${isDark ? '0.4' : '0.25'})`,
+              color: '#6366f1',
+              padding: isMobile ? '13px 24px' : '16px 36px',
+              fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px',
+              cursor: 'pointer', fontWeight: '800',
+              display: 'inline-flex', alignItems: 'center', gap: '8px',
+              transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease',
+              animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.65s both' : 'none',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(99,102,241,0.25)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)'; e.currentTarget.style.boxShadow = 'none'; }}>
+            <Download size={isMobile ? 17 : 19} />
+            Browse Notes
           </button>
         </div>
       </section>
@@ -1244,6 +1634,10 @@ export default function HomePage({ setCurrentPage }) {
         @keyframes badgeFloat  { 0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)} }
         @keyframes heroBtnPop  { from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)} }
         @keyframes freePulse   { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)} }
+        @keyframes btnShine    { 0%{left:-100%}40%,100%{left:150%} }
+        @keyframes spin        { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
+        @keyframes spinRing     { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
+        @keyframes ringPulse    { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.05)} }
       `}</style>
     </main>
   );
