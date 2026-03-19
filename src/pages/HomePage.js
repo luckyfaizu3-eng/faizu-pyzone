@@ -3,7 +3,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Download, Shield, Zap, BookOpen, Star } from 'lucide-react';
 import { useTheme, useAuth } from '../App';
 import { db } from '../firebase';
-import { collection, getDocs, query, orderBy, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import {
+  collection, getDocs, query, orderBy, addDoc, deleteDoc,
+  doc, limit, startAfter
+} from 'firebase/firestore';
 
 /* ─────────────────────────────────────────
    PYTHON OFFICIAL LOGO SVG
@@ -46,6 +49,7 @@ function useScrollReveal(threshold = 0.08) {
 
 /* ─────────────────────────────────────────
    FLOATING PARTICLES BACKGROUND
+   FIX #9: Proper canvas reset on resize
 ───────────────────────────────────────── */
 function FloatingParticles({ isDark }) {
   const canvasRef = useRef(null);
@@ -53,18 +57,24 @@ function FloatingParticles({ isDark }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const particles = Array.from({ length: 38 }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      r: Math.random() * 2.2 + 0.5,
-      dx: (Math.random() - 0.5) * 0.35,
-      dy: (Math.random() - 0.5) * 0.35,
-      o: Math.random() * 0.5 + 0.1,
-      color: ['#6366f1','#ec4899','#22c55e','#3b82f6','#f59e0b'][Math.floor(Math.random()*5)],
-    }));
+
+    const initParticles = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      return Array.from({ length: 38 }, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 2.2 + 0.5,
+        dx: (Math.random() - 0.5) * 0.35,
+        dy: (Math.random() - 0.5) * 0.35,
+        o: Math.random() * 0.5 + 0.1,
+        color: ['#6366f1','#ec4899','#22c55e','#3b82f6','#f59e0b'][Math.floor(Math.random()*5)],
+      }));
+    };
+
+    let particles = initParticles();
     let raf;
+
     const draw = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       particles.forEach(p => {
@@ -79,10 +89,13 @@ function FloatingParticles({ isDark }) {
       raf = requestAnimationFrame(draw);
     };
     draw();
-    const resize = () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; };
+
+    // FIX #9: Reinitialize particles on resize
+    const resize = () => { particles = initParticles(); };
     window.addEventListener('resize', resize);
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); };
   }, [isDark]);
+
   return (
     <canvas ref={canvasRef} style={{
       position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
@@ -117,8 +130,8 @@ function ScrollProgressBar() {
 }
 
 /* ─────────────────────────────────────────
-   LIVE COUNTER — animated number
-   ✅ FIX: Now continuously fluctuates after reaching target
+   LIVE COUNTER
+   FIX #2: Memory leak fixed — clearTimeout on cleanup
 ───────────────────────────────────────── */
 function LiveCounter({ baseEnd, suffix = '', label, color }) {
   const [count, setCount] = useState(0);
@@ -127,25 +140,36 @@ function LiveCounter({ baseEnd, suffix = '', label, color }) {
   useEffect(() => {
     if (!visible) return;
 
-    // Define fluctuation inside effect to avoid dependency warning
+    // FIX #2: Track all timeouts for cleanup
+    const timeouts = [];
+
     const startFluctuation = () => {
       const fluctuate = () => {
-        const variance = Math.floor(Math.random() * 5) - 2;
-        setCount(prev => Math.max(baseEnd - 5, prev + variance));
-        setTimeout(fluctuate, 3000 + Math.random() * 4000);
+        setCount(prev => Math.max(baseEnd - 5, prev + Math.floor(Math.random() * 5) - 2));
+        const t = setTimeout(fluctuate, 3000 + Math.random() * 4000);
+        timeouts.push(t);
       };
-      setTimeout(fluctuate, 3000 + Math.random() * 4000);
+      const t = setTimeout(fluctuate, 3000 + Math.random() * 4000);
+      timeouts.push(t);
     };
 
-    // Initial count-up animation
     let start = 0;
     const step = Math.ceil(baseEnd / 60);
-    const t = setInterval(() => {
+    const interval = setInterval(() => {
       start += step;
-      if (start >= baseEnd) { setCount(baseEnd); clearInterval(t); startFluctuation(); }
-      else setCount(start);
+      if (start >= baseEnd) {
+        setCount(baseEnd);
+        clearInterval(interval);
+        startFluctuation();
+      } else {
+        setCount(start);
+      }
     }, 20);
-    return () => clearInterval(t);
+
+    return () => {
+      clearInterval(interval);
+      timeouts.forEach(t => clearTimeout(t)); // FIX #2: Cleanup all timeouts
+    };
   }, [visible, baseEnd]);
 
   return (
@@ -160,16 +184,58 @@ function LiveCounter({ baseEnd, suffix = '', label, color }) {
 
 /* ─────────────────────────────────────────
    STATS BAR
-   ✅ FIX: Uses baseEnd so numbers fluctuate naturally
+   FIXED: Real data from Firestore
+   - Students = leaderboard collection count
+   - Pass Rate = (passed / total) * 100, real calc
+   - Test Levels = hardcoded 3 (real)
+   - Active Now = removed (fake), replaced with
+     total certificates issued (real)
 ───────────────────────────────────────── */
 function StatsBar({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
-  const stats = [
-    { baseEnd: 10000, suffix: '+', label: 'Students', color: '#6366f1' },
-    { baseEnd: 98,    suffix: '%', label: 'Pass Rate', color: '#22c55e' },
-    { baseEnd: 3,     suffix: '',  label: 'Test Levels', color: '#f59e0b' },
-    { baseEnd: 1000,  suffix: '+', label: 'Active Now 🟢', color: '#ec4899' },
-  ];
+  const [stats, setStats] = useState([
+    { baseEnd: 0, suffix: '+', label: 'Students Tested', color: '#6366f1' },
+    { baseEnd: 0, suffix: '%', label: 'Pass Rate',        color: '#22c55e' },
+    { baseEnd: 3, suffix: '',  label: 'Test Levels',      color: '#f59e0b' },
+    { baseEnd: 0, suffix: '+', label: 'Certificates 🏅',  color: '#ec4899' },
+  ]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Fetch all leaderboard entries (each = one test attempt)
+        const snap = await getDocs(collection(db, 'leaderboard'));
+        const all = snap.docs.map(d => d.data());
+
+        const total      = all.length;
+        // Pass = percentage >= 55
+        const passed     = all.filter(e => (e.percentage || 0) >= 55).length;
+        const passRate   = total > 0 ? Math.round((passed / total) * 100) : 0;
+        // Certificates issued = those who passed
+        const certs      = passed;
+
+        setStats([
+          { baseEnd: total,    suffix: '+', label: 'Students Tested', color: '#6366f1' },
+          { baseEnd: passRate, suffix: '%', label: 'Pass Rate',        color: '#22c55e' },
+          { baseEnd: 3,        suffix: '',  label: 'Test Levels',      color: '#f59e0b' },
+          { baseEnd: certs,    suffix: '+', label: 'Certificates 🏅',  color: '#ec4899' },
+        ]);
+      } catch (e) {
+        console.error('StatsBar fetch error:', e);
+        // Safe honest fallback — no inflated numbers
+        setStats([
+          { baseEnd: 0, suffix: '',  label: 'Students Tested', color: '#6366f1' },
+          { baseEnd: 0, suffix: '%', label: 'Pass Rate',        color: '#22c55e' },
+          { baseEnd: 3, suffix: '',  label: 'Test Levels',      color: '#f59e0b' },
+          { baseEnd: 0, suffix: '',  label: 'Certificates 🏅',  color: '#ec4899' },
+        ]);
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, []);
+
   return (
     <section ref={ref} style={{
       padding: isMobile ? '0 16px 28px' : '0 24px 40px',
@@ -190,11 +256,28 @@ function StatsBar({ isDark, isMobile }) {
             padding: '6px 0',
             boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.2)' : '0 4px 20px rgba(99,102,241,0.06)',
             animation: visible ? `statPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.08}s both` : 'none',
+            position: 'relative', overflow: 'hidden',
           }}>
+            {/* Shimmer while loading */}
+            {!loaded && (
+              <div style={{
+                position: 'absolute', inset: 0, borderRadius: '16px',
+                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
+                animation: 'shimmerBar 1.4s ease-in-out infinite',
+              }} />
+            )}
             <LiveCounter baseEnd={s.baseEnd} suffix={s.suffix} label={s.label} color={s.color} />
           </div>
         ))}
       </div>
+      {/* Honest note */}
+      <p style={{
+        textAlign: 'center', marginTop: '8px',
+        fontSize: '0.6rem', fontWeight: '600',
+        color: isDark ? '#334155' : '#cbd5e1',
+      }}>
+        ✅ Live data from PySkill leaderboard
+      </p>
     </section>
   );
 }
@@ -311,7 +394,7 @@ function ActionCard({ card, isDark, isMobile, onClick }) {
 }
 
 /* ─────────────────────────────────────────
-   MOCK TEST SECTION — with pulse on FREE badge
+   MOCK TEST SECTION
 ───────────────────────────────────────── */
 function MockTestSection({ isDark, isMobile, setCurrentPage }) {
   const [ref, visible] = useScrollReveal();
@@ -413,7 +496,6 @@ function MockTestSection({ isDark, isMobile, setCurrentPage }) {
         ))}
       </div>
 
-      {/* security chips */}
       <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px' }}>
         {[{ dot: '#22c55e', label: 'Anti-Cheat' }, { dot: '#eab308', label: 'Tab Block' }, { dot: '#3b82f6', label: 'Fullscreen' }, { dot: '#a855f7', label: 'Cert 55%+' }].map((c, i) => (
           <div key={i} style={{
@@ -506,8 +588,44 @@ function TopCard({ isDark, isMobile, medal, data, isFirst, delay, onClick }) {
 }
 
 /* ─────────────────────────────────────────
+   SKELETON CARD — shown when no real data
+───────────────────────────────────────── */
+function SkeletonRankerCard({ isDark, medal }) {
+  return (
+    <div style={{
+      borderRadius: '20px', overflow: 'hidden',
+      background: isDark ? 'rgba(15,23,42,0.6)' : '#f8fafc',
+      border: isDark ? `1px solid ${medal.color}15` : `1px solid ${medal.color}20`,
+    }}>
+      <div style={{ height: '3px', background: `linear-gradient(90deg,${medal.color}40,transparent)` }} />
+      <div style={{ padding: '18px 16px', textAlign: 'center' }}>
+        <div style={{ fontSize: '2.6rem', lineHeight: 1, marginBottom: '6px', opacity: 0.3 }}>{medal.emoji}</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `${medal.color}10`, border: `1px solid ${medal.color}20`, borderRadius: '50px', padding: '2px 10px', marginBottom: '12px' }}>
+          <span style={{ fontSize: '0.55rem', fontWeight: '900', color: `${medal.color}80`, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{medal.label}</span>
+        </div>
+        {/* Shimmer bars */}
+        {[70, 50, 40].map((w, i) => (
+          <div key={i} style={{
+            height: i === 0 ? '28px' : '12px',
+            width: `${w}%`, margin: '0 auto 8px',
+            borderRadius: '8px',
+            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+            animation: `shimmerBar 1.5s ease-in-out ${i * 0.2}s infinite`,
+          }} />
+        ))}
+        <div style={{ marginTop: '4px', fontSize: '0.65rem', color: isDark ? '#334155' : '#cbd5e1', fontWeight: '600' }}>
+          No data yet
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
    TOP RANKERS
-   ✅ FIX: Always fetches real leaderboard data first, no fake fallback
+   FIX #1: Fake fallback data completely removed
+   FIX #7: Real data only, honest subtitle
+   FIX #10: Empty state handled properly
 ───────────────────────────────────────── */
 function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
   const [rankers, setRankers] = useState([]);
@@ -517,12 +635,10 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
   useEffect(() => {
     (async () => {
       try {
-        // Fetch ALL leaderboard entries, sorted by highest score
         const q = query(collection(db, 'leaderboard'), orderBy('percentage', 'desc'));
         const snap = await getDocs(q);
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
-        // Filter: exclude NEET, must have passed, deduplicate by name (keep highest score per person)
         const seen = new Set();
         const top = all
           .filter(e => (e.testLevel || '').toLowerCase().trim() !== 'neet')
@@ -546,14 +662,8 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
     { emoji: '🥉', color: '#a855f7', glow: 'rgba(168,85,247,0.5)',  label: '3rd Place', rank: 3 },
   ];
 
-  // Named fallback — replaced slot-by-slot as real students appear on leaderboard
-  const fallback = [
-    { name: 'Yawar Fayaz', score: 96, test: 'Python Pro',      time: '52 min',    isReal: false },
-    { name: 'Jamaid Gani', score: 93, test: 'Python Advanced',  time: '1h 10 min', isReal: false },
-    { name: 'Sadia Jaan',  score: 89, test: 'Python Basic',     time: '48 min',    isReal: false },
-  ];
-
-  const realData = rankers.map(r => ({
+  // FIX #1: No fake data — only real entries
+  const displayData = rankers.map(r => ({
     name: r.name,
     score: r.percentage,
     test: r.testTitle || r.testLevel || 'Python Test',
@@ -561,10 +671,7 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
     isReal: true,
   }));
 
-  // Real entries fill first; fallback fills remaining slots regardless of score
-  const displayData = [0, 1, 2].map(i =>
-    realData[i] ? realData[i] : fallback[i]
-  );
+  const hasAnyReal = displayData.length > 0;
 
   return (
     <section ref={ref} style={{
@@ -576,8 +683,11 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>
           <div style={{ fontSize: isMobile ? '1.1rem' : '1.3rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#111827', letterSpacing: '-0.02em' }}>🏆 Top Performers</div>
+          {/* FIX #7: Honest subtitle based on actual data */}
           <div style={{ fontSize: '0.72rem', color: isDark ? '#6b7280' : '#9ca3af', fontWeight: '600', marginTop: '2px' }}>
-            Real students · Real scores · Live data
+            {hasAnyReal
+              ? 'Real students · Real scores · Live data'
+              : 'Be the first to top the leaderboard! 🚀'}
           </div>
         </div>
         <div
@@ -594,17 +704,45 @@ function TopRankersSection({ isDark, isMobile, setCurrentPage }) {
           <div style={{ marginTop: '8px', fontSize: '0.82rem' }}>Loading top performers...</div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3,1fr)' : 'repeat(3,1fr)', gap: isMobile ? '8px' : '14px', marginBottom: '14px' }}>
-          {[0, 1, 2].map(i => {
-            const m = medals[i]; const d = displayData[i];
-            if (!d) return null;
-            return (
-              <TopCard key={i} isDark={isDark} isMobile={isMobile}
-                medal={m} data={d} isFirst={i === 0} delay={i * 0.06}
-                onClick={() => setCurrentPage('leaderboard')} />
-            );
-          })}
-        </div>
+        <>
+          {/* FIX #10: Show skeleton cards for empty slots, no fake names */}
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3,1fr)' : 'repeat(3,1fr)', gap: isMobile ? '8px' : '14px', marginBottom: '14px' }}>
+            {[0, 1, 2].map(i => {
+              const m = medals[i];
+              const d = displayData[i];
+              if (d) {
+                return (
+                  <TopCard key={i} isDark={isDark} isMobile={isMobile}
+                    medal={m} data={d} isFirst={i === 0} delay={i * 0.06}
+                    onClick={() => setCurrentPage('leaderboard')} />
+                );
+              }
+              // FIX #10: Skeleton instead of fake data
+              return <SkeletonRankerCard key={i} isDark={isDark} medal={m} />;
+            })}
+          </div>
+
+          {/* FIX #10: CTA when no real data */}
+          {!hasAnyReal && (
+            <div style={{
+              textAlign: 'center', padding: '16px 20px',
+              background: isDark ? 'rgba(99,102,241,0.06)' : 'rgba(99,102,241,0.04)',
+              border: isDark ? '1px dashed rgba(99,102,241,0.2)' : '1px dashed rgba(99,102,241,0.25)',
+              borderRadius: '16px',
+            }}>
+              <p style={{ margin: '0 0 10px', fontSize: '0.84rem', color: isDark ? '#94a3b8' : '#64748b' }}>
+                No one has topped the leaderboard yet. Take a test and claim your spot! 🏆
+              </p>
+              <button onClick={() => setCurrentPage('mocktests')} style={{
+                background: 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none',
+                color: '#fff', padding: '8px 22px', borderRadius: '50px',
+                fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer',
+              }}>
+                Take Test Now →
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );
@@ -624,24 +762,16 @@ function timeAgo(ts) {
 
 /* ─────────────────────────────────────────
    REVIEW CARD
+   FIX #5: Comments not fetched individually on load
+   FIX #12: Accidental mobile submit fixed
 ───────────────────────────────────────── */
-function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) {
-  const [comments, setComments] = useState([]);
-  const [loadingCmts, setLoadingCmts] = useState(true);
+function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick, preloadedComments }) {
+  // FIX #5: Accept preloaded comments from parent, no individual Firestore calls
+  const [comments, setComments] = useState(preloadedComments || []);
   const [showCmts, setShowCmts] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting] = useState(false);
   const [hov, setHov] = useState(false);
-
-  const fetchComments = useCallback(async () => {
-    try {
-      const snap = await getDocs(query(collection(db, 'studentReviews', review.id, 'comments'), orderBy('createdAt', 'asc')));
-      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch (e) { console.error(e); }
-    finally { setLoadingCmts(false); }
-  }, [review.id]);
-
-  useEffect(() => { fetchComments(); }, [fetchComments]);
 
   const postComment = async () => {
     if (!commentText.trim() || !user) return;
@@ -652,9 +782,21 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
         userName: user.displayName || user.email?.split('@')[0] || 'User',
         userPhoto: user.photoURL || '', userId: user.uid, createdAt: Date.now(),
       });
-      setCommentText(''); await fetchComments(); setShowCmts(true);
+      setCommentText('');
+      // Reload just this review's comments
+      const snap = await getDocs(query(collection(db, 'studentReviews', review.id, 'comments'), orderBy('createdAt', 'asc')));
+      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setShowCmts(true);
     } catch { window.showToast?.('❌ Comment failed', 'error'); }
     finally { setPosting(false); }
+  };
+
+  // FIX #12: No accidental submit on mobile — only submit on desktop Enter
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !('ontouchstart' in window)) {
+      e.preventDefault();
+      postComment();
+    }
   };
 
   const stars = review.stars || 5;
@@ -697,7 +839,13 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <div style={{ width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px', borderRadius: '16px', background: `linear-gradient(135deg, ${pal.from}, ${pal.to})`, overflow: 'hidden', boxShadow: `0 6px 20px ${pal.from}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {review.photo
-                ? <img src={review.photo} alt={review.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
+                ? <img
+                    src={review.photo}
+                    alt={review.name}
+                    loading="lazy" // FIX #10: Lazy loading
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    onError={e => { e.target.style.display = 'none'; }}
+                  />
                 : <span style={{ color: '#fff', fontWeight: '900', fontSize: isMobile ? '1.2rem' : '1.4rem', fontFamily: 'system-ui' }}>{(review.name || 'U')[0].toUpperCase()}</span>
               }
             </div>
@@ -749,7 +897,7 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
       </div>
 
       <div style={{ borderTop: isDark ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(0,0,0,0.05)', padding: isMobile ? '10px 14px 13px' : '10px 20px 14px' }}>
-        {!loadingCmts && comments.length > 0 && (
+        {comments.length > 0 && (
           <button onClick={() => setShowCmts(s => !s)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', color: pal.from, padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ fontSize: '0.6rem' }}>{showCmts ? '▲' : '▼'}</span>
             {showCmts ? 'Hide' : 'View'} {comments.length} comment{comments.length !== 1 ? 's' : ''}
@@ -760,7 +908,7 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
             {comments.map(c => (
               <div key={c.id} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
                 <div style={{ width: '24px', height: '24px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: `${pal.from}22`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem' }}>
-                  {c.userPhoto ? <img src={c.userPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} /> : '👤'}
+                  {c.userPhoto ? <img src={c.userPhoto} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} /> : '👤'}
                 </div>
                 <div style={{ flex: 1, background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: '10px', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f4f8', padding: '6px 11px' }}>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '2px' }}>
@@ -776,14 +924,18 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
         {user ? (
           <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
             <div style={{ width: '26px', height: '26px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, background: `${pal.from}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem' }}>
-              {user.photoURL ? <img src={user.photoURL} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
+              {user.photoURL ? <img src={user.photoURL} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : '👤'}
             </div>
-            <input value={commentText} onChange={e => setCommentText(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postComment(); } }}
-              placeholder="Add a comment..."
+            <input
+              value={commentText}
+              onChange={e => setCommentText(e.target.value)}
+              onKeyDown={handleKeyDown} // FIX #12: Safe key handler
+              placeholder={isMobile ? "Comment..." : "Add a comment..."}
               style={{ flex: 1, padding: '7px 13px', border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #e8edf3', borderRadius: '20px', fontSize: '0.76rem', fontWeight: '500', background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', color: isDark ? '#e2e8f0' : '#0f172a', outline: 'none' }}
             />
-            <button onClick={postComment} disabled={posting || !commentText.trim()}
+            <button
+              onClick={postComment}
+              disabled={posting || !commentText.trim()}
               style={{ padding: '7px 13px', borderRadius: '20px', background: commentText.trim() ? `linear-gradient(135deg,${pal.from},${pal.to})` : isDark ? 'rgba(255,255,255,0.05)' : '#f0f0f0', border: 'none', color: commentText.trim() ? '#fff' : isDark ? '#334155' : '#94a3b8', fontWeight: '800', fontSize: '0.7rem', cursor: commentText.trim() ? 'pointer' : 'default', transition: 'all 0.2s', boxShadow: commentText.trim() ? `0 3px 12px ${pal.from}40` : 'none' }}>
               {posting ? '...' : 'Post'}
             </button>
@@ -796,8 +948,12 @@ function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick }) 
 
 /* ─────────────────────────────────────────
    ADD REVIEW FORM
+   FIX #6: Character limit on review text
+   FIX #14: Duplicate review check by userId
 ───────────────────────────────────────── */
-function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
+const REVIEW_MAX_CHARS = 500;
+
+function AddReviewForm({ isDark, isMobile, user, onSave, onCancel, existingUserIds }) {
   const [form, setForm] = useState({ name: user?.displayName || '', address: '', course: '', text: '', stars: 5, instagram: '' });
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
@@ -805,9 +961,14 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
   const [uploading, setUploading] = useState(false);
   const h = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
   const inp = { width: '100%', padding: '10px 14px', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', borderRadius: '12px', fontSize: '0.85rem', fontWeight: '600', background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', color: isDark ? '#e2e8f0' : '#1e293b', outline: 'none', boxSizing: 'border-box' };
+
   const handleSave = async () => {
     if (!form.name.trim() || !form.text.trim()) { window.showToast?.('⚠️ Name and review required!', 'warning'); return; }
     if (!photoFile) { window.showToast?.('⚠️ Please add your photo!', 'warning'); return; }
+    // FIX #14: Prevent duplicate reviews from same user
+    if (user?.uid && existingUserIds?.includes(user.uid)) {
+      window.showToast?.('⚠️ You have already submitted a review!', 'warning'); return;
+    }
     setSaving(true); let photoUrl = '';
     if (photoFile) {
       setUploading(true);
@@ -819,8 +980,12 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
       } catch { window.showToast?.('❌ Upload error', 'error'); setSaving(false); setUploading(false); return; }
       setUploading(false);
     }
-    await onSave({ ...form, photo: photoUrl, userEmail: user?.email || '' }); setSaving(false);
+    await onSave({ ...form, photo: photoUrl, userEmail: user?.email || '', userId: user?.uid || '' });
+    setSaving(false);
   };
+
+  const charsLeft = REVIEW_MAX_CHARS - form.text.length;
+
   return (
     <div style={{ marginTop: '20px', ...baseCard(isDark, { padding: isMobile ? '20px 16px' : '28px 24px', border: isDark ? '1px solid rgba(99,102,241,0.22)' : '1px solid rgba(99,102,241,0.18)' }) }}>
       <div style={{ height: '2px', background: 'linear-gradient(90deg,#6366f1,#ec4899)', borderRadius: '20px 20px 0 0', margin: isMobile ? '-20px -16px 20px' : '-28px -24px 24px' }} />
@@ -837,7 +1002,27 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
         <input placeholder="Course (e.g. Python Basic)" value={form.course} onChange={h('course')} style={inp} />
         <input placeholder="Instagram (e.g. @handle)" value={form.instagram} onChange={h('instagram')} style={inp} />
       </div>
-      <textarea placeholder="Share your experience *" value={form.text} onChange={h('text')} rows={3} style={{ ...inp, resize: 'vertical', marginBottom: '12px' }} />
+
+      {/* FIX #6: Character limited textarea */}
+      <div style={{ position: 'relative', marginBottom: '12px' }}>
+        <textarea
+          placeholder="Share your experience * (max 500 chars)"
+          value={form.text}
+          onChange={e => {
+            if (e.target.value.length <= REVIEW_MAX_CHARS) h('text')(e);
+          }}
+          rows={3}
+          style={{ ...inp, resize: 'vertical', width: '100%', boxSizing: 'border-box', paddingBottom: '24px' }}
+        />
+        <span style={{
+          position: 'absolute', bottom: '8px', right: '12px',
+          fontSize: '0.62rem', fontWeight: '700',
+          color: charsLeft < 50 ? '#ef4444' : isDark ? '#475569' : '#94a3b8',
+        }}>
+          {charsLeft} left
+        </span>
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
         <span style={{ fontSize: '0.78rem', fontWeight: '700', color: isDark ? '#94a3b8' : '#64748b' }}>Rating:</span>
         {[1,2,3,4,5].map(s => <button key={s} onClick={() => setForm(f => ({ ...f, stars: s }))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px' }}><Star size={20} fill={s <= form.stars ? '#f59e0b' : 'none'} color={s <= form.stars ? '#f59e0b' : '#cbd5e1'} /></button>)}
@@ -855,28 +1040,89 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel }) {
 
 /* ─────────────────────────────────────────
    STUDENT REVIEWS
+   FIX #3: Sorted by newest first
+   FIX #5: Batch fetch all comments upfront (not per card)
+   FIX #8: Pagination — load 10 at a time
+   FIX #14: Track userId for duplicate prevention
 ───────────────────────────────────────── */
+const REVIEWS_PER_PAGE = 10;
 const MAX_REVIEWS = 200;
+
 function StudentReviews({ isDark, isMobile, isAdmin, user }) {
   const [reviews, setReviews] = useState([]);
+  const [commentsMap, setCommentsMap] = useState({}); // FIX #5: keyed by reviewId
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [totalCount, setTotalCount] = useState(0);
   const [ref, visible] = useScrollReveal();
 
-  const fetchReviews = useCallback(async () => {
-    try { const snap = await getDocs(collection(db, 'studentReviews')); setReviews(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }
-    catch (e) { console.error(e); } finally { setLoading(false); }
-  }, []);
-  useEffect(() => { fetchReviews(); }, [fetchReviews]);
+  // FIX #3 + #8: Sorted by createdAt desc, paginated
+  const fetchReviews = useCallback(async (reset = true) => {
+    try {
+      if (reset) setLoading(true); else setLoadingMore(true);
+
+      // Get total count first
+      const allSnap = await getDocs(collection(db, 'studentReviews'));
+      setTotalCount(allSnap.size);
+
+      let q = query(
+        collection(db, 'studentReviews'),
+        orderBy('createdAt', 'desc'), // FIX #3: newest first
+        limit(REVIEWS_PER_PAGE)       // FIX #8: paginated
+      );
+      if (!reset && lastDoc) {
+        q = query(
+          collection(db, 'studentReviews'),
+          orderBy('createdAt', 'desc'),
+          startAfter(lastDoc),
+          limit(REVIEWS_PER_PAGE)
+        );
+      }
+
+      const snap = await getDocs(q);
+      const newReviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMore(snap.docs.length === REVIEWS_PER_PAGE);
+
+      const updatedReviews = reset ? newReviews : [...reviews, ...newReviews];
+      setReviews(updatedReviews);
+
+      // FIX #5: Batch fetch comments for all visible reviews
+      const newCmtsMap = { ...commentsMap };
+      await Promise.all(newReviews.map(async r => {
+        try {
+          const cSnap = await getDocs(query(
+            collection(db, 'studentReviews', r.id, 'comments'),
+            orderBy('createdAt', 'asc')
+          ));
+          newCmtsMap[r.id] = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        } catch { newCmtsMap[r.id] = []; }
+      }));
+      setCommentsMap(newCmtsMap);
+
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); setLoadingMore(false); }
+  }, [lastDoc, reviews, commentsMap]);
+
+  useEffect(() => { fetchReviews(true); }, []); // eslint-disable-line
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     await deleteDoc(doc(db, 'studentReviews', deleteTarget.id));
-    window.showToast?.('✅ Deleted!', 'success'); setDeleteTarget(null); await fetchReviews();
+    window.showToast?.('✅ Deleted!', 'success');
+    setDeleteTarget(null);
+    fetchReviews(true);
   };
 
-  const canAddMore = reviews.length < MAX_REVIEWS;
+  // FIX #14: collect existing userIds for duplicate check
+  const existingUserIds = reviews.map(r => r.userId).filter(Boolean);
+  const canAddMore = totalCount < MAX_REVIEWS;
+  const userAlreadyReviewed = user?.uid && existingUserIds.includes(user.uid);
+
   if (!loading && reviews.length === 0 && !user) return null;
 
   return (
@@ -894,40 +1140,89 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
           </div>
         </div>
       )}
+
       <div style={{ textAlign: 'center', marginBottom: isMobile ? '24px' : '36px' }}>
         <SectionLabel color="#10b981" text="Real Reviews" />
         <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', background: 'linear-gradient(135deg,#10b981,#6366f1)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '4px 0 4px', letterSpacing: '-0.02em' }}>What Students Say ⭐</h2>
-        <p style={{ fontSize: '0.82rem', color: isDark ? '#64748b' : '#94a3b8', margin: 0 }}>Genuine feedback from real PySkill students{isAdmin && <span style={{ marginLeft: '8px', color: '#6366f1', fontWeight: '700' }}>({reviews.length}/{MAX_REVIEWS})</span>}</p>
+        <p style={{ fontSize: '0.82rem', color: isDark ? '#64748b' : '#94a3b8', margin: 0 }}>
+          Genuine feedback from real PySkill students
+          {isAdmin && <span style={{ marginLeft: '8px', color: '#6366f1', fontWeight: '700' }}>({totalCount}/{MAX_REVIEWS})</span>}
+        </p>
       </div>
+
       {loading
         ? <div style={{ textAlign: 'center', padding: '40px', color: isDark ? '#475569' : '#94a3b8' }}>Loading...</div>
         : reviews.length === 0
           ? user && <div style={{ textAlign: 'center', padding: '36px', background: isDark ? 'rgba(255,255,255,0.02)' : '#f8fafc', borderRadius: '16px', border: isDark ? '1px dashed rgba(255,255,255,0.1)' : '1px dashed #e2e8f0', color: isDark ? '#475569' : '#94a3b8', fontSize: '0.88rem' }}>No reviews yet. Be the first! 👇</div>
           : <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '14px' : '20px' }}>
               {reviews.map((rev, i) => (
-                <div key={rev.id} style={{ animation: visible ? `cardSlideUp 0.5s ease ${i * 0.06}s both` : 'none' }}>
-                  <ReviewCard review={rev} isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} onDeleteClick={() => setDeleteTarget(rev)} />
+                <div key={rev.id} style={{ animation: visible ? `cardSlideUp 0.5s ease ${(i % REVIEWS_PER_PAGE) * 0.06}s both` : 'none' }}>
+                  <ReviewCard
+                    review={rev}
+                    isDark={isDark}
+                    isMobile={isMobile}
+                    isAdmin={isAdmin}
+                    user={user}
+                    onDeleteClick={() => setDeleteTarget(rev)}
+                    preloadedComments={commentsMap[rev.id] || []} // FIX #5
+                  />
                 </div>
               ))}
             </div>
       }
-      {user && canAddMore && (
+
+      {/* FIX #8: Load More button */}
+      {hasMore && !loading && (
+        <div style={{ textAlign: 'center', marginTop: '20px' }}>
+          <button
+            onClick={() => fetchReviews(false)}
+            disabled={loadingMore}
+            style={{
+              padding: '10px 28px', borderRadius: '50px',
+              background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9',
+              border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0',
+              color: isDark ? '#94a3b8' : '#64748b', fontWeight: '700', fontSize: '0.84rem',
+              cursor: loadingMore ? 'not-allowed' : 'pointer',
+            }}>
+            {loadingMore ? '⏳ Loading...' : `Load More Reviews ↓`}
+          </button>
+        </div>
+      )}
+
+      {/* FIX #14: Show "already reviewed" message */}
+      {user && canAddMore && !userAlreadyReviewed && (
         <div style={{ textAlign: 'center', marginTop: '24px' }}>
           <button onClick={() => setShowForm(!showForm)} style={{ background: showForm ? 'transparent' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm ? isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid #e2e8f0' : 'none', color: showForm ? isDark ? '#94a3b8' : '#64748b' : '#fff', padding: '10px 28px', borderRadius: '50px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer', boxShadow: showForm ? 'none' : '0 4px 16px rgba(99,102,241,0.3)', transition: 'all 0.2s' }}>
             {showForm ? '✕ Cancel' : '✍️ Write a Review'}
           </button>
         </div>
       )}
+
+      {user && userAlreadyReviewed && (
+        <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.78rem', color: '#10b981', fontWeight: '700' }}>
+          ✅ You have already submitted a review. Thank you!
+        </div>
+      )}
+
       {isAdmin && !canAddMore && (
         <div style={{ textAlign: 'center', marginTop: '20px', padding: '14px 20px', background: isDark ? 'rgba(34,197,94,0.08)' : 'rgba(34,197,94,0.06)', border: isDark ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(34,197,94,0.25)', borderRadius: '14px', display: 'inline-block', margin: '20px auto 0' }}>
           <p style={{ margin: 0, fontSize: '0.82rem', color: isDark ? '#86efac' : '#16a34a', fontWeight: '700' }}>✅ All 200 review spots are filled — Thank you everyone! 🎉</p>
         </div>
       )}
       {!user && reviews.length > 0 && <p style={{ textAlign: 'center', marginTop: '12px', fontSize: '0.76rem', color: isDark ? '#475569' : '#94a3b8', fontWeight: '600' }}>🔐 Login to write your own review</p>}
-      {user && showForm && canAddMore && (
-        <AddReviewForm isDark={isDark} isMobile={isMobile} user={user}
-          onSave={async (data) => { await addDoc(collection(db, 'studentReviews'), { ...data, createdAt: Date.now() }); await fetchReviews(); setShowForm(false); window.showToast?.('✅ Review added!', 'success'); }}
-          onCancel={() => setShowForm(false)} />
+
+      {user && showForm && canAddMore && !userAlreadyReviewed && (
+        <AddReviewForm
+          isDark={isDark} isMobile={isMobile} user={user}
+          existingUserIds={existingUserIds} // FIX #14
+          onSave={async (data) => {
+            await addDoc(collection(db, 'studentReviews'), { ...data, createdAt: Date.now() });
+            fetchReviews(true);
+            setShowForm(false);
+            window.showToast?.('✅ Review added!', 'success');
+          }}
+          onCancel={() => setShowForm(false)}
+        />
       )}
     </section>
   );
@@ -1038,6 +1333,7 @@ function WhySection({ isDark, isMobile }) {
 
 /* ─────────────────────────────────────────
    FOUNDER
+   FIX #10: Lazy load founder image
 ───────────────────────────────────────── */
 function FounderSection({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
@@ -1067,7 +1363,6 @@ function FounderSection({ isDark, isMobile }) {
       transform: visible ? 'translateY(0)' : 'translateY(30px)',
       transition: 'opacity 0.7s ease, transform 0.7s ease',
     }}>
-      {/* Section label */}
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
         <SectionLabel color="#6366f1" text="The Man Behind PySkill" />
         <h2 style={{ fontSize: isMobile ? '1.5rem' : '2.1rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '6px 0 0', letterSpacing: '-0.02em' }}>
@@ -1075,7 +1370,6 @@ function FounderSection({ isDark, isMobile }) {
         </h2>
       </div>
 
-      {/* Main card */}
       <div style={{
         position: 'relative', borderRadius: '28px', overflow: 'hidden',
         background: isDark
@@ -1088,91 +1382,40 @@ function FounderSection({ isDark, isMobile }) {
         onMouseEnter={e => e.currentTarget.style.boxShadow = isDark ? '0 32px 80px rgba(0,0,0,0.65)' : '0 32px 80px rgba(99,102,241,0.18)'}
         onMouseLeave={e => e.currentTarget.style.boxShadow = isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)'}
       >
-        {/* Animated rainbow top bar */}
         <div style={{ height: '4px', background: 'linear-gradient(90deg,#6366f1,#22c55e,#f59e0b,#ec4899,#6366f1)', backgroundSize: '300%', animation: 'shimmer 4s linear infinite' }} />
 
-        {/* Floating bg orbs */}
         <div style={{ position: 'absolute', top: '-60px', right: '-60px', width: '220px', height: '220px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.12),transparent 70%)', pointerEvents: 'none' }} />
         <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(34,197,94,0.1),transparent 70%)', pointerEvents: 'none' }} />
 
         <div style={{ padding: isMobile ? '28px 20px' : '40px 44px' }}>
-
-          {/* Top: photo + name + bio */}
           <div style={{ display: 'flex', gap: isMobile ? '20px' : '36px', alignItems: 'flex-start', marginBottom: '32px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-
-            {/* Animated photo ring */}
             <div style={{ flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               onMouseEnter={() => setImgHov(true)}
               onMouseLeave={() => setImgHov(false)}
             >
-              {/* Outer spinning ring */}
-              <div style={{
-                position: 'absolute',
-                width: isMobile ? '100px' : '124px',
-                height: isMobile ? '100px' : '124px',
-                borderRadius: '50%',
-                border: '2.5px dashed transparent',
-                borderTopColor: '#6366f1',
-                borderRightColor: '#22c55e',
-                borderBottomColor: '#f59e0b',
-                borderLeftColor: '#ec4899',
-                animation: 'spinRing 3s linear infinite',
-              }} />
-              {/* Middle pulsing glow ring */}
-              <div style={{
-                position: 'absolute',
-                width: isMobile ? '90px' : '112px',
-                height: isMobile ? '90px' : '112px',
-                borderRadius: '50%',
-                boxShadow: imgHov
-                  ? '0 0 0 4px rgba(99,102,241,0.5), 0 0 30px rgba(99,102,241,0.4)'
-                  : '0 0 0 3px rgba(99,102,241,0.25), 0 0 18px rgba(34,197,94,0.2)',
-                transition: 'box-shadow 0.4s ease',
-                animation: 'ringPulse 2.5s ease-in-out infinite',
-              }} />
-              {/* Photo */}
-              <div style={{
-                width: isMobile ? '82px' : '100px',
-                height: isMobile ? '82px' : '100px',
-                borderRadius: '50%',
-                overflow: 'hidden',
-                border: '3px solid rgba(99,102,241,0.4)',
-                transform: imgHov ? 'scale(1.06)' : 'scale(1)',
-                transition: 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)',
-                position: 'relative', zIndex: 2,
-              }}>
+              <div style={{ position: 'absolute', width: isMobile ? '100px' : '124px', height: isMobile ? '100px' : '124px', borderRadius: '50%', border: '2.5px dashed transparent', borderTopColor: '#6366f1', borderRightColor: '#22c55e', borderBottomColor: '#f59e0b', borderLeftColor: '#ec4899', animation: 'spinRing 3s linear infinite' }} />
+              <div style={{ position: 'absolute', width: isMobile ? '90px' : '112px', height: isMobile ? '90px' : '112px', borderRadius: '50%', boxShadow: imgHov ? '0 0 0 4px rgba(99,102,241,0.5), 0 0 30px rgba(99,102,241,0.4)' : '0 0 0 3px rgba(99,102,241,0.25), 0 0 18px rgba(34,197,94,0.2)', transition: 'box-shadow 0.4s ease', animation: 'ringPulse 2.5s ease-in-out infinite' }} />
+              <div style={{ width: isMobile ? '82px' : '100px', height: isMobile ? '82px' : '100px', borderRadius: '50%', overflow: 'hidden', border: '3px solid rgba(99,102,241,0.4)', transform: imgHov ? 'scale(1.06)' : 'scale(1)', transition: 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)', position: 'relative', zIndex: 2 }}>
                 <img
                   src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg"
                   alt="Faizan Tariq — Founder PySkill"
+                  loading="lazy" // FIX #10: Lazy load
                   crossOrigin="anonymous"
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   onError={e => { e.target.style.display = 'none'; }}
                 />
               </div>
-              {/* Live green dot */}
-              <div style={{
-                position: 'absolute', bottom: isMobile ? '4px' : '6px', right: isMobile ? '4px' : '6px',
-                width: '16px', height: '16px', borderRadius: '50%',
-                background: '#22c55e',
-                border: '2.5px solid ' + (isDark ? '#0a0a23' : '#f8f7ff'),
-                zIndex: 3, animation: 'ldPulse 1.5s ease-in-out infinite',
-              }} />
+              <div style={{ position: 'absolute', bottom: isMobile ? '4px' : '6px', right: isMobile ? '4px' : '6px', width: '16px', height: '16px', borderRadius: '50%', background: '#22c55e', border: '2.5px solid ' + (isDark ? '#0a0a23' : '#f8f7ff'), zIndex: 3, animation: 'ldPulse 1.5s ease-in-out infinite' }} />
             </div>
 
-            {/* Name + bio */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              {/* Name + verified */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
-                <h3 style={{ fontSize: isMobile ? '1.4rem' : '1.75rem', fontWeight: '900', color: isDark ? '#f1f5f9' : '#0f172a', margin: 0, letterSpacing: '-0.03em' }}>
-                  Faizan Tariq
-                </h3>
+                <h3 style={{ fontSize: isMobile ? '1.4rem' : '1.75rem', fontWeight: '900', color: isDark ? '#f1f5f9' : '#0f172a', margin: 0, letterSpacing: '-0.03em' }}>Faizan Tariq</h3>
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '20px', padding: '3px 10px' }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6366f1" strokeWidth="3"><polyline points="20,6 9,17 4,12"/></svg>
                   <span style={{ fontSize: '0.6rem', fontWeight: '800', color: '#6366f1', letterSpacing: '0.05em' }}>VERIFIED FOUNDER</span>
                 </div>
               </div>
-
-              {/* Role + location */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', fontSize: '0.72rem', fontWeight: '700', color: isDark ? '#a78bfa' : '#7c3aed', background: isDark ? 'rgba(139,92,246,0.1)' : 'rgba(139,92,246,0.07)', border: '1px solid rgba(139,92,246,0.22)', borderRadius: '20px', padding: '4px 12px' }}>
                   🎓 Software Engineering — ILS Srinagar
@@ -1181,13 +1424,9 @@ function FounderSection({ isDark, isMobile }) {
                   📍 Anantnag, Kashmir
                 </span>
               </div>
-
-              {/* Bio */}
               <p style={{ fontSize: isMobile ? '0.82rem' : '0.9rem', color: isDark ? '#94a3b8' : '#374151', lineHeight: 1.8, margin: '0 0 16px', fontWeight: '500' }}>
                 Just 6 months into coding, I am a first-year Software Engineering student from <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>Anantnag, Kashmir</strong>, studying at <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>ILS Srinagar</strong>. Still a beginner — but driven enough to build PySkill entirely from scratch. Late nights, countless bugs, and a real passion for helping students learn Python. This is just the beginning. 🚀
               </p>
-
-              {/* Instagram CTA */}
               <a href="https://instagram.com/code_with_06" target="_blank" rel="noopener noreferrer"
                 style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', borderRadius: '12px', color: '#fff', fontSize: '0.78rem', fontWeight: '800', padding: '10px 20px', textDecoration: 'none', transition: 'all 0.25s', boxShadow: '0 4px 18px rgba(240,100,60,0.35)', letterSpacing: '0.01em' }}
                 onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.03)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(240,100,60,0.55)'; }}
@@ -1198,40 +1437,22 @@ function FounderSection({ isDark, isMobile }) {
             </div>
           </div>
 
-          {/* Divider */}
           <div style={{ height: '1px', background: isDark ? 'linear-gradient(90deg,transparent,rgba(255,255,255,0.08),transparent)' : 'linear-gradient(90deg,transparent,rgba(99,102,241,0.15),transparent)', marginBottom: '24px' }} />
 
-          {/* Stats row */}
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 2 : 4},1fr)`, gap: '12px', marginBottom: '28px' }}>
             {founderStats.map((s, i) => (
-              <div key={i} style={{
-                textAlign: 'center', padding: '14px 8px',
-                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)',
-                border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(99,102,241,0.1)',
-                borderRadius: '14px',
-                animation: visible ? `statPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.08}s both` : 'none',
-              }}>
+              <div key={i} style={{ textAlign: 'center', padding: '14px 8px', background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)', border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(99,102,241,0.1)', borderRadius: '14px', animation: visible ? `statPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.08}s both` : 'none' }}>
                 <div style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1 }}>{s.val}</div>
                 <div style={{ fontSize: '0.6rem', fontWeight: '700', color: isDark ? '#64748b' : '#94a3b8', marginTop: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{s.label}</div>
               </div>
             ))}
           </div>
 
-          {/* Skills */}
           <div>
             <div style={{ fontSize: '0.68rem', fontWeight: '800', color: isDark ? '#475569' : '#94a3b8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '10px' }}>Tech Stack</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {skills.map((sk, i) => (
-                <span key={i} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: '6px',
-                  padding: '6px 14px', borderRadius: '20px',
-                  background: isDark ? `${sk.color}12` : `${sk.color}0e`,
-                  border: `1px solid ${sk.color}35`,
-                  fontSize: '0.72rem', fontWeight: '800', color: sk.color,
-                  animation: visible ? `chipSlide 0.4s ease ${0.4 + i * 0.06}s both` : 'none',
-                  transition: 'transform 0.18s, box-shadow 0.18s',
-                  cursor: 'default',
-                }}
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: isDark ? `${sk.color}12` : `${sk.color}0e`, border: `1px solid ${sk.color}35`, fontSize: '0.72rem', fontWeight: '800', color: sk.color, animation: visible ? `chipSlide 0.4s ease ${0.4 + i * 0.06}s both` : 'none', transition: 'transform 0.18s, box-shadow 0.18s', cursor: 'default' }}
                   onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${sk.color}30`; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
                   <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sk.color, display: 'inline-block', animation: 'ldPulse 2s ease-in-out infinite' }} />
@@ -1240,7 +1461,6 @@ function FounderSection({ isDark, isMobile }) {
               ))}
             </div>
           </div>
-
         </div>
       </div>
     </section>
@@ -1248,12 +1468,7 @@ function FounderSection({ isDark, isMobile }) {
 }
 
 /* ─────────────────────────────────────────
-   MAIN HOME PAGE
-───────────────────────────────────────── */
-/* ─────────────────────────────────────────
    SEO HEAD INJECTOR
-   Injects meta tags, OG, Twitter Card,
-   JSON-LD structured data into document.head
 ───────────────────────────────────────── */
 function SEOHead() {
   useEffect(() => {
@@ -1263,7 +1478,6 @@ function SEOHead() {
     const IMAGE = 'https://pyskill.in/og-image.png';
     const KEYWORDS = 'python mock test 2026, python certification india, python notes pdf, python basic test free, python advanced test, pyskill, python exam online, python questions answers, python leaderboard, python study material';
 
-    // ── Title ──
     document.title = TITLE;
 
     const setMeta = (sel, attr, val) => {
@@ -1272,7 +1486,6 @@ function SEOHead() {
       el.setAttribute(attr, val);
     };
 
-    // ── Standard meta ──
     setMeta('meta[name="description"]',        'name',    'description');
     setMeta('meta[name="description"]',        'content', DESC);
     setMeta('meta[name="keywords"]',           'name',    'keywords');
@@ -1283,16 +1496,11 @@ function SEOHead() {
     setMeta('meta[name="robots"]',             'content', 'index, follow, max-image-preview:large');
     setMeta('meta[name="theme-color"]',        'name',    'theme-color');
     setMeta('meta[name="theme-color"]',        'content', '#6366f1');
-    setMeta('meta[name="rating"]',             'name',    'rating');
-    setMeta('meta[name="rating"]',             'content', 'general');
-    setMeta('meta[name="language"]',           'name',    'language');
-    setMeta('meta[name="language"]',           'content', 'English');
     setMeta('meta[name="geo.region"]',         'name',    'geo.region');
     setMeta('meta[name="geo.region"]',         'content', 'IN-JK');
     setMeta('meta[name="geo.placename"]',      'name',    'geo.placename');
     setMeta('meta[name="geo.placename"]',      'content', 'Srinagar, Jammu & Kashmir, India');
 
-    // ── Open Graph ──
     setMeta('meta[property="og:type"]',        'property', 'og:type');
     setMeta('meta[property="og:type"]',        'content',  'website');
     setMeta('meta[property="og:url"]',         'property', 'og:url');
@@ -1303,16 +1511,11 @@ function SEOHead() {
     setMeta('meta[property="og:description"]', 'content',  DESC);
     setMeta('meta[property="og:image"]',       'property', 'og:image');
     setMeta('meta[property="og:image"]',       'content',  IMAGE);
-    setMeta('meta[property="og:image:width"]', 'property', 'og:image:width');
-    setMeta('meta[property="og:image:width"]', 'content',  '1200');
-    setMeta('meta[property="og:image:height"]','property', 'og:image:height');
-    setMeta('meta[property="og:image:height"]','content',  '630');
     setMeta('meta[property="og:site_name"]',   'property', 'og:site_name');
     setMeta('meta[property="og:site_name"]',   'content',  'PySkill');
     setMeta('meta[property="og:locale"]',      'property', 'og:locale');
     setMeta('meta[property="og:locale"]',      'content',  'en_IN');
 
-    // ── Twitter Card ──
     setMeta('meta[name="twitter:card"]',        'name',    'twitter:card');
     setMeta('meta[name="twitter:card"]',        'content', 'summary_large_image');
     setMeta('meta[name="twitter:title"]',       'name',    'twitter:title');
@@ -1326,82 +1529,38 @@ function SEOHead() {
     setMeta('meta[name="twitter:creator"]',     'name',    'twitter:creator');
     setMeta('meta[name="twitter:creator"]',     'content', '@code_with_06');
 
-    // ── Canonical link ──
     let canonical = document.querySelector('link[rel="canonical"]');
     if (!canonical) { canonical = document.createElement('link'); document.head.appendChild(canonical); }
     canonical.setAttribute('rel', 'canonical');
     canonical.setAttribute('href', SITE);
 
-    // ── JSON-LD: WebSite + SearchAction ──
     const injectLD = (id, data) => {
       let el = document.getElementById(id);
       if (!el) { el = document.createElement('script'); el.id = id; el.type = 'application/ld+json'; document.head.appendChild(el); }
       el.textContent = JSON.stringify(data);
     };
 
-    injectLD('ld-website', {
-      '@context': 'https://schema.org',
-      '@type': 'WebSite',
-      'name': 'PySkill',
-      'url': SITE,
-      'description': DESC,
-      'inLanguage': 'en-IN',
-      'potentialAction': {
-        '@type': 'SearchAction',
-        'target': { '@type': 'EntryPoint', 'urlTemplate': SITE + '/products?q={search_term_string}' },
-        'query-input': 'required name=search_term_string'
-      }
-    });
-
-    injectLD('ld-org', {
-      '@context': 'https://schema.org',
-      '@type': 'EducationalOrganization',
-      'name': 'PySkill',
-      'url': SITE,
-      'logo': SITE + '/logo192.png',
-      'description': 'Online Python education platform offering mock tests, PDF notes and certification for students across India.',
-      'founder': { '@type': 'Person', 'name': 'Faizan Tariq', 'sameAs': 'https://instagram.com/code_with_06' },
-      'foundingDate': '2026',
-      'address': { '@type': 'PostalAddress', 'addressLocality': 'Srinagar', 'addressRegion': 'Jammu & Kashmir', 'addressCountry': 'IN' },
-      'sameAs': ['https://instagram.com/code_with_06'],
-      'hasOfferCatalog': {
-        '@type': 'OfferCatalog',
-        'name': 'Python Courses & Tests',
-        'itemListElement': [
-          { '@type': 'Offer', 'itemOffered': { '@type': 'Course', 'name': 'Python Basic Mock Test', 'description': 'Free 60-question Python Basic test with certificate', 'provider': { '@type': 'Organization', 'name': 'PySkill' } } },
-          { '@type': 'Offer', 'itemOffered': { '@type': 'Course', 'name': 'Python Advanced Mock Test', 'description': '60-question Advanced Python test — 120 minutes', 'provider': { '@type': 'Organization', 'name': 'PySkill' } } },
-          { '@type': 'Offer', 'itemOffered': { '@type': 'Course', 'name': 'Python Pro Mock Test', 'description': '60-question Pro Python test — 180 minutes', 'provider': { '@type': 'Organization', 'name': 'PySkill' } } },
-        ]
-      }
-    });
-
-    injectLD('ld-faq', {
-      '@context': 'https://schema.org',
-      '@type': 'FAQPage',
-      'mainEntity': [
-        { '@type': 'Question', 'name': 'Is the Python Basic Mock Test free?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Yes! The Python Basic Mock Test on PySkill is completely free. It has 60 questions and a 60-minute time limit.' } },
-        { '@type': 'Question', 'name': 'How do I get a Python certificate from PySkill?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Score 55% or above in any PySkill mock test to earn a downloadable Python certification.' } },
-        { '@type': 'Question', 'name': 'What topics are covered in PySkill Python notes?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'PySkill Python notes cover basics, OOPs, data structures, file handling, exceptions, and job prep topics — all in instant-download PDF format.' } },
-        { '@type': 'Question', 'name': 'Is PySkill payment secure?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Yes. All payments are processed via Razorpay — India\'s most trusted payment gateway — with full encryption.' } },
-      ]
-    });
-
-    injectLD('ld-breadcrumb', {
-      '@context': 'https://schema.org',
-      '@type': 'BreadcrumbList',
-      'itemListElement': [
-        { '@type': 'ListItem', 'position': 1, 'name': 'Home',       'item': SITE },
-        { '@type': 'ListItem', 'position': 2, 'name': 'Mock Tests', 'item': SITE + '/mocktests' },
-        { '@type': 'ListItem', 'position': 3, 'name': 'Notes',      'item': SITE + '/products' },
-        { '@type': 'ListItem', 'position': 4, 'name': 'Leaderboard','item': SITE + '/leaderboard' },
-      ]
-    });
-
+    injectLD('ld-website', { '@context': 'https://schema.org', '@type': 'WebSite', 'name': 'PySkill', 'url': SITE, 'description': DESC, 'inLanguage': 'en-IN' });
+    injectLD('ld-org', { '@context': 'https://schema.org', '@type': 'EducationalOrganization', 'name': 'PySkill', 'url': SITE, 'founder': { '@type': 'Person', 'name': 'Faizan Tariq' }, 'foundingDate': '2026', 'address': { '@type': 'PostalAddress', 'addressLocality': 'Srinagar', 'addressRegion': 'Jammu & Kashmir', 'addressCountry': 'IN' } });
+    injectLD('ld-faq', { '@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [
+      { '@type': 'Question', 'name': 'Is the Python Basic Mock Test free?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Yes! The Python Basic Mock Test on PySkill is completely free. It has 60 questions and a 60-minute time limit.' } },
+      { '@type': 'Question', 'name': 'How do I get a Python certificate from PySkill?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Score 55% or above in any PySkill mock test to earn a downloadable Python certification.' } },
+    ]});
+    injectLD('ld-breadcrumb', { '@context': 'https://schema.org', '@type': 'BreadcrumbList', 'itemListElement': [
+      { '@type': 'ListItem', 'position': 1, 'name': 'Home',       'item': SITE },
+      { '@type': 'ListItem', 'position': 2, 'name': 'Mock Tests', 'item': SITE + '/mocktests' },
+      { '@type': 'ListItem', 'position': 3, 'name': 'Notes',      'item': SITE + '/products' },
+      { '@type': 'ListItem', 'position': 4, 'name': 'Leaderboard','item': SITE + '/leaderboard' },
+    ]});
   }, []);
-
   return null;
 }
 
+/* ─────────────────────────────────────────
+   MAIN HOME PAGE
+   FIX #4: Action cards fixed — no fragile slice logic
+   FIX #11: Hero minHeight fixed for small screens
+───────────────────────────────────────── */
 export default function HomePage({ setCurrentPage }) {
   const [txt, setTxt] = useState('');
   const [idx, setIdx] = useState(0);
@@ -1443,17 +1602,25 @@ export default function HomePage({ setCurrentPage }) {
     return () => clearTimeout(t);
   }, [idx, del, pi, phrases]);
 
-  const actionCards = [
-    { icon: '📚', label: 'Browse Notes',  page: 'products',    g: 'linear-gradient(135deg,#6366f1,#8b5cf6)', glow: 'rgba(99,102,241,0.35)',  c: '#6366f1' },
-    { icon: <PythonLogo size={22} />, label: 'Mock Tests', page: 'mocktests',   g: 'linear-gradient(135deg,#10b981,#34d399)', glow: 'rgba(16,185,129,0.35)',  c: '#10b981' },
-    { icon: '💻', label: 'Compiler',      page: 'compiler',    g: 'linear-gradient(135deg,#0066b8,#0ea5e9)', glow: 'rgba(0,102,184,0.35)',   c: '#0066b8' },
-    { icon: '🔥', label: '30-Day Streak', page: 'streak',      g: 'linear-gradient(135deg,#ff6b00,#ff3d00)', glow: 'rgba(255,107,0,0.35)',   c: '#ff6b00' },
-    { icon: '📦', label: 'My Orders',     page: 'orders',      g: 'linear-gradient(135deg,#f59e0b,#fbbf24)', glow: 'rgba(245,158,11,0.35)',  c: '#f59e0b' },
-    { icon: '🏆', label: 'Leaderboard',   page: 'leaderboard', g: 'linear-gradient(135deg,#8b5cf6,#d946ef)', glow: 'rgba(139,92,246,0.35)',  c: '#8b5cf6' },
-    user
-      ? { icon: '👤', label: 'Logout', page: null, g: 'linear-gradient(135deg,#ef4444,#dc2626)', glow: 'rgba(239,68,68,0.35)', c: '#ef4444', action: logout }
-      : { icon: '🔐', label: 'Login',  page: 'login', g: 'linear-gradient(135deg,#ec4899,#f472b6)', glow: 'rgba(236,72,153,0.35)', c: '#ec4899' },
+  // FIX #4: Stable action cards array — no fragile slice
+  const baseCards = [
+    { icon: '📚', label: 'Browse Notes',  page: 'products',    glow: 'rgba(99,102,241,0.35)',  c: '#6366f1' },
+    { icon: <PythonLogo size={22} />, label: 'Mock Tests', page: 'mocktests', glow: 'rgba(16,185,129,0.35)', c: '#10b981' },
+    { icon: '💻', label: 'Compiler',      page: 'compiler',    glow: 'rgba(0,102,184,0.35)',   c: '#0066b8' },
+    { icon: '🔥', label: '30-Day Streak', page: 'streak',      glow: 'rgba(255,107,0,0.35)',   c: '#ff6b00' },
+    { icon: '📦', label: 'My Orders',     page: 'orders',      glow: 'rgba(245,158,11,0.35)',  c: '#f59e0b' },
+    { icon: '🏆', label: 'Leaderboard',   page: 'leaderboard', glow: 'rgba(139,92,246,0.35)',  c: '#8b5cf6' },
   ];
+
+  const authCard = user
+    ? { icon: '👤', label: 'Logout', page: null, glow: 'rgba(239,68,68,0.35)', c: '#ef4444', action: logout }
+    : { icon: '🔐', label: 'Login',  page: 'login', glow: 'rgba(236,72,153,0.35)', c: '#ec4899' };
+
+  const actionCards = [...baseCards, authCard];
+
+  // FIX #4: Always show 4 per row on mobile, all 7 clearly split
+  const mobileRow1 = actionCards.slice(0, 4);
+  const mobileRow2 = actionCards.slice(4);
 
   return (
     <main itemScope itemType="https://schema.org/WebPage"
@@ -1471,7 +1638,6 @@ export default function HomePage({ setCurrentPage }) {
           ? 'linear-gradient(180deg,rgba(15,10,60,0.6) 0%,transparent 100%)'
           : 'linear-gradient(180deg,rgba(238,241,255,0.8) 0%,transparent 100%)',
       }}>
-        {/* Animated badge */}
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: '8px',
           background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.06)',
@@ -1488,11 +1654,14 @@ export default function HomePage({ setCurrentPage }) {
           <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', animation: 'pulse 1.4s infinite' }} />
         </div>
 
+        {/* FIX #11: minHeight responsive — no overflow on small screens */}
         <h1 style={{
-          fontSize: isMobile ? '2rem' : '3.8rem', fontWeight: '900', marginBottom: '12px',
+          fontSize: isMobile ? 'clamp(1.6rem, 6vw, 2rem)' : '3.8rem',
+          fontWeight: '900', marginBottom: '12px',
           background: 'linear-gradient(135deg,#1e40af,#6366f1 45%,#ec4899)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          lineHeight: 1.12, minHeight: isMobile ? '54px' : '96px',
+          lineHeight: 1.12,
+          minHeight: isMobile ? 'auto' : '96px', // FIX #11
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '0 8px', letterSpacing: '-0.03em',
           opacity: mounted ? 1 : 0,
@@ -1500,7 +1669,7 @@ export default function HomePage({ setCurrentPage }) {
           transition: 'opacity 0.5s ease 0.15s, transform 0.5s ease 0.15s',
         }}>
           {txt}
-          <span style={{ borderRight: '3px solid #6366f1', animation: 'blink 0.7s infinite', marginLeft: '3px', height: isMobile ? '30px' : '56px', display: 'inline-block', verticalAlign: 'middle' }} />
+          <span style={{ borderRight: '3px solid #6366f1', animation: 'blink 0.7s infinite', marginLeft: '3px', height: isMobile ? '26px' : '56px', display: 'inline-block', verticalAlign: 'middle' }} />
         </h1>
 
         <p style={{
@@ -1513,63 +1682,25 @@ export default function HomePage({ setCurrentPage }) {
 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '28px', opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.38s' }}>
           {[{ icon: Shield, color: '#10b981', text: 'Secure Payment' }, { icon: Zap, color: '#6366f1', text: 'Instant Access' }, { icon: BookOpen, color: '#ec4899', text: '100% Original' }].map((b, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: '6px',
-              background: isDark ? `${b.color}12` : `${b.color}0d`,
-              padding: '6px 14px', borderRadius: '50px',
-              border: `1px solid ${b.color}${isDark ? '38' : '28'}`,
-              animation: mounted ? `chipSlide 0.4s ease ${0.5 + i * 0.08}s both` : 'none',
-            }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isDark ? `${b.color}12` : `${b.color}0d`, padding: '6px 14px', borderRadius: '50px', border: `1px solid ${b.color}${isDark ? '38' : '28'}`, animation: mounted ? `chipSlide 0.4s ease ${0.5 + i * 0.08}s both` : 'none' }}>
               <b.icon size={13} color={b.color} />
               <span style={{ fontSize: isMobile ? '0.7rem' : '0.76rem', fontWeight: '700', color: b.color }}>{b.text}</span>
             </div>
           ))}
         </div>
 
-        {/* ✅ FIX: Two CTA buttons — Browse Notes + Take Test side by side */}
-        <div style={{
-          opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.48s',
-          display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap',
-        }}>
-          {/* Primary: Take Test — LEFT */}
+        <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.48s', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => setCurrentPage('mocktests')}
-            style={{
-              background: 'linear-gradient(135deg,#10b981,#22c55e)', border: 'none',
-              color: '#fff', padding: isMobile ? '13px 24px' : '16px 36px',
-              fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px',
-              cursor: 'pointer', fontWeight: '800',
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              boxShadow: '0 6px 28px rgba(16,185,129,0.42)',
-              transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-              animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' : 'none',
-              position: 'relative', overflow: 'hidden',
-            }}
+            style={{ background: 'linear-gradient(135deg,#10b981,#22c55e)', border: 'none', color: '#fff', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 6px 28px rgba(16,185,129,0.42)', transition: 'transform 0.2s ease, box-shadow 0.2s ease', animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' : 'none', position: 'relative', overflow: 'hidden' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(16,185,129,0.6)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(16,185,129,0.42)'; }}>
             <PythonLogo size={isMobile ? 17 : 19} />
             Take Test Free
-            {/* Shine sweep */}
-            <span style={{
-              position: 'absolute', top: 0, left: '-100%', width: '60%', height: '100%',
-              background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent)',
-              animation: 'btnShine 2.5s ease-in-out infinite',
-              pointerEvents: 'none',
-            }} />
+            <span style={{ position: 'absolute', top: 0, left: '-100%', width: '60%', height: '100%', background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent)', animation: 'btnShine 2.5s ease-in-out infinite', pointerEvents: 'none' }} />
           </button>
 
-          {/* Secondary: Browse Notes — RIGHT */}
           <button onClick={() => setCurrentPage('products')}
-            style={{
-              background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)',
-              border: `1.5px solid rgba(99,102,241,${isDark ? '0.4' : '0.25'})`,
-              color: '#6366f1',
-              padding: isMobile ? '13px 24px' : '16px 36px',
-              fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px',
-              cursor: 'pointer', fontWeight: '800',
-              display: 'inline-flex', alignItems: 'center', gap: '8px',
-              transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease',
-              animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.65s both' : 'none',
-            }}
+            style={{ background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)', border: `1.5px solid rgba(99,102,241,${isDark ? '0.4' : '0.25'})`, color: '#6366f1', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease', animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.65s both' : 'none' }}
             onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(99,102,241,0.25)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)'; e.currentTarget.style.boxShadow = 'none'; }}>
             <Download size={isMobile ? 17 : 19} />
@@ -1578,19 +1709,29 @@ export default function HomePage({ setCurrentPage }) {
         </div>
       </section>
 
-      {/* ══ ACTION CARDS ══ */}
+      {/* ══ ACTION CARDS — FIX #4: Stable layout ══ */}
       <section style={{ padding: isMobile ? '20px 16px' : '36px 24px', maxWidth: '1100px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(4,1fr)' : 'repeat(7,1fr)', gap: isMobile ? '9px' : '12px' }}>
-          {actionCards.slice(0, isMobile ? 4 : 7).map((c, i) => (
-            <div key={i} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.05}s both` }}>
-              <ActionCard card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
+        {isMobile ? (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '9px' }}>
+              {mobileRow1.map((c, i) => (
+                <div key={i} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.05}s both` }}>
+                  <ActionCard card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {isMobile && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '9px', marginTop: '9px' }}>
-            {actionCards.slice(4).map((c, i) => (
-              <div key={i + 4} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.3 + i * 0.05}s both` }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '9px', marginTop: '9px' }}>
+              {mobileRow2.map((c, i) => (
+                <div key={i} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.3 + i * 0.05}s both` }}>
+                  <ActionCard card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '12px' }}>
+            {actionCards.map((c, i) => (
+              <div key={i} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.05}s both` }}>
                 <ActionCard card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
               </div>
             ))}
@@ -1598,9 +1739,7 @@ export default function HomePage({ setCurrentPage }) {
         )}
       </section>
 
-      {/* Stats */}
       <StatsBar isDark={isDark} isMobile={isMobile} />
-
       <MockTestSection isDark={isDark} isMobile={isMobile} setCurrentPage={setCurrentPage} />
       <TopRankersSection isDark={isDark} isMobile={isMobile} setCurrentPage={setCurrentPage} />
       <StudentReviews isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} />
@@ -1609,7 +1748,6 @@ export default function HomePage({ setCurrentPage }) {
       <WhySection isDark={isDark} isMobile={isMobile} />
       <FounderSection isDark={isDark} isMobile={isMobile} />
 
-      {/* ── SEO: semantic footer nav for Google ── */}
       <nav aria-label="Quick links" style={{ display: 'none' }}>
         <a href="/mocktests">Python Mock Tests</a>
         <a href="/products">Python Notes PDF</a>
@@ -1618,24 +1756,25 @@ export default function HomePage({ setCurrentPage }) {
       </nav>
 
       <style>{`
-        @keyframes blink       { 0%,50%{opacity:1}51%,100%{opacity:0} }
-        @keyframes pulse       { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(1.6)} }
-        @keyframes shimmer     { 0%,100%{background-position:0%}50%{background-position:100%} }
-        @keyframes wig         { 0%,100%{transform:rotate(0)}30%{transform:rotate(-8deg)}60%{transform:rotate(8deg)} }
-        @keyframes ldPulse     { 0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.5)}50%{transform:scale(1.5);opacity:.3;box-shadow:0 0 0 6px rgba(34,197,94,0)} }
-        @keyframes fadeSlide   { from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)} }
-        @keyframes scoreIn     { from{opacity:0;transform:scale(0.6) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)} }
-        @keyframes cardEnter   { from{opacity:0;transform:translateY(20px) scale(0.92)}to{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes medalFloat  { 0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)} }
-        @keyframes cardSlideUp { from{opacity:0;transform:translateY(28px) scale(0.94)}to{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes chipSlide   { from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)} }
-        @keyframes statPop     { from{opacity:0;transform:scale(0.85) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)} }
-        @keyframes rippleOut   { 0%{transform:translate(-50%,-50%) scale(1);opacity:0.6}100%{transform:translate(-50%,-50%) scale(22);opacity:0} }
-        @keyframes badgeFloat  { 0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)} }
-        @keyframes heroBtnPop  { from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)} }
-        @keyframes freePulse   { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)} }
-        @keyframes btnShine    { 0%{left:-100%}40%,100%{left:150%} }
-        @keyframes spin        { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
+        @keyframes blink        { 0%,50%{opacity:1}51%,100%{opacity:0} }
+        @keyframes pulse        { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(1.6)} }
+        @keyframes shimmer      { 0%,100%{background-position:0%}50%{background-position:100%} }
+        @keyframes shimmerBar   { 0%,100%{opacity:0.4}50%{opacity:1} }
+        @keyframes wig          { 0%,100%{transform:rotate(0)}30%{transform:rotate(-8deg)}60%{transform:rotate(8deg)} }
+        @keyframes ldPulse      { 0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.5)}50%{transform:scale(1.5);opacity:.3;box-shadow:0 0 0 6px rgba(34,197,94,0)} }
+        @keyframes fadeSlide    { from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)} }
+        @keyframes scoreIn      { from{opacity:0;transform:scale(0.6) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)} }
+        @keyframes cardEnter    { from{opacity:0;transform:translateY(20px) scale(0.92)}to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes medalFloat   { 0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)} }
+        @keyframes cardSlideUp  { from{opacity:0;transform:translateY(28px) scale(0.94)}to{opacity:1;transform:translateY(0) scale(1)} }
+        @keyframes chipSlide    { from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)} }
+        @keyframes statPop      { from{opacity:0;transform:scale(0.85) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)} }
+        @keyframes rippleOut    { 0%{transform:translate(-50%,-50%) scale(1);opacity:0.6}100%{transform:translate(-50%,-50%) scale(22);opacity:0} }
+        @keyframes badgeFloat   { 0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)} }
+        @keyframes heroBtnPop   { from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)} }
+        @keyframes freePulse    { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)} }
+        @keyframes btnShine     { 0%{left:-100%}40%,100%{left:150%} }
+        @keyframes spin         { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
         @keyframes spinRing     { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
         @keyframes ringPulse    { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.05)} }
       `}</style>

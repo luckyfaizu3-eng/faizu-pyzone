@@ -34,7 +34,6 @@ import LoginPage from './pages/LoginPage';
 import MockTestPage from './pages/MockTestPage';
 import AIChatPage from './pages/AIChatPage';
 import PythonCompiler from './pages/PythonCompiler';
-import CertificateVerifyPage from './pages/CertificateVerifyPage';
 
 // ✅ Streak Challenge Imports
 import StreakChallengePage from './pages/StreakChallengePage';
@@ -122,11 +121,10 @@ function App() {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
       if (hash.startsWith('products/')) return 'products';
-      if (hash.startsWith('verify/') || hash === 'verify') return 'verify';
       const validPages = [
         'home', 'products', 'cart', 'orders', 'admin', 'login',
         'mocktests', 'leaderboard', 'aichat', 'compiler',
-        'streak', 'streak-practice', 'streak-result', 'admin-streak', 'verify',
+        'streak', 'streak-practice', 'streak-result', 'admin-streak',
         'blog-mock-test',
       ];
       return validPages.includes(hash) ? hash : 'home';
@@ -152,7 +150,6 @@ function App() {
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('products/')) return;
-    if (hash.startsWith('verify/')) return;
     if (currentPage !== window.history.state?.page) {
       window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
@@ -480,7 +477,6 @@ function App() {
     });
   };
 
-  const isVerifyPage = currentPage === 'verify' || window.location.hash.startsWith('#verify/');
   const isIndia = geoData?.country === 'IN' || !geoData;
 
   return (
@@ -513,7 +509,7 @@ function App() {
                 )}
 
                 {/* ✅ Foreign Country Banner */}
-                {!isVerifyPage && !isIndia && geoData && showGeoBanner && (
+                {!isIndia && geoData && showGeoBanner && (
                   <div style={{ background: 'linear-gradient(135deg,#0f172a,#1e1b4b)', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', zIndex: 9998, position: 'relative' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '1.2rem' }}>{geoData.flag}</span>
@@ -529,120 +525,113 @@ function App() {
                   </div>
                 )}
 
-                {/* ✅ Verify page — no navbar/footer */}
-                {isVerifyPage ? (
-                  <CertificateVerifyPage />
-                ) : (
-                  <>
-                    <Navbar
-                      currentPage={currentPage}
-                      setCurrentPage={setCurrentPage}
+                <Navbar
+                  currentPage={currentPage}
+                  setCurrentPage={setCurrentPage}
+                  searchQuery={searchQuery}
+                  setSearchQuery={setSearchQuery}
+                  mobileMenuOpen={mobileMenuOpen}
+                  setMobileMenuOpen={setMobileMenuOpen}
+                  user={user}
+                  logout={logout}
+                  cartCount={cartCount}
+                />
+
+                <main style={{ position: 'relative', zIndex: 1 }}>
+
+                  {currentPage === 'home' && (
+                    <HomePage setCurrentPage={setCurrentPage} />
+                  )}
+
+                  {currentPage === 'products' && (
+                    <ProductsPage
+                      products={products}
+                      setProducts={setProducts}
+                      refreshProducts={loadProducts}
+                      buyNow={buyNow}
+                      selectedCategory={selectedCategory}
+                      setSelectedCategory={setSelectedCategory}
                       searchQuery={searchQuery}
-                      setSearchQuery={setSearchQuery}
-                      mobileMenuOpen={mobileMenuOpen}
-                      setMobileMenuOpen={setMobileMenuOpen}
+                      isProductPurchased={isProductPurchased}
                       user={user}
-                      logout={logout}
-                      cartCount={cartCount}
+                      onAddReview={handleAddReview}
                     />
+                  )}
 
-                    <main style={{ position: 'relative', zIndex: 1 }}>
+                  {currentPage === 'cart' && (
+                    <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />
+                  )}
 
-                      {currentPage === 'home' && (
-                        <HomePage setCurrentPage={setCurrentPage} />
-                      )}
+                  {currentPage === 'login' && <LoginPage />}
 
-                      {currentPage === 'products' && (
-                        <ProductsPage
-                          products={products}
-                          setProducts={setProducts}
-                          refreshProducts={loadProducts}
-                          buyNow={buyNow}
-                          selectedCategory={selectedCategory}
-                          setSelectedCategory={setSelectedCategory}
-                          searchQuery={searchQuery}
-                          isProductPurchased={isProductPurchased}
-                          user={user}
-                          onAddReview={handleAddReview}
-                        />
-                      )}
+                  {currentPage === 'orders' && (
+                    <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />
+                  )}
 
-                      {currentPage === 'cart' && (
-                        <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />
-                      )}
+                  {currentPage === 'admin' && user?.isAdmin && (
+                    <AdminPanel products={products} addProduct={addProduct} deleteProduct={deleteProduct} orders={orders} />
+                  )}
 
-                      {currentPage === 'login' && <LoginPage />}
+                  {currentPage === 'mocktests' && <MockTestPage />}
 
-                      {currentPage === 'orders' && (
-                        <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />
-                      )}
+                  {currentPage === 'leaderboard' && (
+                    <Leaderboard userEmail={user?.email} />
+                  )}
 
-                      {currentPage === 'admin' && user?.isAdmin && (
-                        <AdminPanel products={products} addProduct={addProduct} deleteProduct={deleteProduct} orders={orders} />
-                      )}
+                  {currentPage === 'aichat' && (
+                    <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />
+                  )}
 
-                      {currentPage === 'mocktests' && <MockTestPage />}
+                  {currentPage === 'compiler' && (
+                    <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />
+                  )}
 
-                      {currentPage === 'leaderboard' && (
-                        <Leaderboard userEmail={user?.email} />
-                      )}
+                  {/* ✅ STREAK PAGES */}
+                  {currentPage === 'streak' && (
+                    <StreakChallengePage
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                      user={user}
+                      setCurrentPage={setCurrentPage}
+                      onBuy={handleStreakPayment}
+                    />
+                  )}
 
-                      {currentPage === 'aichat' && (
-                        <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />
-                      )}
+                  {currentPage === 'streak-practice' && (
+                    <DailyPractice
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                      user={user}
+                      setCurrentPage={setCurrentPage}
+                    />
+                  )}
 
-                      {currentPage === 'compiler' && (
-                        <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />
-                      )}
+                  {currentPage === 'streak-result' && (
+                    <StreakResult
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                      user={user}
+                      setCurrentPage={setCurrentPage}
+                    />
+                  )}
 
-                      {/* ✅ STREAK PAGES */}
-                      {currentPage === 'streak' && (
-                        <StreakChallengePage
-                          isMobile={window.innerWidth <= 768}
-                          isDark={isDark}
-                          user={user}
-                          setCurrentPage={setCurrentPage}
-                          onBuy={handleStreakPayment}
-                        />
-                      )}
+                  {/* ✅ ADMIN STREAK — full panel, only for admin */}
+                  {currentPage === 'admin-streak' && user?.email === ADMIN_EMAIL && (
+                    <AdminStreak
+                      isMobile={window.innerWidth <= 768}
+                      isDark={isDark}
+                      user={user}
+                    />
+                  )}
 
-                      {currentPage === 'streak-practice' && (
-                        <DailyPractice
-                          isMobile={window.innerWidth <= 768}
-                          isDark={isDark}
-                          user={user}
-                          setCurrentPage={setCurrentPage}
-                        />
-                      )}
+                  {/* ✅ Blog Post */}
+                  {currentPage === 'blog-mock-test' && (
+                    <BlogPostMockTest setCurrentPage={setCurrentPage} />
+                  )}
 
-                      {currentPage === 'streak-result' && (
-                        <StreakResult
-                          isMobile={window.innerWidth <= 768}
-                          isDark={isDark}
-                          user={user}
-                          setCurrentPage={setCurrentPage}
-                        />
-                      )}
+                </main>
 
-                      {/* ✅ ADMIN STREAK — full panel, only for admin */}
-                      {currentPage === 'admin-streak' && user?.email === ADMIN_EMAIL && (
-                        <AdminStreak
-                          isMobile={window.innerWidth <= 768}
-                          isDark={isDark}
-                          user={user}
-                        />
-                      )}
-
-                      {/* ✅ Blog Post */}
-                      {currentPage === 'blog-mock-test' && (
-                        <BlogPostMockTest setCurrentPage={setCurrentPage} />
-                      )}
-
-                    </main>
-
-                    {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
-                  </>
-                )}
+                {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
 
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               </div>
