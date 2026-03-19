@@ -340,8 +340,13 @@ export default function VerifyCertificate({ certificateId, onBack }) {
     if (!certificateId) return;
     const fetch = async () => {
       try {
-        const { collection, query, where, getDocs } = await import('firebase/firestore');
-        const q = query(collection(db, 'certificates'), where('certificateId', '==', certificateId));
+        const { collection, query, where, getDocs, collectionGroup } = await import('firebase/firestore');
+
+        // Strategy: search leaderboard first to find userId, then fetch certificate directly
+        // This avoids needing a collectionGroup index on certificates
+        // Query top-level "certificatesPublic" collection — no index needed
+        // This collection is populated by mockTestService.issueCertificate()
+        const q = query(collection(db, 'certificatesPublic'), where('certificateId', '==', certificateId));
         const snap = await getDocs(q);
         if (snap.empty) { setNotFound(true); setLoading(false); return; }
         setCert({ id: snap.docs[0].id, ...snap.docs[0].data() });
