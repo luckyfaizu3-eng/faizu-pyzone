@@ -100,7 +100,7 @@ function CertSVG({ cert, sigBase64 }) {
   const W = 1056, H = 748;
   const score = cert.score ?? 0;
   const studentNameUpper = (cert.userName || '').toUpperCase();
-  const verifyUrl = `https://pyskill.in/verify/${cert.certificateId || 'N/A'}`;
+  const verifyUrl = `https://faizupyzone.shop/verify/${cert.certificateId || 'N/A'}`;
   const SX = 112, SY = 310;
 
   // Use base64 for export (no CORS), fall back to URL for live preview
@@ -219,7 +219,7 @@ function CertSVG({ cert, sigBase64 }) {
 
       {/* Bottom left PySkill */}
       <text x={SX} y={H-55} textAnchor="middle" fontSize="10" fontWeight="700" fill={goldMid} fontFamily="Cinzel,serif" letterSpacing="1.5">PYSKILL</text>
-      <text x={SX} y={H-40} textAnchor="middle" fontSize="8" fill="#aaaaaa" fontFamily="Cormorant Garamond,Georgia,serif">pyskill.in</text>
+      <text x={SX} y={H-40} textAnchor="middle" fontSize="8" fill="#aaaaaa" fontFamily="Cormorant Garamond,Georgia,serif">faizupyzone.shop</text>
 
       {/* Top right badge */}
       <rect x={W-196} y={18} width={172} height={24} rx="12" fill={accentColor} opacity="0.9"/>
@@ -292,7 +292,7 @@ function CertSVG({ cert, sigBase64 }) {
       <rect x={374} y={660} width={W-390} height={46} rx="4" fill={accentColor} opacity="0.05"/>
       <line x1={378} y1={660} x2={W-20} y2={660} stroke={accentColor} strokeWidth="0.8" opacity="0.35"/>
       <text x={590} y={678} textAnchor="middle" fontSize="7.5" fill="#666" fontFamily="Cinzel,serif" letterSpacing="0.2">This certificate confirms that the above-named individual has passed PySkill&apos;s proctored Python test</text>
-      <text x={590} y={694} textAnchor="middle" fontSize="7.5" fill="#666" fontFamily="Cinzel,serif" letterSpacing="0.2">under strict anti-cheat monitoring. Valid for resume, LinkedIn &amp; portfolio. Verified at pyskill.in</text>
+      <text x={590} y={694} textAnchor="middle" fontSize="7.5" fill="#666" fontFamily="Cinzel,serif" letterSpacing="0.2">under strict anti-cheat monitoring. Valid for resume, LinkedIn &amp; portfolio. Verified at faizupyzone.shop</text>
     </svg>
   );
 }
