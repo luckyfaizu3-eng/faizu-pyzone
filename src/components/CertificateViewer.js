@@ -100,7 +100,7 @@ function CertSVG({ cert, sigBase64 }) {
   const W = 1056, H = 748;
   const score = cert.score ?? 0;
   const studentNameUpper = (cert.userName || '').toUpperCase();
-  const verifyUrl = `https://faizupyzone.shop/verify/${cert.certificateId || 'N/A'}`;
+  const verifyUrl = `https://faizupyzone.shop/#verify/${cert.certificateId || 'N/A'}`;
   const SX = 112, SY = 310;
 
   // Use base64 for export (no CORS), fall back to URL for live preview

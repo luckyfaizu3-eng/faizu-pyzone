@@ -112,7 +112,7 @@ function CertSVG({ cert }) {
   const { leftBg, leftAccent, accentColor, accentLight, goldDark, goldLight, goldMid, label, badgeText, skills } = cfg;
   const W = 1056, H = 748;
   const score = cert.score ?? 0;
-  const verifyUrl = `https://faizupyzone.shop/verify/${cert.certificateId || 'N/A'}`;
+  const verifyUrl = `https://faizupyzone.shop/#verify/${cert.certificateId || 'N/A'}`;
   const SX = 112, SY = 310;
 
   return (
