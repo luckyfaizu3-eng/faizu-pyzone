@@ -44,6 +44,9 @@ import AdminStreak from './pages/AdminStreak';
 // ✅ Blog Post Import
 import BlogPostMockTest from './pages/BlogPostMockTest';
 
+// ✅ Certificate Verification Page
+import VerifyCertificate from './pages/VerifyCertificate';
+
 // ✅ Streak price service
 import { getStreakPrice } from './streakService';
 
@@ -77,6 +80,15 @@ export const CATEGORIES = [
 
 const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
 
+/* ─────────────────────────────────────────
+   HELPER: Parse certificateId from URL hash
+   Handles:  #verify/ABC123  →  'ABC123'
+───────────────────────────────────────── */
+function parseCertIdFromHash(hash) {
+  const match = hash.match(/^verify\/(.+)$/);
+  return match ? match[1] : null;
+}
+
 function App() {
   useEffect(() => {
     ReactGA.initialize('G-4677K2HY57');
@@ -103,6 +115,9 @@ function App() {
   const [compilerInitialCode, setCompilerInitialCode] = useState('');
   const [streakPrice,       setStreakPrice]       = useState(99);
 
+  // ✅ Certificate verify state — stores certId when on verify page
+  const [verifyCertId, setVerifyCertId] = useState(null);
+
   // ✅ Geo State
   const [geoData,       setGeoData]       = useState(null);
   const [showGeoBanner, setShowGeoBanner] = useState(true);
@@ -115,17 +130,25 @@ function App() {
     });
   }, []);
 
-  // ✅ Browser back button fix
+  // ✅ Browser back button fix — now also handles #verify/[certId]
   useEffect(() => {
     const getInitialPage = () => {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
+
+      // Handle certificate verify route: #verify/ABC123
+      const certId = parseCertIdFromHash(hash);
+      if (certId) {
+        setVerifyCertId(certId);
+        return 'verify';
+      }
+
       if (hash.startsWith('products/')) return 'products';
       const validPages = [
         'home', 'products', 'cart', 'orders', 'admin', 'login',
         'mocktests', 'leaderboard', 'aichat', 'compiler',
         'streak', 'streak-practice', 'streak-result', 'admin-streak',
-        'blog-mock-test',
+        'blog-mock-test', 'verify',
       ];
       return validPages.includes(hash) ? hash : 'home';
     };
@@ -138,6 +161,10 @@ function App() {
       if (event.state && event.state.page) {
         setCurrentPage(event.state.page);
         if (event.state.page !== 'products') setSelectedCategory('all');
+        // Restore certId if going back to verify page
+        if (event.state.page === 'verify' && event.state.certId) {
+          setVerifyCertId(event.state.certId);
+        }
       } else {
         setCurrentPage('home');
       }
@@ -150,11 +177,18 @@ function App() {
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('products/')) return;
+    if (hash.startsWith('verify/')) return; // don't overwrite verify URL
+
     if (currentPage !== window.history.state?.page) {
-      window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
+      if (currentPage === 'verify' && verifyCertId) {
+        // Push proper URL: #verify/ABC123
+        window.history.pushState({ page: 'verify', certId: verifyCertId }, '', `#verify/${verifyCertId}`);
+      } else {
+        window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
+      }
     }
     trackPageView(`/${currentPage}`);
-  }, [currentPage]);
+  }, [currentPage, verifyCertId]);
 
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('pyskill_theme');
@@ -409,7 +443,7 @@ function App() {
       try {
         const orderResult = await addOrder({
           userEmail: user.email, userId: user.uid, items: orderItems, total: cartTotal,
-          date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+          date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'numeric', year: 'numeric' }),
           paymentId: response.razorpay_payment_id, status: 'completed',
         }, user.uid);
         if (!orderResult.success) { window.showToast?.('Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error'); return; }
@@ -479,6 +513,9 @@ function App() {
 
   const isIndia = geoData?.country === 'IN' || !geoData;
 
+  // ✅ Hide Navbar & Footer on verify page (clean public view)
+  const isVerifyPage = currentPage === 'verify';
+
   return (
     <AuthContext.Provider value={{ user, login, logout, register, resetPassword }}>
       <CartContext.Provider value={{ cart, addToCart, removeFromCart, cartTotal, cartCount }}>
@@ -525,17 +562,20 @@ function App() {
                   </div>
                 )}
 
-                <Navbar
-                  currentPage={currentPage}
-                  setCurrentPage={setCurrentPage}
-                  searchQuery={searchQuery}
-                  setSearchQuery={setSearchQuery}
-                  mobileMenuOpen={mobileMenuOpen}
-                  setMobileMenuOpen={setMobileMenuOpen}
-                  user={user}
-                  logout={logout}
-                  cartCount={cartCount}
-                />
+                {/* ✅ Hide Navbar on verify page — clean public certificate view */}
+                {!isVerifyPage && (
+                  <Navbar
+                    currentPage={currentPage}
+                    setCurrentPage={setCurrentPage}
+                    searchQuery={searchQuery}
+                    setSearchQuery={setSearchQuery}
+                    mobileMenuOpen={mobileMenuOpen}
+                    setMobileMenuOpen={setMobileMenuOpen}
+                    user={user}
+                    logout={logout}
+                    cartCount={cartCount}
+                  />
+                )}
 
                 <main style={{ position: 'relative', zIndex: 1 }}>
 
@@ -629,9 +669,24 @@ function App() {
                     <BlogPostMockTest setCurrentPage={setCurrentPage} />
                   )}
 
+                  {/* ✅ CERTIFICATE VERIFY PAGE
+                      Route: #verify/[certificateId]
+                      Public page — no login required
+                      QR scan pe seedha yahan aata hai
+                  */}
+                  {currentPage === 'verify' && (
+                    <VerifyCertificate
+                      certificateId={verifyCertId}
+                      onBack={() => setCurrentPage('home')}
+                    />
+                  )}
+
                 </main>
 
-                {currentPage === 'home' && <Footer setCurrentPage={setCurrentPage} />}
+                {/* ✅ Hide Footer on verify page */}
+                {currentPage === 'home' && !isVerifyPage && (
+                  <Footer setCurrentPage={setCurrentPage} />
+                )}
 
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               </div>

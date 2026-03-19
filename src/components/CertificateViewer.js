@@ -7,6 +7,8 @@ const FONT_STYLE = `
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Cinzel:wght@400;600;700&family=Dancing+Script:wght@600;700&display=swap');
 `;
 
+const SIG_URL = 'https://i.ibb.co/C3xKVcFm/Whats-App-Image-2026-03-19-at-12-47-02-AM.jpg';
+
 /* ─────────────────────────────────────────
    LEVEL CONFIG
 ───────────────────────────────────────── */
@@ -50,6 +52,27 @@ const LEVEL_CONFIG = {
 };
 
 /* ─────────────────────────────────────────
+   FETCH SIGNATURE AS BASE64
+   (Solves CORS issue when rendering SVG on canvas)
+───────────────────────────────────────── */
+async function fetchSignatureBase64() {
+  try {
+    const res = await fetch(SIG_URL);
+    if (!res.ok) throw new Error('Fetch failed');
+    const blob = await res.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result); // "data:image/jpeg;base64,..."
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch (e) {
+    console.warn('Signature fetch failed, falling back to URL:', e);
+    return SIG_URL; // fallback — works for live preview but not canvas export
+  }
+}
+
+/* ─────────────────────────────────────────
    QR IMAGE
 ───────────────────────────────────────── */
 function QRImage({ value, x, y, size, color }) {
@@ -67,16 +90,21 @@ function QRImage({ value, x, y, size, color }) {
 
 /* ─────────────────────────────────────────
    CERTIFICATE SVG
+   sigBase64: pass base64 string for canvas export (fixes CORS)
+              leave undefined for live preview (uses URL directly)
 ───────────────────────────────────────── */
-function CertSVG({ cert }) {
+function CertSVG({ cert, sigBase64 }) {
   const level = (cert.level || 'basic').toLowerCase();
   const cfg = LEVEL_CONFIG[level] || LEVEL_CONFIG.basic;
   const { leftBg, leftAccent, accentColor, accentLight, goldDark, goldLight, goldMid, label, badgeText, skills } = cfg;
   const W = 1056, H = 748;
   const score = cert.score ?? 0;
   const studentNameUpper = (cert.userName || '').toUpperCase();
-  const verifyUrl = `PYSKILL|${cert.certificateId || 'N/A'}|${studentNameUpper}|${(cert.level || 'BASIC').toUpperCase()}|${score}%|${cert.date || 'N/A'}|pyskill.in`;
+  const verifyUrl = `https://pyskill.in/verify/${cert.certificateId || 'N/A'}`;
   const SX = 112, SY = 310;
+
+  // Use base64 for export (no CORS), fall back to URL for live preview
+  const sigHref = sigBase64 || SIG_URL;
 
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} data-cert-root="true">
@@ -142,7 +170,6 @@ function CertSVG({ cert }) {
       <rect x="5" y="5" width={W-10} height={H-10} fill="none" stroke={`url(#gH_${level})`} strokeWidth="1.5"/>
 
       {/* ── SEAL ── */}
-      {/* Starburst */}
       {Array.from({ length: 20 }).map((_, i) => {
         const a1 = (i/20)*Math.PI*2, a2 = a1+Math.PI/20;
         const r1=84, r2=74;
@@ -153,25 +180,19 @@ function CertSVG({ cert }) {
       <circle cx={SX} cy={SY} r={60} fill={`url(#sealInner_${level})`}/>
       <circle cx={SX} cy={SY} r={54} fill="none" stroke={`url(#gD_${level})`} strokeWidth="1"/>
 
-      {/* Stars */}
       {[0,60,120,180,240,300].map((deg,i) => {
         const rad=(deg-90)*Math.PI/180;
         return <text key={i} x={SX+Math.cos(rad)*70} y={SY+Math.sin(rad)*70+4} textAnchor="middle" fontSize="8" fill={goldMid} fontFamily="serif">★</text>;
       })}
 
-      {/* TOP ARC: PYTHON */}
       <path id={`arcTop_${level}`} d={`M ${SX-50},${SY} A 50,50 0 0,1 ${SX+50},${SY}`} fill="none"/>
       <text fontSize="9" fontWeight="700" fill={goldLight} fontFamily="Cinzel,serif" letterSpacing="5">
         <textPath href={`#arcTop_${level}`} startOffset="50%" textAnchor="middle">PYTHON</textPath>
       </text>
 
-      {/* PYSKILL — big bold center */}
       <text x={SX} y={SY-4} textAnchor="middle" fontSize="17" fontWeight="700" fill={goldLight} fontFamily="Cinzel,serif" letterSpacing="1.5">PYSKILL</text>
-
-      {/* Level */}
       <text x={SX} y={SY+18} textAnchor="middle" fontSize="13" fontWeight="700" fill={goldLight} fontFamily="Cinzel,serif" letterSpacing="2">{label}</text>
 
-      {/* BOTTOM ARC: CERTIFIED */}
       <path id={`arcBot_${level}`} d={`M ${SX-50},${SY} A 50,50 0 0,0 ${SX+50},${SY}`} fill="none"/>
       <text fontSize="8" fontWeight="600" fill={goldMid} fontFamily="Cinzel,serif" letterSpacing="3">
         <textPath href={`#arcBot_${level}`} startOffset="50%" textAnchor="middle">CERTIFIED</textPath>
@@ -187,13 +208,11 @@ function CertSVG({ cert }) {
         </g>
       ))}
 
-      {/* ── TOP LEFT: Python logo + PYSKILL header ── */}
-      {/* Python logo — small, left aligned */}
+      {/* Top left: Python logo + PYSKILL header */}
       <g transform="translate(26, 22) scale(0.095)">
         <path fill="url(#plBlue_basic)" d="M126.916.072c-64.832 0-60.784 28.115-60.784 28.115l.072 29.128h61.868v8.745H41.631S.145 61.355.145 126.77c0 65.417 36.21 63.097 36.21 63.097h21.61v-30.356s-1.165-36.21 35.632-36.21h61.362s34.475.557 34.475-33.319V33.97S194.67.072 126.916.072zm-34.054 19.474a11.05 11.05 0 0 1 11.063 11.064A11.05 11.05 0 0 1 92.862 41.674a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064z"/>
         <path fill="url(#plYellow_basic)" d="M128.757 254.126c64.832 0 60.784-28.115 60.784-28.115l-.072-29.127H127.6v-8.745h86.441s41.486 4.705 41.486-60.712c0-65.416-36.21-63.096-36.21-63.096h-21.61v30.355s1.165 36.21-35.632 36.21h-61.362s-34.475-.557-34.475 33.32v56.013s-5.235 33.897 62.518 33.897zm34.055-19.474a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064 11.05 11.05 0 0 1 11.063 11.064 11.05 11.05 0 0 1-11.063 11.064z"/>
       </g>
-      {/* PYSKILL text — right of logo */}
       <text x={56} y={38} fontSize="15" fontWeight="700" fill={goldLight} fontFamily="Cinzel,serif" letterSpacing="2">PYSKILL</text>
       <text x={56} y={50} fontSize="6.5" fill={accentLight} fontFamily="Cinzel,serif" letterSpacing="2.5">PYTHON CERTIFICATION</text>
       <line x1={22} y1={60} x2={200} y2={60} stroke={goldMid} strokeWidth="0.5" opacity="0.45"/>
@@ -237,12 +256,12 @@ function CertSVG({ cert }) {
       <rect x={585} y={440} width={10} height={10} fill={goldMid} transform="rotate(45 590 445)"/>
       <line x1={600} y1={445} x2={800} y2={445} stroke={goldMid} strokeWidth="0.75" opacity="0.5"/>
 
-      {/* ══ CERTIFICATE ID — y:453 to 503 ══ */}
+      {/* Certificate ID */}
       <rect x={415} y={453} width={350} height={42} rx="8" fill="none" stroke={accentColor} strokeWidth="1.2" opacity="0.45"/>
       <text x={590} y={468} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="2">CERTIFICATE ID</text>
       <text x={590} y={485} textAnchor="middle" fontSize="10" fontWeight="800" fill="#1a1a2e" fontFamily="Courier New,monospace" letterSpacing="0.8">{cert.certificateId || 'N/A'}</text>
 
-      {/* ══ LEVEL / DATE / LOCATION — y:510 to 530 (clearly below cert ID) ══ */}
+      {/* Level / Date / Location */}
       <text x={460} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">LEVEL</text>
       <text x={460} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{(cert.level||'BASIC').toUpperCase()}</text>
 
@@ -252,27 +271,24 @@ function CertSVG({ cert }) {
       <text x={780} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">LOCATION</text>
       <text x={780} y={528} textAnchor="middle" fontSize="10" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.userAddress || 'India'}</text>
 
-      {/* ══ SIGNATURE — y:542 to 614 ══
-          image y=542, height=72 → bottom=614 = line y ✅
-      */}
+      {/* ── SIGNATURE ── sigHref = base64 during export, URL during preview */}
       <image
-        href="https://i.ibb.co/C3xKVcFm/Whats-App-Image-2026-03-19-at-12-47-02-AM.jpg"
+        href={sigHref}
         x={500} y={554} width={220} height={60}
         preserveAspectRatio="xMidYMax meet"
         style={{ mixBlendMode: 'multiply' }}
       />
-      {/* line moved up to sit right under signature */}
       <line x1={560} y1={590} x2={650} y2={590} stroke="#999" strokeWidth="0.7"/>
       <text x={600} y={602} textAnchor="middle" fontSize="8" fontWeight="600" fill="#777" fontFamily="Cinzel,serif" letterSpacing="2.5">SIGNATURE</text>
       <text x={600} y={614} textAnchor="middle" fontSize="6.5" fill="#aaa" fontFamily="Cinzel,serif" letterSpacing="0.8">FOUNDER &amp; CEO, PYSKILL · @code_with_06</text>
 
-      {/* ══ QR CODE — right of signature, y:510 to 630 ══ */}
+      {/* QR Code */}
       <rect x={W-138} y={510} width={116} height={116} fill="#fff" rx="6" stroke={accentColor} strokeWidth="2"/>
       <QRImage value={verifyUrl} x={W-135} y={513} size={110} color={leftBg}/>
       <text x={W-80} y={638} textAnchor="middle" fontSize="7" fill={accentColor} fontFamily="Cinzel,serif" letterSpacing="1" fontWeight="700">SCAN TO VERIFY</text>
       <text x={W-80} y={649} textAnchor="middle" fontSize="6.5" fill="#888" fontFamily="Cinzel,serif">All details inside</text>
 
-      {/* ══ BOTTOM DISCLAIMER ══ */}
+      {/* Bottom disclaimer */}
       <rect x={374} y={660} width={W-390} height={46} rx="4" fill={accentColor} opacity="0.05"/>
       <line x1={378} y1={660} x2={W-20} y2={660} stroke={accentColor} strokeWidth="0.8" opacity="0.35"/>
       <text x={590} y={678} textAnchor="middle" fontSize="7.5" fill="#666" fontFamily="Cinzel,serif" letterSpacing="0.2">This certificate confirms that the above-named individual has passed PySkill&apos;s proctored Python test</text>
@@ -287,23 +303,32 @@ function CertSVG({ cert }) {
 async function downloadAsPDF(cert) {
   const { jsPDF } = await import('jspdf');
   const level = (cert.level || 'basic').toLowerCase();
+
+  // ── FIX: fetch signature as base64 to avoid CORS block on canvas ──
+  const sigBase64 = await fetchSignatureBase64();
+
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1056px;height:748px;overflow:hidden;';
   document.body.appendChild(wrap);
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(wrap);
-  root.render(<CertSVG cert={cert} />);
+
+  // Pass sigBase64 so SVG embeds it directly — no external URL on canvas
+  root.render(<CertSVG cert={cert} sigBase64={sigBase64} />);
   await new Promise(r => setTimeout(r, 500));
+
   const svgEl = wrap.querySelector('svg');
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
   styleEl.textContent = FONT_STYLE;
   svgEl.insertBefore(styleEl, svgEl.firstChild);
   if (document.fonts) await document.fonts.ready;
   await new Promise(r => setTimeout(r, 1200));
+
   const serializer = new XMLSerializer();
   const svgStr = serializer.serializeToString(svgEl);
   const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
+
   const SCALE = 3;
   const canvas = document.createElement('canvas');
   canvas.width = 1056 * SCALE;
@@ -311,15 +336,18 @@ async function downloadAsPDF(cert) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+
   await new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(); };
     img.onerror = e => reject(new Error('SVG render failed'));
     img.src = url;
   });
+
   URL.revokeObjectURL(url);
   root.unmount();
   document.body.removeChild(wrap);
+
   const imgData = canvas.toDataURL('image/png', 1.0);
   const A4_W = 841.89, A4_H = 595.28;
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4', compress: true });
@@ -334,23 +362,32 @@ async function downloadAsPDF(cert) {
 ───────────────────────────────────────── */
 async function saveAsImage(cert) {
   const level = (cert.level || 'basic').toLowerCase();
+
+  // ── FIX: fetch signature as base64 to avoid CORS block on canvas ──
+  const sigBase64 = await fetchSignatureBase64();
+
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1056px;height:748px;overflow:hidden;';
   document.body.appendChild(wrap);
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(wrap);
-  root.render(<CertSVG cert={cert} />);
+
+  // Pass sigBase64 so SVG embeds it directly — no external URL on canvas
+  root.render(<CertSVG cert={cert} sigBase64={sigBase64} />);
   await new Promise(r => setTimeout(r, 500));
+
   const svgEl = wrap.querySelector('svg');
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
   styleEl.textContent = FONT_STYLE;
   svgEl.insertBefore(styleEl, svgEl.firstChild);
   if (document.fonts) await document.fonts.ready;
   await new Promise(r => setTimeout(r, 1200));
+
   const serializer = new XMLSerializer();
   const svgStr = serializer.serializeToString(svgEl);
   const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
+
   const SCALE = 4;
   const canvas = document.createElement('canvas');
   canvas.width = 1056 * SCALE;
@@ -358,15 +395,18 @@ async function saveAsImage(cert) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
+
   await new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(); };
     img.onerror = reject;
     img.src = url;
   });
+
   URL.revokeObjectURL(url);
   root.unmount();
   document.body.removeChild(wrap);
+
   canvas.toBlob(blob => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -451,7 +491,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22, width: '100%', maxWidth: 920, paddingTop: 20 }}>
 
-          {/* Preview */}
+          {/* Preview — uses URL directly (no base64 needed for live preview) */}
           <div style={{
             width: previewW, height: previewH,
             borderRadius: 16, overflow: 'hidden',
@@ -461,6 +501,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
             pointerEvents: canDownload ? 'auto' : 'none',
           }}>
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: 1056, height: 748 }}>
+              {/* No sigBase64 here — live preview uses URL directly, CORS is fine for <image> in DOM SVG */}
               <CertSVG cert={cert} />
             </div>
           </div>
