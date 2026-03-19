@@ -155,7 +155,12 @@ function App() {
 
     const initialPage = getInitialPage();
     setCurrentPage(initialPage);
-    window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
+    // Don't overwrite verify URL — keep #verify/certId in address bar
+    if (initialPage === 'verify' && verifyCertId) {
+      window.history.replaceState({ page: 'verify', certId: verifyCertId }, '', window.location.hash);
+    } else if (initialPage !== 'verify') {
+      window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
+    }
 
     const handlePopState = (event) => {
       if (event.state && event.state.page) {
@@ -175,17 +180,21 @@ function App() {
   }, []);
 
   useEffect(() => {
+    // Never overwrite a verify URL with anything else
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('products/')) return;
-    if (hash.startsWith('verify/')) return; // don't overwrite verify URL
+
+    if (currentPage === 'verify' && verifyCertId) {
+      const target = `#verify/${verifyCertId}`;
+      if (window.location.hash !== target) {
+        window.history.replaceState({ page: 'verify', certId: verifyCertId }, '', target);
+      }
+      trackPageView(`/verify/${verifyCertId}`);
+      return;
+    }
 
     if (currentPage !== window.history.state?.page) {
-      if (currentPage === 'verify' && verifyCertId) {
-        // Push proper URL: #verify/ABC123
-        window.history.pushState({ page: 'verify', certId: verifyCertId }, '', `#verify/${verifyCertId}`);
-      } else {
-        window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
-      }
+      window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     }
     trackPageView(`/${currentPage}`);
   }, [currentPage, verifyCertId]);
@@ -201,7 +210,11 @@ function App() {
   });
 
   const [showSplash, setShowSplash] = useState(() => {
-    const splashShown = sessionStorage.getItem('splashShown');
+    // Never show splash on certificate verify links
+    const hash = window.location.hash.slice(1);
+    if (hash.startsWith('verify/')) return false;
+    // localStorage persists across sessions — splash shows only once ever
+    const splashShown = localStorage.getItem('splashShown');
     return !splashShown;
   });
 
@@ -223,7 +236,7 @@ function App() {
 
   const handleSplashComplete = () => {
     setShowSplash(false);
-    sessionStorage.setItem('splashShown', 'true');
+    localStorage.setItem('splashShown', 'true');
   };
 
   useEffect(() => {
@@ -672,7 +685,7 @@ function App() {
                   {/* ✅ CERTIFICATE VERIFY PAGE
                       Route: #verify/[certificateId]
                       Public page — no login required
-                      QR scan pe seedha yahan aata hai
+                      Opens directly when QR code is scanned
                   */}
                   {currentPage === 'verify' && (
                     <VerifyCertificate
