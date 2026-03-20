@@ -250,7 +250,6 @@ function MockTestPage() {
   const [submitOverlayData, setSubmitOverlayData] = useState({ isPassed: false, score: 0, testType: 'python' });
   const [overlayCountdown, setOverlayCountdown] = useState(10);
   const [slideDir, setSlideDir] = React.useState('none');
-  const [fixingCerts, setFixingCerts] = useState(false);
 
   // Double submit guard
   const formSubmittedRef = useRef(false);
@@ -334,167 +333,11 @@ function MockTestPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Reset form submitted ref when form step is shown
   useEffect(() => {
     if (currentStep === 'form') {
       formSubmittedRef.current = false;
     }
   }, [currentStep]);
-
-  // ============================================================
-  // ADMIN TOOL — Issue certificates to all past users who scored 55%+
-  // ============================================================
-  const fixPastCertificates = async () => {
-    if (!window.confirm('This will issue certificates to all past users who scored 55% or above.\n\nContinue?')) return;
-    setFixingCerts(true);
-    window.showToast?.('🔄 Fixing past certificates... check console for progress', 'info');
-
-    // All user IDs copied from Firebase console
-    const ALL_USER_IDS = [
-      '0qVDmxAw0iVUkp9tpy2bdCbTAA23',
-      '1IDk6aBGXvQxxK0RbBytCPD3gmt2',
-      '2EfW6sHeEsbI3cBazxmVFf5Z8rw1',
-      '30HV8Eu93kPYoZKgakGm5fLd9gq2',
-      '3F6f97d3cwWDBwsSXI02Hh0qKbF2',
-      '6Xe5iBheX0ZuxWCeZcEJC9mbnAx1',
-      '8c3vjxIVszU7DyNQHqF8Mwl0XXA2',
-      '9uGH0G9JD1Q90YTJRdnT1DaNSPd2',
-      'AmvkhakMzERa7hKEX5dhTG1uqB63',
-      'BuX9AivypHZHBKE3aB1IFXoA3AU2',
-      'CT3zEm3T1QdmVxP3y3ttPBJ9zgo1',
-      'Cgf4PhvlJEe2p20t6m9hcYLM1wh1',
-      'EWzYYcIXQ4bSLdJhiTrIzDTAXtU2',
-      'FF3wx56DbdOqRbn7SaBk3Uf92lg1',
-      'GfnPQ8tGyrSgAbeaJkHbUDXUdpS2',
-      'H7wOM8iiT7aWs9pvYhKTVzqwmbM2',
-      'ImtgWAHKrBN4QX9h3rZuONb29Cz2',
-      'IoyYNgeb6HQ93PRxQNfNTX6IXVd2',
-      'JJNfFkRdTDMVBTVeJhgeZxssZwa2',
-      'JKFFrr1QCKVcSd10QCP7DYOfzjt2',
-      'K52ukXMrdrgfyfAVg3FpHWJVZZu2',
-      'L8lpMFRzZ3TRk65YgmoIajo7UNr2',
-      'LPk6e3aERch8JK9vVbKGNfEbHBq1',
-      'MMV5keBpswcfluYd5Wzonn04vSE3',
-      'MTtd5XR4WuPUN5TSoqg0L1hx5ak2',
-      'MsGK9X3ZrddOueRkvZ9W8bBvMS02',
-      'QLr8HRy2z9XKK3IWqZd2JLQfpZI2',
-      'R0FtBL0HofR3CNsbXsC6h5l2LN22',
-      'RZ7IopRmVKfZx3dHZhwu4H20HSU2',
-      'SpafvAdpeuOACcyZTHwoiGsMQBn1',
-      'VfsDJSdsnbW02GF7iTpSMRSC3RB2',
-      'VjjTeGgPqRRddVdh8QWMeUVoMof1',
-      'WPROiXKLseOuYYHNX9Mp6ldqdhq2',
-      'X4NETYCChvMTkx0GVD90ulH2m0H2',
-      'Y7jODttwijNp2zJMdrr1vm5D7I82',
-      'ZB6XK3LMugWmHHPOpJhclXcX0vv2',
-      'aKciyxy56CPB0lwdjOy2KVHaGNF3',
-      'bLzFRtvmndWFJOclB9swfBZDTlK2',
-      'bq4nz9qgBZgBNDyXbBj6gMeTOhq2',
-      'cuERoc5en8WXfZkbVTCv58Bo8wH2',
-      'dzYmEoISviMTDXXh3ZUpwuiBgxg2',
-      'g7YrmNpHDSaH6KOFVmsQPbWs58M2',
-      'gX25BN3UZ0WzaOxRTkuHyruhSP12',
-      'icOsGhKBsHcSrOioOaZW6hE6itV2',
-      'j1nOyYEKWiT1O9JzswDJdTqGpvg1',
-      'mcSqAtjXM3NhLKpn7utmljXtHS32',
-      'o6vyMkCRMTdrHaJSiqyl7RxAr7f1',
-      'p1iO03Li60Pk6moTqkku41t3Jrg1',
-      'qcPYilnsMRbZZ3OrdR7AELCghmw2',
-      's4txtD7691WDee0djMX7PY8u8bO2',
-      'scVSe1vN5MPTuHqaZddUu90PVA93',
-      'uaUdTm3PyGWUqnJs3S3XaPDHKDb2',
-      'uxJzBfwqvtZ8lpmnPrGPuRWIDg63',
-      'xQtA0zHLuKXXxgdRs3ZkKCoQcKZ2',
-      'zOfD27C7nqU4Z1ww68yVfW6fyUB2',
-    ];
-
-    try {
-      const { collection, getDocs, query, where, addDoc, serverTimestamp } = await import('firebase/firestore');
-
-      let fixed = 0, skipped = 0, errors = 0;
-      console.log(`👥 Total users to check: ${ALL_USER_IDS.length}`);
-
-      for (const userId of ALL_USER_IDS) {
-        try {
-          // Fetch mockTests subcollection
-          const mockTestsSnap = await getDocs(collection(db, 'users', userId, 'mockTests'));
-          // Fetch testResults subcollection
-          const testResultsSnap = await getDocs(collection(db, 'users', userId, 'testResults'));
-
-          // Merge both collections
-          const allTestDocs = [...mockTestsSnap.docs, ...testResultsSnap.docs];
-
-          if (allTestDocs.length === 0) {
-            console.log(`⚠️ No tests found for userId: ${userId}`);
-            continue;
-          }
-
-          for (const testDoc of allTestDocs) {
-            const test = testDoc.data();
-
-            // Only Python tests with 55%+ score
-            if (test.testType === 'neet') continue;
-            if (!test.level) continue;
-            if ((test.score ?? 0) < 55) continue;
-
-            const userEmail = test.studentInfo?.email || test.userEmail || '';
-            const userName = test.studentInfo?.fullName || test.studentInfo?.name || userEmail.split('@')[0] || 'Student';
-
-            // Check if certificate already exists
-            const certsSnap = await getDocs(
-              query(
-                collection(db, 'users', userId, 'certificates'),
-                where('level', '==', test.level)
-              )
-            );
-
-            if (!certsSnap.empty) {
-              console.log(`⏭️ Already has cert: ${userEmail} (${test.level})`);
-              skipped++;
-              continue;
-            }
-
-            // Build certificate data
-            const certData = {
-              userName: userName,
-              userAge: test.studentInfo?.age || 'N/A',
-              userAddress: test.studentInfo?.address || 'N/A',
-              userEmail: userEmail,
-              userId: userId,
-              testName: test.planName || `Python ${test.level} Mock Test`,
-              level: test.level,
-              score: test.score,
-              date: test.testDate || new Date().toLocaleDateString('en-IN', {
-                day: '2-digit', month: 'long', year: 'numeric'
-              }),
-              founderName: 'Faizan Tariq',
-              issuedAt: serverTimestamp(),
-              autoFixed: true,
-              certificateId: `CERT-${userId.slice(0,6).toUpperCase()}-${test.level.toUpperCase()}-${Date.now()}`
-            };
-
-            await addDoc(collection(db, 'users', userId, 'certificates'), certData);
-            console.log(`✅ Certificate issued: ${userEmail} — ${test.level} — ${test.score}%`);
-            fixed++;
-          }
-        } catch (userErr) {
-          console.error(`❌ Error for userId ${userId}:`, userErr);
-          errors++;
-        }
-      }
-
-      const msg = `✅ Done! Issued: ${fixed} | Already had: ${skipped} | Errors: ${errors}`;
-      console.log(msg);
-      window.showToast?.(msg, 'success');
-      await loadUserData();
-
-    } catch (err) {
-      console.error('Fix script error:', err);
-      window.showToast?.('❌ Error: ' + err.message, 'error');
-    } finally {
-      setFixingCerts(false);
-    }
-  };
 
   const handlePayment = (plan, finalPrice = null, couponResult = null) => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
@@ -569,7 +412,6 @@ function MockTestPage() {
     } else { window.showToast?.('❌ Free unlock failed', 'error'); }
   };
 
-  // Prevent duplicate form submissions using ref guard
   const handleFormSubmit = useCallback(async (formData) => {
     if (formSubmittedRef.current) {
       console.log('Duplicate form submit blocked');
@@ -620,7 +462,6 @@ function MockTestPage() {
     } finally { setLoading(false); }
   };
 
-  // Certificate is issued automatically on 55%+ score — no review required
   const handleTestComplete = useCallback(async (results) => {
     if (!selectedPlan) return;
     setLoading(true);
@@ -660,14 +501,10 @@ function MockTestPage() {
       };
       await saveTestResult(user.uid, testData);
 
-      // Admin: always issue certificate on every test regardless of score
-      // Normal users: auto-issue certificate if score >= 55%
       const adminUser = isAdmin(user.email);
       const shouldIssueCert = adminUser || results.percentage >= 55;
 
       if (shouldIssueCert) {
-        // Admin gets a fresh certificate every test — no duplicate check
-        // Normal users get one certificate per level
         const skipDuplicateCheck = adminUser;
         const certCheck = skipDuplicateCheck ? { hasCertificate: false } : await hasCertificateForLevel(user.uid, selectedPlan.level);
 
@@ -945,52 +782,6 @@ function MockTestPage() {
         {activeTab === 'tests' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
 
-            {/* ✅ ADMIN FIX BUTTON — sirf admin ko dikhega */}
-            {isAdmin(user?.email) && (
-              <div style={{
-                background: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)',
-                border: '2px dashed #ef4444',
-                borderRadius: '16px',
-                padding: '1.25rem 1.5rem',
-                marginBottom: '1.5rem',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                flexWrap: 'wrap',
-                gap: '1rem'
-              }}>
-                <div>
-                  <div style={{ fontWeight: '800', color: '#dc2626', fontSize: '0.95rem', marginBottom: '0.2rem' }}>
-                    🔧 Admin Tool: Fix Past Certificates
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: isDark ? '#94a3b8' : '#64748b' }}>
-                    Issues certificates to all users who previously scored 55% or above
-                  </div>
-                </div>
-                <button
-                  onClick={fixPastCertificates}
-                  disabled={fixingCerts}
-                  style={{
-                    background: fixingCerts ? '#e2e8f0' : 'linear-gradient(135deg, #ef4444, #dc2626)',
-                    border: 'none',
-                    color: fixingCerts ? '#94a3b8' : '#fff',
-                    padding: '0.75rem 1.5rem',
-                    borderRadius: '12px',
-                    fontWeight: '800',
-                    cursor: fixingCerts ? 'not-allowed' : 'pointer',
-                    fontSize: '0.9rem',
-                    boxShadow: fixingCerts ? 'none' : '0 4px 14px rgba(239,68,68,0.4)',
-                    whiteSpace: 'nowrap',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}
-                >
-                  {fixingCerts ? <><Loader size={16} className="spin" /> Running...</> : '🚀 Run Fix Now'}
-                </button>
-              </div>
-            )}
-
             <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))', border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2.5rem', animation: 'fadeInUp 0.8s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <div style={{ width: 'clamp(50px, 12vw, 70px)', height: 'clamp(50px, 12vw, 70px)', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
@@ -1092,7 +883,6 @@ function MockTestPage() {
 
         {activeTab === 'results' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
-            {/* Certificate is now issued automatically — no review banner needed */}
             <Certificatesection userCertificates={[]} testHistory={testHistory} isDark={isDark} onViewCertificate={setSelectedCertificate} onDeleteCertificate={handleDeleteCertificate} onDeleteTest={handleDeleteClick} />
           </div>
         )}
