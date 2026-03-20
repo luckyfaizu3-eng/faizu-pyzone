@@ -238,7 +238,6 @@ function MockTestPage() {
   const [selectedCertificate, setSelectedCertificate] = useState(null);
   // eslint-disable-next-line no-unused-vars
   const [testResults, setTestResults] = useState(null);
-  const [needsReview, setNeedsReview] = useState(false);
   const [paymentDetails, setPaymentDetails] = useState({});
   const [testStatus, setTestStatus] = useState({});
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -251,8 +250,9 @@ function MockTestPage() {
   const [submitOverlayData, setSubmitOverlayData] = useState({ isPassed: false, score: 0, testType: 'python' });
   const [overlayCountdown, setOverlayCountdown] = useState(10);
   const [slideDir, setSlideDir] = React.useState('none');
+  const [fixingCerts, setFixingCerts] = useState(false);
 
-  // ✅ FIX: Double submit guard
+  // Double submit guard
   const formSubmittedRef = useRef(false);
 
   const fetchPrices = async () => {
@@ -334,12 +334,167 @@ function MockTestPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // ✅ FIX: Reset form submitted ref when form step is shown
+  // Reset form submitted ref when form step is shown
   useEffect(() => {
     if (currentStep === 'form') {
       formSubmittedRef.current = false;
     }
   }, [currentStep]);
+
+  // ============================================================
+  // ADMIN TOOL — Issue certificates to all past users who scored 55%+
+  // ============================================================
+  const fixPastCertificates = async () => {
+    if (!window.confirm('This will issue certificates to all past users who scored 55% or above.\n\nContinue?')) return;
+    setFixingCerts(true);
+    window.showToast?.('🔄 Fixing past certificates... check console for progress', 'info');
+
+    // All user IDs copied from Firebase console
+    const ALL_USER_IDS = [
+      '0qVDmxAw0iVUkp9tpy2bdCbTAA23',
+      '1IDk6aBGXvQxxK0RbBytCPD3gmt2',
+      '2EfW6sHeEsbI3cBazxmVFf5Z8rw1',
+      '30HV8Eu93kPYoZKgakGm5fLd9gq2',
+      '3F6f97d3cwWDBwsSXI02Hh0qKbF2',
+      '6Xe5iBheX0ZuxWCeZcEJC9mbnAx1',
+      '8c3vjxIVszU7DyNQHqF8Mwl0XXA2',
+      '9uGH0G9JD1Q90YTJRdnT1DaNSPd2',
+      'AmvkhakMzERa7hKEX5dhTG1uqB63',
+      'BuX9AivypHZHBKE3aB1IFXoA3AU2',
+      'CT3zEm3T1QdmVxP3y3ttPBJ9zgo1',
+      'Cgf4PhvlJEe2p20t6m9hcYLM1wh1',
+      'EWzYYcIXQ4bSLdJhiTrIzDTAXtU2',
+      'FF3wx56DbdOqRbn7SaBk3Uf92lg1',
+      'GfnPQ8tGyrSgAbeaJkHbUDXUdpS2',
+      'H7wOM8iiT7aWs9pvYhKTVzqwmbM2',
+      'ImtgWAHKrBN4QX9h3rZuONb29Cz2',
+      'IoyYNgeb6HQ93PRxQNfNTX6IXVd2',
+      'JJNfFkRdTDMVBTVeJhgeZxssZwa2',
+      'JKFFrr1QCKVcSd10QCP7DYOfzjt2',
+      'K52ukXMrdrgfyfAVg3FpHWJVZZu2',
+      'L8lpMFRzZ3TRk65YgmoIajo7UNr2',
+      'LPk6e3aERch8JK9vVbKGNfEbHBq1',
+      'MMV5keBpswcfluYd5Wzonn04vSE3',
+      'MTtd5XR4WuPUN5TSoqg0L1hx5ak2',
+      'MsGK9X3ZrddOueRkvZ9W8bBvMS02',
+      'QLr8HRy2z9XKK3IWqZd2JLQfpZI2',
+      'R0FtBL0HofR3CNsbXsC6h5l2LN22',
+      'RZ7IopRmVKfZx3dHZhwu4H20HSU2',
+      'SpafvAdpeuOACcyZTHwoiGsMQBn1',
+      'VfsDJSdsnbW02GF7iTpSMRSC3RB2',
+      'VjjTeGgPqRRddVdh8QWMeUVoMof1',
+      'WPROiXKLseOuYYHNX9Mp6ldqdhq2',
+      'X4NETYCChvMTkx0GVD90ulH2m0H2',
+      'Y7jODttwijNp2zJMdrr1vm5D7I82',
+      'ZB6XK3LMugWmHHPOpJhclXcX0vv2',
+      'aKciyxy56CPB0lwdjOy2KVHaGNF3',
+      'bLzFRtvmndWFJOclB9swfBZDTlK2',
+      'bq4nz9qgBZgBNDyXbBj6gMeTOhq2',
+      'cuERoc5en8WXfZkbVTCv58Bo8wH2',
+      'dzYmEoISviMTDXXh3ZUpwuiBgxg2',
+      'g7YrmNpHDSaH6KOFVmsQPbWs58M2',
+      'gX25BN3UZ0WzaOxRTkuHyruhSP12',
+      'icOsGhKBsHcSrOioOaZW6hE6itV2',
+      'j1nOyYEKWiT1O9JzswDJdTqGpvg1',
+      'mcSqAtjXM3NhLKpn7utmljXtHS32',
+      'o6vyMkCRMTdrHaJSiqyl7RxAr7f1',
+      'p1iO03Li60Pk6moTqkku41t3Jrg1',
+      'qcPYilnsMRbZZ3OrdR7AELCghmw2',
+      's4txtD7691WDee0djMX7PY8u8bO2',
+      'scVSe1vN5MPTuHqaZddUu90PVA93',
+      'uaUdTm3PyGWUqnJs3S3XaPDHKDb2',
+      'uxJzBfwqvtZ8lpmnPrGPuRWIDg63',
+      'xQtA0zHLuKXXxgdRs3ZkKCoQcKZ2',
+      'zOfD27C7nqU4Z1ww68yVfW6fyUB2',
+    ];
+
+    try {
+      const { collection, getDocs, query, where, addDoc, serverTimestamp } = await import('firebase/firestore');
+
+      let fixed = 0, skipped = 0, errors = 0;
+      console.log(`👥 Total users to check: ${ALL_USER_IDS.length}`);
+
+      for (const userId of ALL_USER_IDS) {
+        try {
+          // Fetch mockTests subcollection
+          const mockTestsSnap = await getDocs(collection(db, 'users', userId, 'mockTests'));
+          // Fetch testResults subcollection
+          const testResultsSnap = await getDocs(collection(db, 'users', userId, 'testResults'));
+
+          // Merge both collections
+          const allTestDocs = [...mockTestsSnap.docs, ...testResultsSnap.docs];
+
+          if (allTestDocs.length === 0) {
+            console.log(`⚠️ No tests found for userId: ${userId}`);
+            continue;
+          }
+
+          for (const testDoc of allTestDocs) {
+            const test = testDoc.data();
+
+            // Only Python tests with 55%+ score
+            if (test.testType === 'neet') continue;
+            if (!test.level) continue;
+            if ((test.score ?? 0) < 55) continue;
+
+            const userEmail = test.studentInfo?.email || test.userEmail || '';
+            const userName = test.studentInfo?.fullName || test.studentInfo?.name || userEmail.split('@')[0] || 'Student';
+
+            // Check if certificate already exists
+            const certsSnap = await getDocs(
+              query(
+                collection(db, 'users', userId, 'certificates'),
+                where('level', '==', test.level)
+              )
+            );
+
+            if (!certsSnap.empty) {
+              console.log(`⏭️ Already has cert: ${userEmail} (${test.level})`);
+              skipped++;
+              continue;
+            }
+
+            // Build certificate data
+            const certData = {
+              userName: userName,
+              userAge: test.studentInfo?.age || 'N/A',
+              userAddress: test.studentInfo?.address || 'N/A',
+              userEmail: userEmail,
+              userId: userId,
+              testName: test.planName || `Python ${test.level} Mock Test`,
+              level: test.level,
+              score: test.score,
+              date: test.testDate || new Date().toLocaleDateString('en-IN', {
+                day: '2-digit', month: 'long', year: 'numeric'
+              }),
+              founderName: 'Faizan Tariq',
+              issuedAt: serverTimestamp(),
+              autoFixed: true,
+              certificateId: `CERT-${userId.slice(0,6).toUpperCase()}-${test.level.toUpperCase()}-${Date.now()}`
+            };
+
+            await addDoc(collection(db, 'users', userId, 'certificates'), certData);
+            console.log(`✅ Certificate issued: ${userEmail} — ${test.level} — ${test.score}%`);
+            fixed++;
+          }
+        } catch (userErr) {
+          console.error(`❌ Error for userId ${userId}:`, userErr);
+          errors++;
+        }
+      }
+
+      const msg = `✅ Done! Issued: ${fixed} | Already had: ${skipped} | Errors: ${errors}`;
+      console.log(msg);
+      window.showToast?.(msg, 'success');
+      await loadUserData();
+
+    } catch (err) {
+      console.error('Fix script error:', err);
+      window.showToast?.('❌ Error: ' + err.message, 'error');
+    } finally {
+      setFixingCerts(false);
+    }
+  };
 
   const handlePayment = (plan, finalPrice = null, couponResult = null) => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
@@ -414,10 +569,10 @@ function MockTestPage() {
     } else { window.showToast?.('❌ Free unlock failed', 'error'); }
   };
 
-  // ✅ FIX: useCallback + ref guard — double submit permanently fixed
+  // Prevent duplicate form submissions using ref guard
   const handleFormSubmit = useCallback(async (formData) => {
     if (formSubmittedRef.current) {
-      console.log('⛔ MockTestPage: duplicate form submit blocked');
+      console.log('Duplicate form submit blocked');
       return;
     }
     formSubmittedRef.current = true;
@@ -431,12 +586,12 @@ function MockTestPage() {
         await startTest(selectedPlan);
       } else {
         window.showToast?.('❌ Failed to save details', 'error');
-        formSubmittedRef.current = false; // reset on failure so user can retry
+        formSubmittedRef.current = false;
       }
     } catch (error) {
       console.error('Error saving details:', error);
       window.showToast?.('❌ Error occurred', 'error');
-      formSubmittedRef.current = false; // reset on error so user can retry
+      formSubmittedRef.current = false;
     } finally {
       setLoading(false);
     }
@@ -444,7 +599,7 @@ function MockTestPage() {
   }, [user, selectedPlan]);
 
   const startTest = async (plan) => {
-    setCurrentStep('loading'); // ✅ Form turant hide karo — dobara submit na ho sake
+    setCurrentStep('loading');
     setLoading(true);
     window.showToast?.('⏳ Loading Python test questions...', 'info');
     try {
@@ -455,7 +610,7 @@ function MockTestPage() {
         setCurrentStep('test');
         window.showToast?.(`✅ ${result.questions.length} questions loaded!`, 'success');
       } else {
-        window.showToast?.(result.error || '⚠️ No questions available. Admin please add questions first!', 'warning');
+        window.showToast?.(result.error || '⚠️ No questions available. Please contact admin.', 'warning');
         setCurrentStep('plans'); setSelectedPlan(null);
       }
     } catch (error) {
@@ -465,7 +620,7 @@ function MockTestPage() {
     } finally { setLoading(false); }
   };
 
-  // ✅ Certificate logic — sirf tab mile jab user ne review likha ho
+  // Certificate is issued automatically on 55%+ score — no review required
   const handleTestComplete = useCallback(async (results) => {
     if (!selectedPlan) return;
     setLoading(true);
@@ -473,67 +628,71 @@ function MockTestPage() {
       const now = new Date();
       if (selectedPlan?.level !== 'neet' && !isAdmin(user.email)) {
         const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        await updateTestAttempt(user.uid, selectedPlan.level, { testSubmittedAt: now.toISOString(), resultsViewedAt: now.toISOString(), lockStartsAt: now.toISOString(), lockEndsAt: lockEndsAt.toISOString() });
+        await updateTestAttempt(user.uid, selectedPlan.level, {
+          testSubmittedAt: now.toISOString(),
+          resultsViewedAt: now.toISOString(),
+          lockStartsAt: now.toISOString(),
+          lockEndsAt: lockEndsAt.toISOString()
+        });
       }
       const testData = {
-        planId: selectedPlan?.id || 'unknown', planName: selectedPlan?.name || 'Python Mock Test',
-        level: selectedPlan?.level || 'basic', score: results.percentage, testType: 'python',
-        correct: results.correct, wrong: results.wrong, total: results.total,
-        passed: results.percentage >= 55, timeTaken: results.timeTaken,
-        tabSwitches: results.tabSwitches || 0, correctQuestions: results.correctQuestions || [],
-        wrongQuestions: results.wrongQuestions || [], penalized: results.penalized || false,
-        studentInfo: results.studentInfo || userDetails || { fullName: user.displayName || user.email.split('@')[0], email: user.email, age: 'N/A', address: 'N/A' },
+        planId: selectedPlan?.id || 'unknown',
+        planName: selectedPlan?.name || 'Python Mock Test',
+        level: selectedPlan?.level || 'basic',
+        score: results.percentage,
+        testType: 'python',
+        correct: results.correct,
+        wrong: results.wrong,
+        total: results.total,
+        passed: isAdmin(user.email) ? true : results.percentage >= 55,
+        timeTaken: results.timeTaken,
+        tabSwitches: results.tabSwitches || 0,
+        correctQuestions: results.correctQuestions || [],
+        wrongQuestions: results.wrongQuestions || [],
+        penalized: results.penalized || false,
+        studentInfo: results.studentInfo || userDetails || {
+          fullName: user.displayName || user.email.split('@')[0],
+          email: user.email, age: 'N/A', address: 'N/A'
+        },
         testDate: now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }),
         testTime: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
         completedAt: now.toISOString()
       };
       await saveTestResult(user.uid, testData);
 
-      const shouldIssueCert = results.percentage >= 55;
-      if (shouldIssueCert) {
-        let reviewsFull = false;
-        let hasReview = false;
-        try {
-          const { collection, query, where, getDocs } = await import('firebase/firestore');
-          const allReviewsSnap = await getDocs(collection(db, 'studentReviews'));
-          reviewsFull = allReviewsSnap.size >= 200;
-          if (!reviewsFull) {
-            const reviewQuery = query(collection(db, 'studentReviews'), where('userEmail', '==', user.email));
-            const reviewSnap = await getDocs(reviewQuery);
-            hasReview = !reviewSnap.empty;
-          }
-        } catch (e) {
-          console.error('Review check failed:', e);
-          reviewsFull = false; hasReview = false;
-        }
+      // Admin: always issue certificate on every test regardless of score
+      // Normal users: auto-issue certificate if score >= 55%
+      const adminUser = isAdmin(user.email);
+      const shouldIssueCert = adminUser || results.percentage >= 55;
 
-        const canGetCert = reviewsFull || hasReview;
-        if (!canGetCert) {
-          setNeedsReview(true);
-          window.showToast?.('📝 Congratulations! You scored 55%+! To get your certificate, please write a review first in the "What Students Say" section on the Home page.', 'warning');
-        } else {
-          setNeedsReview(false);
-          const certCheck = await hasCertificateForLevel(user.uid, selectedPlan.level);
-          if (!certCheck.hasCertificate) {
-            const certificateData = {
-              userName: results.studentInfo?.fullName || userDetails?.fullName || user.displayName || user.email,
-              userAge: results.studentInfo?.age || userDetails?.age || 'N/A',
-              userAddress: results.studentInfo?.address || userDetails?.address || 'N/A',
-              userEmail: user.email, testName: selectedPlan.name, level: selectedPlan.level,
-              score: results.percentage,
-              date: now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }),
-              founderName: 'Faizan Tariq'
-            };
-            const certResult = await issueCertificate(user.uid, certificateData);
-            if (certResult.success) {
-              window.showToast?.('🎉 Certificate issued successfully!', 'success');
-              setUserCertificates(prev => [...prev, certResult.certificate]);
-            } else {
-              window.showToast?.(`❌ ${certResult.error || 'Certificate issue failed'}`, 'error');
-            }
+      if (shouldIssueCert) {
+        // Admin gets a fresh certificate every test — no duplicate check
+        // Normal users get one certificate per level
+        const skipDuplicateCheck = adminUser;
+        const certCheck = skipDuplicateCheck ? { hasCertificate: false } : await hasCertificateForLevel(user.uid, selectedPlan.level);
+
+        if (!certCheck.hasCertificate) {
+          const certificateData = {
+            userName: results.studentInfo?.fullName || userDetails?.fullName || user.displayName || user.email,
+            userAge: results.studentInfo?.age || userDetails?.age || 'N/A',
+            userAddress: results.studentInfo?.address || userDetails?.address || 'N/A',
+            userEmail: user.email,
+            testName: selectedPlan.name,
+            level: selectedPlan.level,
+            score: results.percentage,
+            date: now.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }),
+            founderName: 'Faizan Tariq',
+            isAdmin: adminUser
+          };
+          const certResult = await issueCertificate(user.uid, certificateData);
+          if (certResult.success) {
+            window.showToast?.('🎉 Certificate issued successfully!', 'success');
+            setUserCertificates(prev => [...prev, certResult.certificate]);
           } else {
-            window.showToast?.('ℹ️ You already have a certificate for this level', 'info');
+            window.showToast?.(`❌ ${certResult.error || 'Certificate issue failed'}`, 'error');
           }
+        } else {
+          window.showToast?.('ℹ️ You already have a certificate for this level', 'info');
         }
       } else {
         window.showToast?.('💪 Score 55% or above to earn your certificate!', 'info');
@@ -541,7 +700,7 @@ function MockTestPage() {
 
       setTestResults(results);
       loadUserData();
-      const isPassed = results.percentage >= 55;
+      const isPassed = isAdmin(user.email) ? true : results.percentage >= 55;
       setLoading(false);
       setCurrentStep('plans');
       setTestQuestions([]);
@@ -585,7 +744,12 @@ function MockTestPage() {
       });
       if (!isAdmin(user.email)) {
         const lockEndsAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-        await updateTestAttempt(user.uid, 'neet', { testSubmittedAt: now.toISOString(), resultsViewedAt: now.toISOString(), lockStartsAt: now.toISOString(), lockEndsAt: lockEndsAt.toISOString() });
+        await updateTestAttempt(user.uid, 'neet', {
+          testSubmittedAt: now.toISOString(),
+          resultsViewedAt: now.toISOString(),
+          lockStartsAt: now.toISOString(),
+          lockEndsAt: lockEndsAt.toISOString()
+        });
       }
       setSelectedPlan({ id: 'neet', name: 'NEET Mock Test', level: 'neet', timeLimit: 180 });
       setTestResults(neetResults);
@@ -663,8 +827,10 @@ function MockTestPage() {
     if (!testToDelete) return;
     try {
       const result = await deleteTestResult(user.uid, testToDelete.id);
-      if (result.success) { window.showToast?.('✅ Test result deleted!', 'success'); setShowDeleteDialog(false); setTestToDelete(null); await loadUserData(); }
-      else window.showToast?.('❌ Failed to delete result', 'error');
+      if (result.success) {
+        window.showToast?.('✅ Test result deleted!', 'success');
+        setShowDeleteDialog(false); setTestToDelete(null); await loadUserData();
+      } else window.showToast?.('❌ Failed to delete result', 'error');
     } catch (error) { console.error('Error deleting result:', error); window.showToast?.('❌ Error occurred', 'error'); }
   };
   const handleCancelDelete = () => { setShowDeleteDialog(false); setTestToDelete(null); };
@@ -730,7 +896,11 @@ function MockTestPage() {
     <div style={{ minHeight: '100vh', background: isDark ? 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)' : 'linear-gradient(135deg, #f0f4ff 0%, #fdf2f8 100%)', paddingTop: '100px', paddingBottom: '3rem', padding: '100px 1rem 3rem' }}>
 
       {showSubmitOverlay && (
-        <SubmissionOverlay isPassed={submitOverlayData.isPassed} countdown={overlayCountdown} score={submitOverlayData.score} testType={submitOverlayData.testType}
+        <SubmissionOverlay
+          isPassed={submitOverlayData.isPassed}
+          countdown={overlayCountdown}
+          score={submitOverlayData.score}
+          testType={submitOverlayData.testType}
           onDone={() => { setShowSubmitOverlay(false); setActiveTab('results'); backToPlans(); }}
         />
       )}
@@ -774,6 +944,53 @@ function MockTestPage() {
 
         {activeTab === 'tests' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
+
+            {/* ✅ ADMIN FIX BUTTON — sirf admin ko dikhega */}
+            {isAdmin(user?.email) && (
+              <div style={{
+                background: isDark ? 'rgba(239,68,68,0.1)' : 'rgba(239,68,68,0.05)',
+                border: '2px dashed #ef4444',
+                borderRadius: '16px',
+                padding: '1.25rem 1.5rem',
+                marginBottom: '1.5rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: '1rem'
+              }}>
+                <div>
+                  <div style={{ fontWeight: '800', color: '#dc2626', fontSize: '0.95rem', marginBottom: '0.2rem' }}>
+                    🔧 Admin Tool: Fix Past Certificates
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: isDark ? '#94a3b8' : '#64748b' }}>
+                    Issues certificates to all users who previously scored 55% or above
+                  </div>
+                </div>
+                <button
+                  onClick={fixPastCertificates}
+                  disabled={fixingCerts}
+                  style={{
+                    background: fixingCerts ? '#e2e8f0' : 'linear-gradient(135deg, #ef4444, #dc2626)',
+                    border: 'none',
+                    color: fixingCerts ? '#94a3b8' : '#fff',
+                    padding: '0.75rem 1.5rem',
+                    borderRadius: '12px',
+                    fontWeight: '800',
+                    cursor: fixingCerts ? 'not-allowed' : 'pointer',
+                    fontSize: '0.9rem',
+                    boxShadow: fixingCerts ? 'none' : '0 4px 14px rgba(239,68,68,0.4)',
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  {fixingCerts ? <><Loader size={16} className="spin" /> Running...</> : '🚀 Run Fix Now'}
+                </button>
+              </div>
+            )}
+
             <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.15), rgba(236,72,153,0.15))', border: `2px solid ${isDark ? 'rgba(99,102,241,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2.5rem', animation: 'fadeInUp 0.8s ease' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
                 <div style={{ width: 'clamp(50px, 12vw, 70px)', height: 'clamp(50px, 12vw, 70px)', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(99,102,241,0.4)' }}>
@@ -786,8 +1003,7 @@ function MockTestPage() {
                   { icon: <Monitor size={18} />, title: 'Desktop Mode', desc: 'For best experience, use desktop site mode on mobile or a laptop/computer.', color: '#6366f1', bg: 'rgba(99,102,241,0.1)', border: 'rgba(99,102,241,0.2)', bgDark: 'rgba(99,102,241,0.2)', borderDark: 'rgba(99,102,241,0.3)' },
                   { icon: <Clock size={18} />, title: '12-Hour Window', desc: 'After purchase, you have 12 hours to start the Python test. No refunds if time expires.', color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.2)', bgDark: 'rgba(16,185,129,0.2)', borderDark: 'rgba(16,185,129,0.3)' },
                   { icon: <Lock size={18} />, title: '7-Day Lock', desc: 'After viewing results, the Python test locks for 7 days. Repurchase to try again.', color: '#ef4444', bg: 'rgba(239,68,68,0.1)', border: 'rgba(239,68,68,0.2)', bgDark: 'rgba(239,68,68,0.2)', borderDark: 'rgba(239,68,68,0.3)' },
-                  { icon: <Trophy size={18} />, title: 'Pass Mark: 55%', desc: 'Score 55% or above to earn your Python certificate. Writing a review is required before downloading your certificate.', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)', bgDark: 'rgba(245,158,11,0.2)', borderDark: 'rgba(245,158,11,0.3)' },
-                  { icon: <Award size={18} />, title: '✍️ Review Required', desc: 'You must write a review on the Home page before you can download your certificate. No certificate will be issued without a review.', color: '#a855f7', bg: 'rgba(168,85,247,0.1)', border: 'rgba(168,85,247,0.2)', bgDark: 'rgba(168,85,247,0.2)', borderDark: 'rgba(168,85,247,0.3)' },
+                  { icon: <Trophy size={18} />, title: 'Pass Mark: 55%', desc: 'Score 55% or above to automatically earn your Python certificate.', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.2)', bgDark: 'rgba(245,158,11,0.2)', borderDark: 'rgba(245,158,11,0.3)' },
                 ].map((item, i) => (
                   <div key={i} style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', background: isDark ? item.bgDark : item.bg, borderRadius: '12px', border: `1px solid ${isDark ? item.borderDark : item.border}` }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: item.color, fontWeight: '700', fontSize: 'clamp(0.85rem, 2.5vw, 1rem)' }}>{item.icon}{item.title}</div>
@@ -876,21 +1092,7 @@ function MockTestPage() {
 
         {activeTab === 'results' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
-            {needsReview && (
-              <div style={{ background: 'linear-gradient(135deg, rgba(168,85,247,0.15), rgba(99,102,241,0.15))', border: '2px solid rgba(168,85,247,0.5)', borderRadius: '20px', padding: 'clamp(1rem, 3vw, 1.5rem)', marginBottom: '2rem', animation: 'fadeInUp 0.5s ease', textAlign: 'center' }}>
-                <div style={{ fontSize: 'clamp(2rem, 6vw, 2.8rem)', marginBottom: '0.75rem' }}>🎉</div>
-                <h3 style={{ fontSize: 'clamp(1.1rem, 3.5vw, 1.5rem)', fontWeight: '900', color: isDark ? '#e2e8f0' : '#1e293b', margin: '0 0 0.5rem' }}>You Passed! One Step Left</h3>
-                <p style={{ fontSize: 'clamp(0.82rem, 2.5vw, 0.95rem)', color: isDark ? '#cbd5e1' : '#475569', margin: '0 0 1.25rem', lineHeight: 1.6 }}>
-                  Write a review on the Home page to unlock your certificate download.
-                </p>
-                <button onClick={() => { window.location.href = '/#student-reviews'; }}
-                  style={{ background: 'linear-gradient(135deg, #a855f7, #6366f1)', border: 'none', color: '#fff', padding: 'clamp(0.75rem, 2.5vw, 1rem) clamp(1.5rem, 4vw, 2.5rem)', borderRadius: '50px', fontSize: 'clamp(0.9rem, 2.5vw, 1.05rem)', fontWeight: '800', cursor: 'pointer', boxShadow: '0 6px 20px rgba(168,85,247,0.45)', transition: 'all 0.25s', display: 'inline-flex', alignItems: 'center', gap: '0.6rem', letterSpacing: '0.5px' }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-2px)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
-                  ✍️ Write a Review → Get Certificate
-                </button>
-              </div>
-            )}
+            {/* Certificate is now issued automatically — no review banner needed */}
             <Certificatesection userCertificates={[]} testHistory={testHistory} isDark={isDark} onViewCertificate={setSelectedCertificate} onDeleteCertificate={handleDeleteCertificate} onDeleteTest={handleDeleteClick} />
           </div>
         )}
