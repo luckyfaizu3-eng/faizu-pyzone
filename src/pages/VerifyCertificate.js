@@ -340,7 +340,7 @@ export default function VerifyCertificate({ certificateId, onBack }) {
     if (!certificateId) return;
     const fetch = async () => {
       try {
-        const { collection, query, where, getDocs, collectionGroup } = await import('firebase/firestore');
+        const { collection, query, where, getDocs } = await import('firebase/firestore');
 
         // Strategy: search leaderboard first to find userId, then fetch certificate directly
         // This avoids needing a collectionGroup index on certificates

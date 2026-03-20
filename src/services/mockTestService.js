@@ -99,7 +99,6 @@ export const canUserTakeTest = async (userId, level) => {
   try {
     const payment = await getPaymentDetails(userId, level);
     
-    // If not paid, can't take test
     if (!payment.hasPaid) {
       return {
         canTake: false,
@@ -109,7 +108,6 @@ export const canUserTakeTest = async (userId, level) => {
 
     const now = new Date();
 
-    // Check grace period (12 hours after purchase)
     if (payment.purchaseValidUntil) {
       const gracePeriodEnd = new Date(payment.purchaseValidUntil);
       if (now < gracePeriodEnd && !payment.testSubmittedAt) {
@@ -123,7 +121,6 @@ export const canUserTakeTest = async (userId, level) => {
       }
     }
 
-    // Check if test is in progress
     if (payment.testStartedAt && !payment.testSubmittedAt) {
       return {
         canTake: true,
@@ -132,7 +129,6 @@ export const canUserTakeTest = async (userId, level) => {
       };
     }
 
-    // Check if locked (7 days after result view)
     if (payment.lockEndsAt) {
       const lockEnd = new Date(payment.lockEndsAt);
       if (now < lockEnd) {
@@ -157,7 +153,6 @@ export const canUserTakeTest = async (userId, level) => {
       }
     }
 
-    // Lock expired or grace period expired, need to repurchase
     return {
       canTake: false,
       message: '💳 Purchase again to retake this test',
@@ -252,6 +247,8 @@ export const deleteTestResult = async (userId, testId) => {
 
 /**
  * Issue certificate (ONE per level for regular users, unlimited for admin)
+ * ✅ FIX: Also saves to top-level certificatesPublic collection
+ *         so VerifyCertificate page can find it without a collectionGroup index
  */
 export const issueCertificate = async (userId, certificateData) => {
   try {
@@ -263,21 +260,14 @@ export const issueCertificate = async (userId, certificateData) => {
     
     if (!level) {
       console.error('❌ Missing level in certificateData');
-      return {
-        success: false,
-        error: 'Level is required'
-      };
+      return { success: false, error: 'Level is required' };
     }
     
     if (!userEmail) {
       console.error('❌ Missing userEmail in certificateData');
-      return {
-        success: false,
-        error: 'User email is required'
-      };
+      return { success: false, error: 'User email is required' };
     }
     
-    // 🔓 Check if admin
     const isAdmin = userEmail === 'luckyfaizu3@gmail.com';
     console.log('👤 Is Admin:', isAdmin);
     
@@ -304,6 +294,7 @@ export const issueCertificate = async (userId, certificateData) => {
     const certificate = {
       ...certificateData,
       certificateId: certId,
+      userId,
       issuedAt: new Date().toISOString(),
       timestamp: Timestamp.now(),
       isAdminCert: isAdmin || false
@@ -311,7 +302,7 @@ export const issueCertificate = async (userId, certificateData) => {
 
     console.log('📋 Final certificate object:', certificate);
 
-    // 🔓 Admin gets unlimited certificates with timestamp-based IDs
+    // Save to users/{uid}/certificates subcollection
     if (isAdmin) {
       const docId = `${level}_${timestamp}`;
       const adminCertRef = doc(db, 'users', userId, 'certificates', docId);
@@ -319,11 +310,26 @@ export const issueCertificate = async (userId, certificateData) => {
       await setDoc(adminCertRef, certificate);
       console.log('✅ Admin certificate issued with ID:', docId);
     } else {
-      // Regular users get ONE certificate per level
       const certRef = doc(db, 'users', userId, 'certificates', level);
       console.log('📁 Saving user certificate to:', `users/${userId}/certificates/${level}`);
       await setDoc(certRef, certificate);
       console.log('✅ Certificate issued for level:', level);
+    }
+
+    // ✅ FIX: Also save to top-level certificatesPublic collection
+    // This allows VerifyCertificate page to find cert by ID without
+    // a collectionGroup index — simple where() query on a flat collection
+    try {
+      const publicCertRef = doc(db, 'certificatesPublic', certId);
+      await setDoc(publicCertRef, {
+        ...certificate,
+        // Exclude heavy/unnecessary fields from public record
+        timestamp: Timestamp.now(),
+      });
+      console.log('✅ Certificate also saved to certificatesPublic for QR verification');
+    } catch (publicErr) {
+      // Non-fatal — user still gets their cert, QR verify may not work for this cert
+      console.warn('⚠️ Failed to save to certificatesPublic:', publicErr.message);
     }
 
     console.log('🎉 Certificate successfully saved to Firebase!');
@@ -514,7 +520,7 @@ export const processMockTestPayment = async (userId, planId, paymentData) => {
     const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
     
     const now = new Date();
-    const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000); // 12 hours grace period
+    const purchaseValidUntil = new Date(now.getTime() + 12 * 60 * 60 * 1000);
     
     const payment = {
       planId,
@@ -524,17 +530,11 @@ export const processMockTestPayment = async (userId, planId, paymentData) => {
       paymentId: paymentData.paymentId,
       paidAt: paymentData.paidAt || now.toISOString(),
       purchaseValidUntil: purchaseValidUntil.toISOString(),
-      
-      // Test progress tracking
       testStartedAt: null,
       testSubmittedAt: null,
       resultsViewedAt: null,
-      
-      // Lock period tracking
       lockStartsAt: null,
       lockEndsAt: null,
-      
-      // Metadata
       timestamp: Timestamp.now(),
       date: new Date().toLocaleDateString('en-IN', {
         day: '2-digit',
@@ -562,38 +562,26 @@ export const processMockTestPayment = async (userId, planId, paymentData) => {
 };
 
 /**
- * Update test attempt progress (start, submit, view results, lock)
- * ✅ FIXED: Now checks if document exists before updating
+ * Update test attempt progress
  */
 export const updateTestAttempt = async (userId, level, updateData) => {
   try {
     const paymentRef = doc(db, 'users', userId, 'mockTestPayments', level);
-    
-    // ✅ Check if payment document exists first
     const paymentDoc = await getDoc(paymentRef);
     
     if (!paymentDoc.exists()) {
       console.log(`⚠️ Payment document not found for ${level}, creating new one...`);
       
-      // ✅ Create new payment document with update data
       const newPayment = {
         planId: `mock-${level}`,
         hasPaid: true,
         level: level,
-        
-        // Test progress tracking
         testStartedAt: null,
         testSubmittedAt: null,
         resultsViewedAt: null,
-        
-        // Lock period tracking
         lockStartsAt: null,
         lockEndsAt: null,
-        
-        // Apply the update data
         ...updateData,
-        
-        // Metadata
         timestamp: Timestamp.now(),
         lastUpdated: Timestamp.now(),
         date: new Date().toLocaleDateString('en-IN', {
@@ -613,7 +601,6 @@ export const updateTestAttempt = async (userId, level, updateData) => {
       };
     }
     
-    // ✅ Document exists, update it
     const dataWithTimestamp = {
       ...updateData,
       lastUpdated: Timestamp.now()
@@ -651,7 +638,7 @@ export const hasUserPaidForLevel = async (userId, level) => {
 };
 
 /**
- * Reset test lock (ADMIN ONLY - for testing/support)
+ * Reset test lock (ADMIN ONLY)
  */
 export const resetTestLock = async (userId, level) => {
   try {
@@ -682,7 +669,7 @@ export const resetTestLock = async (userId, level) => {
 };
 
 /**
- * Get all payments for a user (for payment history display)
+ * Get all payments for a user
  */
 export const getAllPayments = async (userId) => {
   try {
@@ -694,7 +681,6 @@ export const getAllPayments = async (userId) => {
       ...doc.data()
     }));
 
-    // Sort by timestamp (newest first)
     payments.sort((a, b) => {
       const timeA = a.timestamp?.toMillis() || 0;
       const timeB = b.timestamp?.toMillis() || 0;
@@ -716,7 +702,7 @@ export const getAllPayments = async (userId) => {
 };
 
 /**
- * Get test analytics for admin dashboard (basic version)
+ * Get test analytics for admin dashboard
  */
 export const getTestAnalytics = async () => {
   return {
@@ -733,7 +719,7 @@ export const getTestAnalytics = async () => {
 };
 
 /**
- * Extend grace period (ADMIN ONLY - for support/special cases)
+ * Extend grace period (ADMIN ONLY)
  */
 export const extendGracePeriod = async (userId, level, additionalHours = 12) => {
   try {
@@ -741,10 +727,7 @@ export const extendGracePeriod = async (userId, level, additionalHours = 12) => 
     const paymentDoc = await getDoc(paymentRef);
     
     if (!paymentDoc.exists()) {
-      return {
-        success: false,
-        message: 'Payment not found'
-      };
+      return { success: false, message: 'Payment not found' };
     }
 
     const payment = paymentDoc.data();

@@ -47,6 +47,9 @@ import BlogPostMockTest from './pages/BlogPostMockTest';
 // ✅ Certificate Verification Page
 import VerifyCertificate from './pages/VerifyCertificate';
 
+// ✅ TEMPORARY — Certificate Migration Tool (delete after running once)
+import MigrateCertsPage from './pages/MigrateCertsPage';
+
 // ✅ Streak price service
 import { getStreakPrice } from './streakService';
 
@@ -148,7 +151,7 @@ function App() {
         'home', 'products', 'cart', 'orders', 'admin', 'login',
         'mocktests', 'leaderboard', 'aichat', 'compiler',
         'streak', 'streak-practice', 'streak-result', 'admin-streak',
-        'blog-mock-test', 'verify',
+        'blog-mock-test', 'verify', 'migrate-certs',
       ];
       return validPages.includes(hash) ? hash : 'home';
     };
@@ -681,6 +684,11 @@ function App() {
                   {/* ✅ Blog Post */}
                   {currentPage === 'blog-mock-test' && (
                     <BlogPostMockTest setCurrentPage={setCurrentPage} />
+                  )}
+
+                  {/* ✅ TEMPORARY — Certificate Migration Tool (admin only) */}
+                  {currentPage === 'migrate-certs' && (
+                    <MigrateCertsPage />
                   )}
 
                   {/* ✅ CERTIFICATE VERIFY PAGE
