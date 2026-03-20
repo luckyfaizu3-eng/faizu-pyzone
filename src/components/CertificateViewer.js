@@ -62,13 +62,13 @@ async function fetchSignatureBase64() {
     const blob = await res.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result); // "data:image/jpeg;base64,..."
+      reader.onloadend = () => resolve(reader.result);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
   } catch (e) {
     console.warn('Signature fetch failed, falling back to URL:', e);
-    return SIG_URL; // fallback — works for live preview but not canvas export
+    return SIG_URL;
   }
 }
 
@@ -90,8 +90,6 @@ function QRImage({ value, x, y, size, color }) {
 
 /* ─────────────────────────────────────────
    CERTIFICATE SVG
-   sigBase64: pass base64 string for canvas export (fixes CORS)
-              leave undefined for live preview (uses URL directly)
 ───────────────────────────────────────── */
 function CertSVG({ cert, sigBase64 }) {
   const level = (cert.level || 'basic').toLowerCase();
@@ -103,7 +101,6 @@ function CertSVG({ cert, sigBase64 }) {
   const verifyUrl = `https://faizupyzone.shop/#verify/${cert.certificateId || 'N/A'}`;
   const SX = 112, SY = 310;
 
-  // Use base64 for export (no CORS), fall back to URL for live preview
   const sigHref = sigBase64 || SIG_URL;
 
   return (
@@ -133,7 +130,6 @@ function CertSVG({ cert, sigBase64 }) {
           <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
           <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-        {/* Python logo gradients */}
         <linearGradient id="plBlue_basic" x1="12%" y1="12%" x2="80%" y2="78%">
           <stop offset="0%" stopColor="#387EB8"/><stop offset="100%" stopColor="#366994"/>
         </linearGradient>
@@ -145,7 +141,7 @@ function CertSVG({ cert, sigBase64 }) {
       {/* Background */}
       <rect width={W} height={H} fill="#F9F7F4"/>
 
-      {/* Python watermark — faded background */}
+      {/* Python watermark */}
       <g opacity="0.042" transform="translate(570,160) scale(1.6)">
         <path fill="#387EB8" d="M126.916.072c-64.832 0-60.784 28.115-60.784 28.115l.072 29.128h61.868v8.745H41.631S.145 61.355.145 126.77c0 65.417 36.21 63.097 36.21 63.097h21.61v-30.356s-1.165-36.21 35.632-36.21h61.362s34.475.557 34.475-33.319V33.97S194.67.072 126.916.072zm-34.054 19.474a11.05 11.05 0 0 1 11.063 11.064A11.05 11.05 0 0 1 92.862 41.674a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064z"/>
         <path fill="#FFC331" d="M128.757 254.126c64.832 0 60.784-28.115 60.784-28.115l-.072-29.127H127.6v-8.745h86.441s41.486 4.705 41.486-60.712c0-65.416-36.21-63.096-36.21-63.096h-21.61v30.355s1.165 36.21-35.632 36.21h-61.362s-34.475-.557-34.475 33.32v56.013s-5.235 33.897 62.518 33.897zm34.055-19.474a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064 11.05 11.05 0 0 1 11.063 11.064 11.05 11.05 0 0 1-11.063 11.064z"/>
@@ -169,7 +165,7 @@ function CertSVG({ cert, sigBase64 }) {
       <rect x="0" y="10" width="9" height={H-20} fill={`url(#gV_${level})`}/>
       <rect x="5" y="5" width={W-10} height={H-10} fill="none" stroke={`url(#gH_${level})`} strokeWidth="1.5"/>
 
-      {/* ── SEAL ── */}
+      {/* Seal */}
       {Array.from({ length: 20 }).map((_, i) => {
         const a1 = (i/20)*Math.PI*2, a2 = a1+Math.PI/20;
         const r1=84, r2=74;
@@ -208,7 +204,7 @@ function CertSVG({ cert, sigBase64 }) {
         </g>
       ))}
 
-      {/* Top left: Python logo + PYSKILL header */}
+      {/* Top left: Python logo + header */}
       <g transform="translate(26, 22) scale(0.095)">
         <path fill="url(#plBlue_basic)" d="M126.916.072c-64.832 0-60.784 28.115-60.784 28.115l.072 29.128h61.868v8.745H41.631S.145 61.355.145 126.77c0 65.417 36.21 63.097 36.21 63.097h21.61v-30.356s-1.165-36.21 35.632-36.21h61.362s34.475.557 34.475-33.319V33.97S194.67.072 126.916.072zm-34.054 19.474a11.05 11.05 0 0 1 11.063 11.064A11.05 11.05 0 0 1 92.862 41.674a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064z"/>
         <path fill="url(#plYellow_basic)" d="M128.757 254.126c64.832 0 60.784-28.115 60.784-28.115l-.072-29.127H127.6v-8.745h86.441s41.486 4.705 41.486-60.712c0-65.416-36.21-63.096-36.21-63.096h-21.61v30.355s1.165 36.21-35.632 36.21h-61.362s-34.475-.557-34.475 33.32v56.013s-5.235 33.897 62.518 33.897zm34.055-19.474a11.05 11.05 0 0 1-11.063-11.064 11.05 11.05 0 0 1 11.063-11.064 11.05 11.05 0 0 1 11.063 11.064 11.05 11.05 0 0 1-11.063 11.064z"/>
@@ -217,7 +213,7 @@ function CertSVG({ cert, sigBase64 }) {
       <text x={56} y={50} fontSize="6.5" fill={accentLight} fontFamily="Cinzel,serif" letterSpacing="2.5">PYTHON CERTIFICATION</text>
       <line x1={22} y1={60} x2={200} y2={60} stroke={goldMid} strokeWidth="0.5" opacity="0.45"/>
 
-      {/* Bottom left PySkill */}
+      {/* Bottom left */}
       <text x={SX} y={H-55} textAnchor="middle" fontSize="10" fontWeight="700" fill={goldMid} fontFamily="Cinzel,serif" letterSpacing="1.5">PYSKILL</text>
       <text x={SX} y={H-40} textAnchor="middle" fontSize="8" fill="#aaaaaa" fontFamily="Cormorant Garamond,Georgia,serif">faizupyzone.shop</text>
 
@@ -271,7 +267,7 @@ function CertSVG({ cert, sigBase64 }) {
       <text x={780} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">LOCATION</text>
       <text x={780} y={528} textAnchor="middle" fontSize="10" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.userAddress || 'India'}</text>
 
-      {/* ── SIGNATURE ── sigHref = base64 during export, URL during preview */}
+      {/* Signature */}
       <image
         href={sigHref}
         x={500} y={554} width={220} height={60}
@@ -304,7 +300,6 @@ async function downloadAsPDF(cert) {
   const { jsPDF } = await import('jspdf');
   const level = (cert.level || 'basic').toLowerCase();
 
-  // ── FIX: fetch signature as base64 to avoid CORS block on canvas ──
   const sigBase64 = await fetchSignatureBase64();
 
   const wrap = document.createElement('div');
@@ -313,7 +308,6 @@ async function downloadAsPDF(cert) {
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(wrap);
 
-  // Pass sigBase64 so SVG embeds it directly — no external URL on canvas
   root.render(<CertSVG cert={cert} sigBase64={sigBase64} />);
   await new Promise(r => setTimeout(r, 500));
 
@@ -363,7 +357,6 @@ async function downloadAsPDF(cert) {
 async function saveAsImage(cert) {
   const level = (cert.level || 'basic').toLowerCase();
 
-  // ── FIX: fetch signature as base64 to avoid CORS block on canvas ──
   const sigBase64 = await fetchSignatureBase64();
 
   const wrap = document.createElement('div');
@@ -372,7 +365,6 @@ async function saveAsImage(cert) {
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(wrap);
 
-  // Pass sigBase64 so SVG embeds it directly — no external URL on canvas
   root.render(<CertSVG cert={cert} sigBase64={sigBase64} />);
   await new Promise(r => setTimeout(r, 500));
 
@@ -434,8 +426,9 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
   useEffect(() => {
     if (!user?.email) { setHasReview(false); return; }
-    // Admin bypass — no review needed
+    // Admin bypass — no review required
     if (user.email === 'luckyfaizu3@gmail.com') { setHasReview(true); return; }
+
     const check = async () => {
       try {
         const { collection, query, where, getDocs } = await import('firebase/firestore');
@@ -444,9 +437,25 @@ export default function CertificateViewer({ certificate, onClose, user }) {
         const q = query(collection(db, 'studentReviews'), where('userEmail', '==', user.email));
         const snap = await getDocs(q);
         setHasReview(!snap.empty);
-      } catch (e) { console.error(e); setHasReview(false); }
+      } catch (e) {
+        console.error(e);
+        setHasReview(false);
+      }
     };
-    check();
+
+    check(); // Initial check on mount
+
+    // Re-check when user returns to this tab
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        check();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Cleanup
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+
   }, [user?.email]);
 
   const canDownload = hasReview === true;
@@ -480,7 +489,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '20px', backdropFilter: 'blur(8px)', overflowY: 'auto',
       }}>
-        {/* Close */}
+        {/* Close button */}
         <button onClick={onClose} style={{
           position: 'fixed', top: 20, right: 20,
           background: '#ef4444', border: 'none', borderRadius: '50%',
@@ -491,7 +500,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22, width: '100%', maxWidth: 920, paddingTop: 20 }}>
 
-          {/* Preview — uses URL directly (no base64 needed for live preview) */}
+          {/* Certificate Preview */}
           <div style={{
             width: previewW, height: previewH,
             borderRadius: 16, overflow: 'hidden',
@@ -501,12 +510,11 @@ export default function CertificateViewer({ certificate, onClose, user }) {
             pointerEvents: canDownload ? 'auto' : 'none',
           }}>
             <div style={{ transform: `scale(${scale})`, transformOrigin: 'top left', width: 1056, height: 748 }}>
-              {/* No sigBase64 here — live preview uses URL directly, CORS is fine for <image> in DOM SVG */}
               <CertSVG cert={cert} />
             </div>
           </div>
 
-          {/* Review required */}
+          {/* Review required message */}
           {!checking && !canDownload && (
             <div style={{
               background: 'linear-gradient(135deg,rgba(168,85,247,0.2),rgba(99,102,241,0.2))',
@@ -519,9 +527,14 @@ export default function CertificateViewer({ certificate, onClose, user }) {
               </p>
               <p style={{ margin: '0 0 16px', fontSize: 12, color: '#94a3b8', lineHeight: 1.6 }}>
                 Write a review on the Home page to unlock your certificate download.
+                <br/>
+                <span style={{ color: '#a78bfa', fontSize: 11 }}>
+                  ✅ This page will automatically unlock after you submit your review!
+                </span>
               </p>
+              {/* Opens in new tab so the certificate modal stays open */}
               <button
-                onClick={() => { window.location.href = '/#student-reviews'; }}
+                onClick={() => { window.open('/#student-reviews', '_blank'); }}
                 style={{
                   background: 'linear-gradient(135deg,#a855f7,#6366f1)',
                   border: 'none', color: '#fff', padding: '10px 24px',
@@ -534,13 +547,14 @@ export default function CertificateViewer({ certificate, onClose, user }) {
             </div>
           )}
 
+          {/* Checking status */}
           {checking && (
             <p style={{ color: '#64748b', fontSize: 12, fontFamily: '"Cinzel",serif', letterSpacing: 1 }}>
               Checking review status...
             </p>
           )}
 
-          {/* Buttons */}
+          {/* Action Buttons */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button onClick={onClose} style={{
               padding: '13px 28px', background: 'transparent',
