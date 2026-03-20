@@ -9,9 +9,6 @@ const FONT_STYLE = `
 
 const SIG_URL = 'https://i.ibb.co/C3xKVcFm/Whats-App-Image-2026-03-19-at-12-47-02-AM.jpg';
 
-/* ─────────────────────────────────────────
-   LEVEL CONFIG
-───────────────────────────────────────── */
 const LEVEL_CONFIG = {
   basic: {
     label: 'BASIC',
@@ -51,10 +48,6 @@ const LEVEL_CONFIG = {
   },
 };
 
-/* ─────────────────────────────────────────
-   FETCH SIGNATURE AS BASE64
-   (Solves CORS issue when rendering SVG on canvas)
-───────────────────────────────────────── */
 async function fetchSignatureBase64() {
   try {
     const res = await fetch(SIG_URL);
@@ -72,9 +65,6 @@ async function fetchSignatureBase64() {
   }
 }
 
-/* ─────────────────────────────────────────
-   QR IMAGE
-───────────────────────────────────────── */
 function QRImage({ value, x, y, size, color }) {
   const [dataUrl, setDataUrl] = useState(null);
   useEffect(() => {
@@ -88,9 +78,6 @@ function QRImage({ value, x, y, size, color }) {
   return <image href={dataUrl} x={x} y={y} width={size} height={size} />;
 }
 
-/* ─────────────────────────────────────────
-   CERTIFICATE SVG
-───────────────────────────────────────── */
 function CertSVG({ cert, sigBase64 }) {
   const level = (cert.level || 'basic').toLowerCase();
   const cfg = LEVEL_CONFIG[level] || LEVEL_CONFIG.basic;
@@ -98,10 +85,29 @@ function CertSVG({ cert, sigBase64 }) {
   const W = 1056, H = 748;
   const score = cert.score ?? 0;
   const studentNameUpper = (cert.userName || '').toUpperCase();
+  const locationText = (cert.userAddress || 'India').trim();
   const verifyUrl = `https://faizupyzone.shop/#verify/${cert.certificateId || 'N/A'}`;
   const SX = 112, SY = 310;
 
   const sigHref = sigBase64 || SIG_URL;
+
+  // Responsive font size for name
+  const nameFontSize = studentNameUpper.length > 28
+    ? '28'
+    : studentNameUpper.length > 25
+    ? '32'
+    : studentNameUpper.length > 20
+    ? '40'
+    : studentNameUpper.length > 15
+    ? '46'
+    : '54';
+
+  // Responsive font size for location
+  const locationFontSize = locationText.length > 25
+    ? '7.5'
+    : locationText.length > 18
+    ? '8.5'
+    : '10';
 
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} data-cert-root="true">
@@ -228,8 +234,18 @@ function CertSVG({ cert, sigBase64 }) {
       <line x1={420} y1={143} x2={760} y2={143} stroke={`url(#gH_${level})`} strokeWidth="0.75"/>
       <text x={590} y={175} textAnchor="middle" fontSize="10" fill="#999" fontFamily="Cinzel,serif" letterSpacing="2">THIS IS TO CERTIFY THAT</text>
 
-      {/* Student name */}
-      <text x={590} y={240} textAnchor="middle" fontSize="54" fontStyle="italic" fontWeight="600" fill="#111111" fontFamily="Cormorant Garamond,Georgia,serif">{studentNameUpper}</text>
+      {/* ✅ Student name — responsive font size */}
+      <text
+        x={590} y={240}
+        textAnchor="middle"
+        fontSize={nameFontSize}
+        fontStyle="italic"
+        fontWeight="600"
+        fill="#111111"
+        fontFamily="Cormorant Garamond,Georgia,serif"
+      >
+        {studentNameUpper}
+      </text>
       <line x1={370} y1={255} x2={810} y2={255} stroke="#222" strokeWidth="1.3"/>
       <line x1={400} y1={260} x2={780} y2={260} stroke={goldMid} strokeWidth="0.75"/>
 
@@ -257,7 +273,7 @@ function CertSVG({ cert, sigBase64 }) {
       <text x={590} y={468} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="2">CERTIFICATE ID</text>
       <text x={590} y={485} textAnchor="middle" fontSize="10" fontWeight="800" fill="#1a1a2e" fontFamily="Courier New,monospace" letterSpacing="0.8">{cert.certificateId || 'N/A'}</text>
 
-      {/* Level / Date / Location */}
+      {/* Level / Date / ✅ Location — responsive font size */}
       <text x={460} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">LEVEL</text>
       <text x={460} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{(cert.level||'BASIC').toUpperCase()}</text>
 
@@ -265,7 +281,7 @@ function CertSVG({ cert, sigBase64 }) {
       <text x={620} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.date || ''}</text>
 
       <text x={780} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">LOCATION</text>
-      <text x={780} y={528} textAnchor="middle" fontSize="10" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.userAddress || 'India'}</text>
+      <text x={780} y={528} textAnchor="middle" fontSize={locationFontSize} fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{locationText}</text>
 
       {/* Signature */}
       <image
@@ -293,36 +309,27 @@ function CertSVG({ cert, sigBase64 }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   PDF DOWNLOAD
-───────────────────────────────────────── */
 async function downloadAsPDF(cert) {
   const { jsPDF } = await import('jspdf');
   const level = (cert.level || 'basic').toLowerCase();
-
   const sigBase64 = await fetchSignatureBase64();
-
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1056px;height:748px;overflow:hidden;';
   document.body.appendChild(wrap);
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(wrap);
-
   root.render(<CertSVG cert={cert} sigBase64={sigBase64} />);
   await new Promise(r => setTimeout(r, 500));
-
   const svgEl = wrap.querySelector('svg');
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
   styleEl.textContent = FONT_STYLE;
   svgEl.insertBefore(styleEl, svgEl.firstChild);
   if (document.fonts) await document.fonts.ready;
   await new Promise(r => setTimeout(r, 1200));
-
   const serializer = new XMLSerializer();
   const svgStr = serializer.serializeToString(svgEl);
   const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-
   const SCALE = 3;
   const canvas = document.createElement('canvas');
   canvas.width = 1056 * SCALE;
@@ -330,18 +337,15 @@ async function downloadAsPDF(cert) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-
   await new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(); };
     img.onerror = e => reject(new Error('SVG render failed'));
     img.src = url;
   });
-
   URL.revokeObjectURL(url);
   root.unmount();
   document.body.removeChild(wrap);
-
   const imgData = canvas.toDataURL('image/png', 1.0);
   const A4_W = 841.89, A4_H = 595.28;
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4', compress: true });
@@ -351,35 +355,26 @@ async function downloadAsPDF(cert) {
   pdf.save(`PySkill_Certificate_${level.toUpperCase()}_${name}.pdf`);
 }
 
-/* ─────────────────────────────────────────
-   SAVE AS IMAGE
-───────────────────────────────────────── */
 async function saveAsImage(cert) {
   const level = (cert.level || 'basic').toLowerCase();
-
   const sigBase64 = await fetchSignatureBase64();
-
   const wrap = document.createElement('div');
   wrap.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1056px;height:748px;overflow:hidden;';
   document.body.appendChild(wrap);
   const { createRoot } = await import('react-dom/client');
   const root = createRoot(wrap);
-
   root.render(<CertSVG cert={cert} sigBase64={sigBase64} />);
   await new Promise(r => setTimeout(r, 500));
-
   const svgEl = wrap.querySelector('svg');
   const styleEl = document.createElementNS('http://www.w3.org/2000/svg', 'style');
   styleEl.textContent = FONT_STYLE;
   svgEl.insertBefore(styleEl, svgEl.firstChild);
   if (document.fonts) await document.fonts.ready;
   await new Promise(r => setTimeout(r, 1200));
-
   const serializer = new XMLSerializer();
   const svgStr = serializer.serializeToString(svgEl);
   const blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(blob);
-
   const SCALE = 4;
   const canvas = document.createElement('canvas');
   canvas.width = 1056 * SCALE;
@@ -387,18 +382,15 @@ async function saveAsImage(cert) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-
   await new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); resolve(); };
     img.onerror = reject;
     img.src = url;
   });
-
   URL.revokeObjectURL(url);
   root.unmount();
   document.body.removeChild(wrap);
-
   canvas.toBlob(blob => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -409,9 +401,6 @@ async function saveAsImage(cert) {
   }, 'image/png', 1.0);
 }
 
-/* ─────────────────────────────────────────
-   MAIN — CertificateViewer
-───────────────────────────────────────── */
 export default function CertificateViewer({ certificate, onClose, user }) {
   const [downloading, setDownloading] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
@@ -426,9 +415,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
   useEffect(() => {
     if (!user?.email) { setHasReview(false); return; }
-    // Admin bypass — no review required
     if (user.email === 'luckyfaizu3@gmail.com') { setHasReview(true); return; }
-
     const check = async () => {
       try {
         const { collection, query, where, getDocs } = await import('firebase/firestore');
@@ -442,20 +429,12 @@ export default function CertificateViewer({ certificate, onClose, user }) {
         setHasReview(false);
       }
     };
-
-    check(); // Initial check on mount
-
-    // Re-check when user returns to this tab
+    check();
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        check();
-      }
+      if (document.visibilityState === 'visible') check();
     };
     document.addEventListener('visibilitychange', handleVisibility);
-
-    // Cleanup
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-
   }, [user?.email]);
 
   const canDownload = hasReview === true;
@@ -489,7 +468,6 @@ export default function CertificateViewer({ certificate, onClose, user }) {
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '20px', backdropFilter: 'blur(8px)', overflowY: 'auto',
       }}>
-        {/* Close button */}
         <button onClick={onClose} style={{
           position: 'fixed', top: 20, right: 20,
           background: '#ef4444', border: 'none', borderRadius: '50%',
@@ -500,7 +478,6 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 22, width: '100%', maxWidth: 920, paddingTop: 20 }}>
 
-          {/* Certificate Preview */}
           <div style={{
             width: previewW, height: previewH,
             borderRadius: 16, overflow: 'hidden',
@@ -514,7 +491,6 @@ export default function CertificateViewer({ certificate, onClose, user }) {
             </div>
           </div>
 
-          {/* Review required message */}
           {!checking && !canDownload && (
             <div style={{
               background: 'linear-gradient(135deg,rgba(168,85,247,0.2),rgba(99,102,241,0.2))',
@@ -532,7 +508,6 @@ export default function CertificateViewer({ certificate, onClose, user }) {
                   ✅ This page will automatically unlock after you submit your review!
                 </span>
               </p>
-              {/* Opens in new tab so the certificate modal stays open */}
               <button
                 onClick={() => { window.open('/#student-reviews', '_blank'); }}
                 style={{
@@ -547,14 +522,12 @@ export default function CertificateViewer({ certificate, onClose, user }) {
             </div>
           )}
 
-          {/* Checking status */}
           {checking && (
             <p style={{ color: '#64748b', fontSize: 12, fontFamily: '"Cinzel",serif', letterSpacing: 1 }}>
               Checking review status...
             </p>
           )}
 
-          {/* Action Buttons */}
           <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
             <button onClick={onClose} style={{
               padding: '13px 28px', background: 'transparent',
