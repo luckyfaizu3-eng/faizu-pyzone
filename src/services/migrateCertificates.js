@@ -8,7 +8,7 @@ import { collection, getDocs, doc, setDoc, Timestamp } from 'firebase/firestore'
 export const migrateSingleUser = async (onProgress) => {
   const results = { migrated: 0, skipped: 0, failed: 0, errors: [] };
 
-  const userId = 'GfnPQ8tGyrSgAbeaJkHbUDXUdpS2'; // ravikumarravi0220@gmail.com
+  const userId = 'gX25BN3UZOWzaOxRTkuHyruhSP12'; // ravikumarravi0220@gmail.com
 
   try {
     onProgress?.(`Checking user: ${userId}`);

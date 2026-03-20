@@ -8,7 +8,7 @@ import { collection, getDocs, doc, setDoc, Timestamp } from 'firebase/firestore'
 import { useAuth } from '../App';
 
 const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
-const TARGET_USER_ID = 'GfnPQ8tGyrSgAbeaJkHbUDXUdpS2';
+const TARGET_USER_ID = 'gX25BN3UZOWzaOxRTkuHyruhSP12';
 const TARGET_EMAIL = 'ravikumarravi0220@gmail.com';
 
 export default function MigrateSingleUserPage() {
