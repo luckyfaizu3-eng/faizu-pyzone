@@ -102,12 +102,7 @@ function CertSVG({ cert, sigBase64 }) {
     ? '46'
     : '54';
 
-  // Responsive font size for location
-  const locationFontSize = locationText.length > 25
-    ? '7.5'
-    : locationText.length > 18
-    ? '8.5'
-    : '10';
+
 
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }} data-cert-root="true">
@@ -234,9 +229,10 @@ function CertSVG({ cert, sigBase64 }) {
       <line x1={420} y1={143} x2={760} y2={143} stroke={`url(#gH_${level})`} strokeWidth="0.75"/>
       <text x={590} y={175} textAnchor="middle" fontSize="10" fill="#999" fontFamily="Cinzel,serif" letterSpacing="2">THIS IS TO CERTIFY THAT</text>
 
-      {/* ✅ Student name — responsive font size */}
+      {/* ✅ Student name — responsive font size + dynamic y position */}
       <text
-        x={590} y={240}
+        x={590}
+        y={studentNameUpper.length > 25 ? 234 : studentNameUpper.length > 20 ? 237 : studentNameUpper.length > 15 ? 239 : 240}
         textAnchor="middle"
         fontSize={nameFontSize}
         fontStyle="italic"
@@ -273,15 +269,25 @@ function CertSVG({ cert, sigBase64 }) {
       <text x={590} y={468} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="2">CERTIFICATE ID</text>
       <text x={590} y={485} textAnchor="middle" fontSize="10" fontWeight="800" fill="#1a1a2e" fontFamily="Courier New,monospace" letterSpacing="0.8">{cert.certificateId || 'N/A'}</text>
 
-      {/* Level / Date / ✅ Location — responsive font size */}
+      {/* ✅ Level + Date + Address — same row */}
       <text x={460} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">LEVEL</text>
       <text x={460} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{(cert.level||'BASIC').toUpperCase()}</text>
 
-      <text x={620} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">DATE</text>
-      <text x={620} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.date || ''}</text>
+      <text x={600} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">DATE</text>
+      <text x={600} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.date || ''}</text>
 
-      <text x={780} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">LOCATION</text>
-      <text x={780} y={528} textAnchor="middle" fontSize={locationFontSize} fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{locationText}</text>
+      {/* ✅ ADDRESS — force fit within 220px so it never overlaps QR */}
+      <text x={780} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">ADDRESS</text>
+      <text
+        x={780} y={528}
+        textAnchor="middle"
+        textLength="220"
+        lengthAdjust="spacingAndGlyphs"
+        fontSize="10"
+        fontWeight="700"
+        fill="#1a1a2e"
+        fontFamily="Cinzel,serif"
+      >{locationText}</text>
 
       {/* Signature */}
       <image
