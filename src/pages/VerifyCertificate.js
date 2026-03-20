@@ -217,9 +217,17 @@ function CertSVG({ cert }) {
       <text x={600} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">DATE</text>
       <text x={600} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.date || ''}</text>
 
-      {/* ✅ ADDRESS — textLength force fit, never overlaps QR */}
+      {/* ✅ ADDRESS — textLength sirf lamba address ke liye */}
       <text x={780} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">ADDRESS</text>
-      <text x={780} y={528} textAnchor="middle" textLength="220" lengthAdjust="spacingAndGlyphs" fontSize="10" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{addressText}</text>
+      <text
+        x={780} y={528}
+        textAnchor="middle"
+        {...(addressText.length > 20 ? { textLength: "220", lengthAdjust: "spacingAndGlyphs" } : {})}
+        fontSize={addressText.length > 30 ? '7' : addressText.length > 20 ? '8.5' : '10'}
+        fontWeight="700"
+        fill="#1a1a2e"
+        fontFamily="Cinzel,serif"
+      >{addressText}</text>
 
       {/* Signature — untouched */}
       <image href={SIG_URL} x={500} y={554} width={220} height={60} preserveAspectRatio="xMidYMax meet" style={{ mixBlendMode: 'multiply' }}/>

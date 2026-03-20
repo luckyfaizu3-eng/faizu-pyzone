@@ -276,14 +276,13 @@ function CertSVG({ cert, sigBase64 }) {
       <text x={600} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">DATE</text>
       <text x={600} y={528} textAnchor="middle" fontSize="11" fontWeight="700" fill="#1a1a2e" fontFamily="Cinzel,serif">{cert.date || ''}</text>
 
-      {/* ✅ ADDRESS — force fit within 220px so it never overlaps QR */}
+      {/* ✅ ADDRESS — textLength sirf lamba address ke liye */}
       <text x={780} y={513} textAnchor="middle" fontSize="7.5" fontWeight="700" fill={goldDark} fontFamily="Cinzel,serif" letterSpacing="1.5">ADDRESS</text>
       <text
         x={780} y={528}
         textAnchor="middle"
-        textLength="220"
-        lengthAdjust="spacingAndGlyphs"
-        fontSize="10"
+        {...(locationText.length > 20 ? { textLength: "220", lengthAdjust: "spacingAndGlyphs" } : {})}
+        fontSize={locationText.length > 30 ? '7' : locationText.length > 20 ? '8.5' : '10'}
         fontWeight="700"
         fill="#1a1a2e"
         fontFamily="Cinzel,serif"
