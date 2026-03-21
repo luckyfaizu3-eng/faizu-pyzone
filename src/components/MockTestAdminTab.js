@@ -66,7 +66,6 @@ export default function MockTestAdminTab({ isDark }) {
   useEffect(() => {
     const now = new Date();
     const result = [];
-    const now = new Date();
 
     for (const u of users) {
       // ── Paid tests (advanced/pro) — from mockTestPayments ──
