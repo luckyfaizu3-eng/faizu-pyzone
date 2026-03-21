@@ -66,9 +66,12 @@ export default function MockTestAdminTab({ isDark }) {
   useEffect(() => {
     const now = new Date();
     const result = [];
+    const now = new Date();
+
     for (const u of users) {
+      // ── Paid tests (advanced/pro) — from mockTestPayments ──
       for (const tp of u.testPays) {
-        if (!tp.level || tp.level === 'basic') continue;
+        if (!tp.level) continue;
         const lockEndsAt = tp.lockEndsAt ? new Date(tp.lockEndsAt) : null;
         const isLocked = !!(lockEndsAt && now < lockEndsAt);
         const timeRemaining = lockEndsAt ? lockEndsAt - now : 0;
@@ -80,9 +83,51 @@ export default function MockTestAdminTab({ isDark }) {
           isLocked, timeRemaining,
           hasPaid: tp.hasPaid || false,
           testSubmittedAt: tp.testSubmittedAt || null,
+          source: 'payment',
         });
       }
+
+      // ── Basic test lock — from mockTests docs ──
+      // Basic users don't have mockTestPayments, lock is stored in the test doc
+      const basicTests = u.tests.filter(t => (t.level || 'basic') === 'basic');
+      const basicLockTest = basicTests.find(t => t.lockEndsAt);
+      // Only add basic if not already in testPays
+      const alreadyAdded = result.some(r => r.uid === u.uid && r.level === 'basic');
+      if (!alreadyAdded && basicLockTest) {
+        const lockEndsAt = new Date(basicLockTest.lockEndsAt);
+        const isLocked = now < lockEndsAt;
+        result.push({
+          uid: u.uid, name: u.name, email: u.email,
+          level: 'basic',
+          lockEndsAt: basicLockTest.lockEndsAt || null,
+          lockStartsAt: basicLockTest.lockStartsAt || null,
+          isLocked, timeRemaining: isLocked ? lockEndsAt - now : 0,
+          hasPaid: false,
+          testSubmittedAt: basicLockTest.testSubmittedAt || null,
+          source: 'test',
+        });
+      }
+
+      // Also check if basic lock is in mockTestPayments (new flow)
+      if (!alreadyAdded) {
+        const basicPay = u.testPays.find(tp => tp.level === 'basic');
+        if (basicPay?.lockEndsAt) {
+          const lockEndsAt = new Date(basicPay.lockEndsAt);
+          const isLocked = now < lockEndsAt;
+          result.push({
+            uid: u.uid, name: u.name, email: u.email,
+            level: 'basic',
+            lockEndsAt: basicPay.lockEndsAt || null,
+            lockStartsAt: basicPay.lockStartsAt || null,
+            isLocked, timeRemaining: isLocked ? lockEndsAt - now : 0,
+            hasPaid: false,
+            testSubmittedAt: basicPay.testSubmittedAt || null,
+            source: 'payment',
+          });
+        }
+      }
     }
+
     result.sort((a, b) => (b.timeRemaining || 0) - (a.timeRemaining || 0));
     setLockUsers(result);
   }, [users]);
@@ -303,9 +348,22 @@ export default function MockTestAdminTab({ isDark }) {
     setLockActionLoading(key);
     try {
       const { updateDoc } = await import('firebase/firestore');
-      await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
-        lockEndsAt: null, lockStartsAt: null,
-      });
+      if (level === 'basic') {
+        // Basic lock is in mockTests docs — update all basic test docs
+        const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
+        await Promise.all(basicSnap.docs
+          .filter(d => (d.data().level || 'basic') === 'basic')
+          .map(d => updateDoc(d.ref, { lockEndsAt: null, lockStartsAt: null }))
+        );
+        // Also try mockTestPayments in case new flow saved it there
+        try {
+          await updateDoc(doc(db, 'users', uid, 'mockTestPayments', 'basic'), { lockEndsAt: null, lockStartsAt: null });
+        } catch {}
+      } else {
+        await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
+          lockEndsAt: null, lockStartsAt: null,
+        });
+      }
       window.showToast?.(`✅ Lock removed for ${level} test`, 'success');
       await loadAll();
     } catch { window.showToast?.('❌ Unlock failed', 'error'); }
@@ -321,9 +379,16 @@ export default function MockTestAdminTab({ isDark }) {
       const { updateDoc } = await import('firebase/firestore');
       const base = currentLockEndsAt ? new Date(currentLockEndsAt) : new Date();
       const newEnd = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
-      await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
-        lockEndsAt: newEnd.toISOString(),
-      });
+      if (level === 'basic') {
+        const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
+        await Promise.all(basicSnap.docs
+          .filter(d => (d.data().level || 'basic') === 'basic')
+          .map(d => updateDoc(d.ref, { lockEndsAt: newEnd.toISOString() }))
+        );
+        try { await updateDoc(doc(db, 'users', uid, 'mockTestPayments', 'basic'), { lockEndsAt: newEnd.toISOString() }); } catch {}
+      } else {
+        await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), { lockEndsAt: newEnd.toISOString() });
+      }
       window.showToast?.(`✅ Lock extended by ${days} day(s)`, 'success');
       setExtendDays(prev => ({ ...prev, [key]: '' }));
       await loadAll();
@@ -338,11 +403,20 @@ export default function MockTestAdminTab({ isDark }) {
       const { updateDoc } = await import('firebase/firestore');
       const now = new Date();
       const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
-        lockStartsAt: now.toISOString(),
-        lockEndsAt: lockEndsAt.toISOString(),
-        testSubmittedAt: now.toISOString(),
-      });
+      if (level === 'basic') {
+        const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
+        await Promise.all(basicSnap.docs
+          .filter(d => (d.data().level || 'basic') === 'basic')
+          .map(d => updateDoc(d.ref, { lockStartsAt: now.toISOString(), lockEndsAt: lockEndsAt.toISOString(), testSubmittedAt: now.toISOString() }))
+        );
+        try { await updateDoc(doc(db, 'users', uid, 'mockTestPayments', 'basic'), { lockStartsAt: now.toISOString(), lockEndsAt: lockEndsAt.toISOString(), testSubmittedAt: now.toISOString() }); } catch {}
+      } else {
+        await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
+          lockStartsAt: now.toISOString(),
+          lockEndsAt: lockEndsAt.toISOString(),
+          testSubmittedAt: now.toISOString(),
+        });
+      }
       window.showToast?.(`✅ Full 7-day lock applied for ${level}`, 'success');
       await loadAll();
     } catch { window.showToast?.('❌ Lock failed', 'error'); }
