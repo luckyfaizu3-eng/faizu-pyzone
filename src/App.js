@@ -12,10 +12,8 @@ import {
   addOrder
 } from './dbService';
 
-// ✅ Import Analytics Tracker
 import { trackPageView, trackAction, ACTIONS } from './Analytics/AnalyticsTracker';
 
-// Import Components
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Background from './components/Background';
@@ -24,7 +22,6 @@ import ToastContainer from './components/ToastContainer';
 import SplashScreen from './components/SplashScreen';
 import Leaderboard from './components/Leaderboard';
 
-// Import Pages
 import HomePage from './pages/HomePage';
 import ProductsPage from './pages/ProductsPage';
 import CartPage from './pages/CartPage';
@@ -35,28 +32,18 @@ import MockTestPage from './pages/MockTestPage';
 import AIChatPage from './pages/AIChatPage';
 import PythonCompiler from './pages/PythonCompiler';
 
-// ✅ Streak Challenge Imports
 import StreakChallengePage from './pages/StreakChallengePage';
 import DailyPractice from './pages/DailyPractice';
 import StreakResult from './pages/StreakResult';
 import AdminStreak from './pages/AdminStreak';
 
-// ✅ Blog Post Import
 import BlogPostMockTest from './pages/BlogPostMockTest';
-
-// ✅ Certificate Verification Page
 import VerifyCertificate from './pages/VerifyCertificate';
-
-// ✅ TEMPORARY — Certificate Migration Tool (delete after running once)
 import MigrateCertsPage from './pages/MigrateCertsPage';
 
-// ✅ Streak price service
 import { getStreakPrice } from './streakService';
-
-// ✅ Geo Price Service
 import { detectGeoPrice } from './services/geoPrice';
 
-// Contexts
 export const CartContext = React.createContext();
 export const AuthContext = React.createContext();
 export const ThemeContext = React.createContext();
@@ -83,10 +70,6 @@ export const CATEGORIES = [
 
 const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
 
-/* ─────────────────────────────────────────
-   HELPER: Parse certificateId from URL hash
-   Handles:  #verify/ABC123  →  'ABC123'
-───────────────────────────────────────── */
 function parseCertIdFromHash(hash) {
   const match = hash.match(/^verify\/(.+)$/);
   return match ? match[1] : null;
@@ -98,9 +81,7 @@ function App() {
     ReactGA.send('pageview');
   }, []);
 
-  useEffect(() => {
-    trackPageView(window.location.pathname);
-  }, []);
+  useEffect(() => { trackPageView(window.location.pathname); }, []);
 
   const [cart, setCart] = useState(() => {
     const savedCart = localStorage.getItem('pyskill_cart');
@@ -117,15 +98,10 @@ function App() {
   const [razorpayError,     setRazorpayError]     = useState(false);
   const [compilerInitialCode, setCompilerInitialCode] = useState('');
   const [streakPrice,       setStreakPrice]       = useState(99);
+  const [verifyCertId,      setVerifyCertId]      = useState(null);
+  const [geoData,           setGeoData]           = useState(null);
+  const [showGeoBanner,     setShowGeoBanner]     = useState(true);
 
-  // ✅ Certificate verify state — stores certId when on verify page
-  const [verifyCertId, setVerifyCertId] = useState(null);
-
-  // ✅ Geo State
-  const [geoData,       setGeoData]       = useState(null);
-  const [showGeoBanner, setShowGeoBanner] = useState(true);
-
-  // ✅ Detect IP on first visit
   useEffect(() => {
     detectGeoPrice().then(data => {
       setGeoData(data);
@@ -133,19 +109,12 @@ function App() {
     });
   }, []);
 
-  // ✅ Browser back button fix — now also handles #verify/[certId]
   useEffect(() => {
     const getInitialPage = () => {
       const hash = window.location.hash.slice(1);
       if (!hash) return 'home';
-
-      // Handle certificate verify route: #verify/ABC123
       const certId = parseCertIdFromHash(hash);
-      if (certId) {
-        setVerifyCertId(certId);
-        return 'verify';
-      }
-
+      if (certId) { setVerifyCertId(certId); return 'verify'; }
       if (hash.startsWith('products/')) return 'products';
       const validPages = [
         'home', 'products', 'cart', 'orders', 'admin', 'login',
@@ -155,51 +124,34 @@ function App() {
       ];
       return validPages.includes(hash) ? hash : 'home';
     };
-
     const initialPage = getInitialPage();
     setCurrentPage(initialPage);
-    // Don't overwrite verify URL — keep #verify/certId in address bar
     if (initialPage === 'verify' && verifyCertId) {
       window.history.replaceState({ page: 'verify', certId: verifyCertId }, '', window.location.hash);
     } else if (initialPage !== 'verify') {
       window.history.replaceState({ page: initialPage }, '', `#${initialPage}`);
     }
-
     const handlePopState = (event) => {
       if (event.state && event.state.page) {
         setCurrentPage(event.state.page);
         if (event.state.page !== 'products') setSelectedCategory('all');
-        // Restore certId if going back to verify page
-        if (event.state.page === 'verify' && event.state.certId) {
-          setVerifyCertId(event.state.certId);
-        }
-      } else {
-        setCurrentPage('home');
-      }
+        if (event.state.page === 'verify' && event.state.certId) setVerifyCertId(event.state.certId);
+      } else { setCurrentPage('home'); }
     };
-
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // Never overwrite a verify URL with anything else
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('products/')) return;
-
     if (currentPage === 'verify' && verifyCertId) {
       const target = `#verify/${verifyCertId}`;
-      if (window.location.hash !== target) {
-        window.history.replaceState({ page: 'verify', certId: verifyCertId }, '', target);
-      }
-      trackPageView(`/verify/${verifyCertId}`);
-      return;
+      if (window.location.hash !== target) window.history.replaceState({ page: 'verify', certId: verifyCertId }, '', target);
+      trackPageView(`/verify/${verifyCertId}`); return;
     }
-
-    if (currentPage !== window.history.state?.page) {
-      window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
-    }
+    if (currentPage !== window.history.state?.page) window.history.pushState({ page: currentPage }, '', `#${currentPage}`);
     trackPageView(`/${currentPage}`);
   }, [currentPage, verifyCertId]);
 
@@ -214,12 +166,9 @@ function App() {
   });
 
   const [showSplash, setShowSplash] = useState(() => {
-    // Never show splash on certificate verify links
     const hash = window.location.hash.slice(1);
     if (hash.startsWith('verify/')) return false;
-    // localStorage persists across sessions — splash shows only once ever
-    const splashShown = localStorage.getItem('splashShown');
-    return !splashShown;
+    return !localStorage.getItem('splashShown');
   });
 
   const toggleTheme = () => {
@@ -243,11 +192,8 @@ function App() {
     localStorage.setItem('splashShown', 'true');
   };
 
-  useEffect(() => {
-    localStorage.setItem('pyskill_cart', JSON.stringify(cart));
-  }, [cart]);
+  useEffect(() => { localStorage.setItem('pyskill_cart', JSON.stringify(cart)); }, [cart]);
 
-  // ✅ Razorpay loader
   useEffect(() => {
     if (window.Razorpay) { setRazorpayLoaded(true); return; }
     const existingScript = document.querySelector('script[src*="razorpay"]');
@@ -287,28 +233,19 @@ function App() {
         const result = await getUserOrders(user.uid);
         if (result.success) setOrders(result.orders);
         else setOrders([]);
-      } catch (error) {
-        console.error('Error loading orders:', error);
-        setOrders([]);
-      }
-    } else {
-      setOrders([]);
-    }
+      } catch (error) { console.error('Error loading orders:', error); setOrders([]); }
+    } else { setOrders([]); }
   }, [user?.uid]);
 
   useEffect(() => { loadOrders(); }, [loadOrders]);
 
-  // ✅ Auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       if (firebaseUser) {
         setUser({
-          email:       firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          uid:         firebaseUser.uid,
-          isAdmin:     isAdminAuth(firebaseUser.email),
+          email: firebaseUser.email, displayName: firebaseUser.displayName,
+          uid: firebaseUser.uid, isAdmin: isAdminAuth(firebaseUser.email),
         });
-        // Admin gets free streak access automatically
         if (firebaseUser.email === ADMIN_EMAIL) {
           localStorage.setItem(`streak_purchased_${firebaseUser.uid}`, 'true');
           if (!localStorage.getItem(`streak_start_${firebaseUser.uid}`)) {
@@ -316,14 +253,11 @@ function App() {
             localStorage.setItem(`streak_count_${firebaseUser.uid}`, '0');
           }
         }
-      } else {
-        setUser(null);
-      }
+      } else { setUser(null); }
     });
     return () => unsubscribe();
   }, []);
 
-  // ✅ Razorpay payment
   const initiatePayment = (amount, items, onSuccess) => {
     if (razorpayError) { window.showToast?.('Payment system failed to load. Please refresh!', 'error'); return; }
     if (!window.Razorpay || !razorpayLoaded) {
@@ -335,25 +269,16 @@ function App() {
       return;
     }
     const options = {
-      key:      RAZORPAY_KEY_ID,
-      amount:   amount * 100,
-      currency: 'INR',
-      name:     'PySkill',
+      key: RAZORPAY_KEY_ID, amount: amount * 100, currency: 'INR', name: 'PySkill',
       description: items.length === 0
         ? `Brain Trap Game — ₹${amount}/month Unlimited Access`
-        : items.length === 1
-          ? items[0].title || 'Premium Study Material'
-          : `${items.length} Study Materials Bundle`,
+        : items.length === 1 ? items[0].title || 'Premium Study Material' : `${items.length} Study Materials Bundle`,
       image: 'https://img.icons8.com/fluency/96/000000/graduation-cap.png',
       handler: async function (response) {
         window.showToast?.('Payment Successful! Processing...', 'success');
         setTimeout(async () => { await onSuccess(response); }, 1000);
       },
-      prefill: {
-        name:    user?.displayName || user?.email?.split('@')[0] || 'Student',
-        email:   user?.email || '',
-        contact: '',
-      },
+      prefill: { name: user?.displayName || user?.email?.split('@')[0] || 'Student', email: user?.email || '', contact: '' },
       theme: { color: isDark ? '#8b5cf6' : '#6366f1' },
       modal: { ondismiss: function () { window.showToast?.('Payment cancelled', 'info'); } },
     };
@@ -367,9 +292,8 @@ function App() {
     }
   };
 
-  // ✅ PayPal for foreign users
   const initiatePayPal = (geo, level = 'basic', onSuccess) => {
-    const price    = geo[level] || geo.price;
+    const price = geo[level] || geo.price;
     const currency = geo.currency;
     const paypalUrl = `https://www.paypal.com/paypalme/pyskill/${price}${currency}`;
     window.open(paypalUrl, '_blank');
@@ -403,8 +327,7 @@ function App() {
     initiatePayment(product.price, [product], async (response) => {
       try {
         const orderResult = await addOrder({
-          userEmail: user.email, userId: user.uid, items: [itemData],
-          total: product.price,
+          userEmail: user.email, userId: user.uid, items: [itemData], total: product.price,
           date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
           paymentId: response.razorpay_payment_id, status: 'completed',
         }, user.uid);
@@ -417,8 +340,7 @@ function App() {
       } catch (error) {
         console.error('Payment handler error:', error);
         window.showToast?.('Payment successful but error occurred. Check orders or contact admin!', 'warning');
-        await loadOrders();
-        setCurrentPage('orders');
+        await loadOrders(); setCurrentPage('orders');
       }
     });
   };
@@ -474,8 +396,7 @@ function App() {
         console.error('Payment handler error:', error);
         window.showToast?.('Payment successful but error occurred. Check orders!', 'warning');
         setCart([]); localStorage.removeItem('pyskill_cart');
-        await loadOrders();
-        setCurrentPage('orders');
+        await loadOrders(); setCurrentPage('orders');
       }
     });
   };
@@ -504,18 +425,13 @@ function App() {
       const result = await updateProductDB(productId, updatedProduct);
       if (result.success) { setProducts(prev => prev.map(p => p.id === productId ? updatedProduct : p)); window.showToast?.('Review added!', 'success'); }
       else { window.showToast?.('Failed to add review: ' + result.error, 'error'); }
-    } catch (error) {
-      console.error('Error adding review:', error);
-      window.showToast?.('Failed to add review!', 'error');
-    }
+    } catch (error) { console.error('Error adding review:', error); window.showToast?.('Failed to add review!', 'error'); }
   };
 
   const openCompiler = useCallback((code = '') => {
-    setCompilerInitialCode(code);
-    setCurrentPage('compiler');
+    setCompilerInitialCode(code); setCurrentPage('compiler');
   }, []);
 
-  // ✅ Streak payment handler
   const handleStreakPayment = (dynamicPrice) => {
     if (!user) { window.showToast?.('Please login first!', 'warning'); setCurrentPage('login'); return; }
     const finalPrice = dynamicPrice || streakPrice;
@@ -529,8 +445,6 @@ function App() {
   };
 
   const isIndia = geoData?.country === 'IN' || !geoData;
-
-  // ✅ Hide Navbar & Footer on verify page (clean public view)
   const isVerifyPage = currentPage === 'verify';
 
   return (
@@ -542,19 +456,16 @@ function App() {
               <SplashScreen onComplete={handleSplashComplete} />
             ) : (
               <div style={{
-                minHeight:  '100vh',
+                minHeight: '100vh',
                 background: isDark ? 'linear-gradient(180deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' : '#ffffff',
-                color:      isDark ? '#e2e8f0' : '#1e293b',
+                color: isDark ? '#e2e8f0' : '#1e293b',
                 fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif',
-                position:   'relative',
-                transition: 'background 0.3s ease, color 0.3s ease',
+                position: 'relative', transition: 'background 0.3s ease, color 0.3s ease',
               }}>
-
                 <ToastContainer />
                 <Background />
                 <AIChatBot setCurrentPage={setCurrentPage} currentPage={currentPage} />
 
-                {/* Payment loading indicator */}
                 {!razorpayLoaded && !razorpayError && (
                   <div style={{ position: 'fixed', bottom: '20px', right: '20px', background: 'rgba(99,102,241,0.9)', color: '#fff', padding: '8px 16px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: '600', zIndex: 9999, display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)' }}>
                     <div style={{ width: '12px', height: '12px', border: '2px solid #fff', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
@@ -562,7 +473,6 @@ function App() {
                   </div>
                 )}
 
-                {/* ✅ Foreign Country Banner */}
                 {!isIndia && geoData && showGeoBanner && (
                   <div style={{ background: 'linear-gradient(135deg,#0f172a,#1e1b4b)', padding: '10px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', zIndex: 9998, position: 'relative' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
@@ -571,145 +481,39 @@ function App() {
                         Visiting from <strong style={{ color: '#fbbf24' }}>{geoData.countryName}</strong>?
                         Prices shown in <strong style={{ color: '#fbbf24' }}>{geoData.currency}</strong>
                       </span>
-                      <span style={{ background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', color: '#34d399' }}>
-                        PayPal accepted
-                      </span>
+                      <span style={{ background: 'rgba(16,185,129,0.2)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '20px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: '700', color: '#34d399' }}>PayPal accepted</span>
                     </div>
                     <button onClick={() => setShowGeoBanner(false)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem', flexShrink: 0 }}>✕</button>
                   </div>
                 )}
 
-                {/* ✅ Hide Navbar on verify page — clean public certificate view */}
                 {!isVerifyPage && (
-                  <Navbar
-                    currentPage={currentPage}
-                    setCurrentPage={setCurrentPage}
-                    searchQuery={searchQuery}
-                    setSearchQuery={setSearchQuery}
-                    mobileMenuOpen={mobileMenuOpen}
-                    setMobileMenuOpen={setMobileMenuOpen}
-                    user={user}
-                    logout={logout}
-                    cartCount={cartCount}
-                  />
+                  <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} searchQuery={searchQuery} setSearchQuery={setSearchQuery} mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} user={user} logout={logout} cartCount={cartCount} />
                 )}
 
                 <main style={{ position: 'relative', zIndex: 1 }}>
-
-                  {currentPage === 'home' && (
-                    <HomePage setCurrentPage={setCurrentPage} />
-                  )}
-
+                  {currentPage === 'home' && <HomePage setCurrentPage={setCurrentPage} />}
                   {currentPage === 'products' && (
-                    <ProductsPage
-                      products={products}
-                      setProducts={setProducts}
-                      refreshProducts={loadProducts}
-                      buyNow={buyNow}
-                      selectedCategory={selectedCategory}
-                      setSelectedCategory={setSelectedCategory}
-                      searchQuery={searchQuery}
-                      isProductPurchased={isProductPurchased}
-                      user={user}
-                      onAddReview={handleAddReview}
-                    />
+                    <ProductsPage products={products} setProducts={setProducts} refreshProducts={loadProducts} buyNow={buyNow} selectedCategory={selectedCategory} setSelectedCategory={setSelectedCategory} searchQuery={searchQuery} isProductPurchased={isProductPurchased} user={user} onAddReview={handleAddReview} />
                   )}
-
-                  {currentPage === 'cart' && (
-                    <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />
-                  )}
-
+                  {currentPage === 'cart' && <CartPage setCurrentPage={setCurrentPage} completeOrder={completeOrder} user={user} />}
                   {currentPage === 'login' && <LoginPage />}
-
-                  {currentPage === 'orders' && (
-                    <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />
-                  )}
-
-                  {currentPage === 'admin' && user?.isAdmin && (
-                    <AdminPanel products={products} addProduct={addProduct} deleteProduct={deleteProduct} orders={orders} />
-                  )}
-
+                  {currentPage === 'orders' && <OrdersPage orders={orders} user={user} refreshOrders={loadOrders} />}
+                  {currentPage === 'admin' && user?.isAdmin && <AdminPanel products={products} addProduct={addProduct} deleteProduct={deleteProduct} orders={orders} />}
                   {currentPage === 'mocktests' && <MockTestPage />}
-
-                  {currentPage === 'leaderboard' && (
-                    <Leaderboard userEmail={user?.email} />
-                  )}
-
-                  {currentPage === 'aichat' && (
-                    <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />
-                  )}
-
-                  {currentPage === 'compiler' && (
-                    <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />
-                  )}
-
-                  {/* ✅ STREAK PAGES */}
-                  {currentPage === 'streak' && (
-                    <StreakChallengePage
-                      isMobile={window.innerWidth <= 768}
-                      isDark={isDark}
-                      user={user}
-                      setCurrentPage={setCurrentPage}
-                      onBuy={handleStreakPayment}
-                    />
-                  )}
-
-                  {currentPage === 'streak-practice' && (
-                    <DailyPractice
-                      isMobile={window.innerWidth <= 768}
-                      isDark={isDark}
-                      user={user}
-                      setCurrentPage={setCurrentPage}
-                    />
-                  )}
-
-                  {currentPage === 'streak-result' && (
-                    <StreakResult
-                      isMobile={window.innerWidth <= 768}
-                      isDark={isDark}
-                      user={user}
-                      setCurrentPage={setCurrentPage}
-                    />
-                  )}
-
-                  {/* ✅ ADMIN STREAK — full panel, only for admin */}
-                  {currentPage === 'admin-streak' && user?.email === ADMIN_EMAIL && (
-                    <AdminStreak
-                      isMobile={window.innerWidth <= 768}
-                      isDark={isDark}
-                      user={user}
-                    />
-                  )}
-
-                  {/* ✅ Blog Post */}
-                  {currentPage === 'blog-mock-test' && (
-                    <BlogPostMockTest setCurrentPage={setCurrentPage} />
-                  )}
-
-                  {/* ✅ TEMPORARY — Certificate Migration Tool (admin only) */}
-                  {currentPage === 'migrate-certs' && (
-                    <MigrateCertsPage />
-                  )}
-
-                  {/* ✅ CERTIFICATE VERIFY PAGE
-                      Route: #verify/[certificateId]
-                      Public page — no login required
-                      Opens directly when QR code is scanned
-                  */}
-                  {currentPage === 'verify' && (
-                    <VerifyCertificate
-                      certificateId={verifyCertId}
-                      onBack={() => setCurrentPage('home')}
-                    />
-                  )}
-
+                  {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
+                  {currentPage === 'aichat' && <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />}
+                  {currentPage === 'compiler' && <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />}
+                  {currentPage === 'streak' && <StreakChallengePage isMobile={window.innerWidth <= 768} isDark={isDark} user={user} setCurrentPage={setCurrentPage} onBuy={handleStreakPayment} />}
+                  {currentPage === 'streak-practice' && <DailyPractice isMobile={window.innerWidth <= 768} isDark={isDark} user={user} setCurrentPage={setCurrentPage} />}
+                  {currentPage === 'streak-result' && <StreakResult isMobile={window.innerWidth <= 768} isDark={isDark} user={user} setCurrentPage={setCurrentPage} />}
+                  {currentPage === 'admin-streak' && user?.email === ADMIN_EMAIL && <AdminStreak isMobile={window.innerWidth <= 768} isDark={isDark} user={user} />}
+                  {currentPage === 'blog-mock-test' && <BlogPostMockTest setCurrentPage={setCurrentPage} />}
+                  {currentPage === 'migrate-certs' && <MigrateCertsPage />}
+                  {currentPage === 'verify' && <VerifyCertificate certificateId={verifyCertId} onBack={() => setCurrentPage('home')} />}
                 </main>
 
-                {/* ✅ Hide Footer on verify page */}
-                {currentPage === 'home' && !isVerifyPage && (
-                  <Footer setCurrentPage={setCurrentPage} />
-                )}
-
+                {currentPage === 'home' && !isVerifyPage && <Footer setCurrentPage={setCurrentPage} />}
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
               </div>
             )}
