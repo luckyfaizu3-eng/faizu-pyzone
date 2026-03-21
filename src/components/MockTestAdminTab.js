@@ -2,17 +2,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../firebase';
 import {
-  collection, getDocs, doc, getDoc, setDoc
+  collection, collectionGroup, getDocs, doc, getDoc, setDoc
 } from 'firebase/firestore';
 import { saveCertificatePayment } from '../services/mockTestService';
-import { Users, Award, DollarSign, RefreshCw, Unlock, Search, ChevronDown, ChevronUp, TrendingUp, Clock, Shield } from 'lucide-react';
+import { Users, Award, DollarSign, RefreshCw, Unlock, Search, ChevronDown, ChevronUp, TrendingUp, Clock, Shield, Trash2, Lock } from 'lucide-react';
 
 const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
 
 // ── helpers ──────────────────────────────────────────────────
 function fmt(ms) {
-  if (!ms) return '—';
-  const s = Math.floor(ms / 1000);
+  const n = Number(ms);
+  if (!ms || isNaN(n) || n <= 0) return '—';
+  const s = Math.floor(n / 1000);
   const m = Math.floor(s / 60);
   const h = Math.floor(m / 60);
   if (h > 0) return `${h}h ${m % 60}m`;
@@ -49,8 +50,42 @@ export default function MockTestAdminTab({ isDark }) {
   const [unlocking, setUnlocking] = useState(null);
   const [unlockEmail, setUnlockEmail] = useState('');
   const [unlockLoading, setUnlockLoading] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(null); // uid being deleted
+  const [confirmDelete, setConfirmDelete] = useState(null); // uid to confirm
   const [revenue, setRevenue] = useState({ total: 0, certPayments: 0, testPayments: 0, count: 0 });
   const [refreshing, setRefreshing] = useState(false);
+
+  // ── Lock Manager state ────────────────────────────────────
+  const [adminTab, setAdminTab] = useState('users');
+  const [lockSearch, setLockSearch] = useState('');
+  const [lockTab, setLockTab] = useState('locked');
+  const [lockActionLoading, setLockActionLoading] = useState(null);
+  const [extendDays, setExtendDays] = useState({});
+  const [lockUsers, setLockUsers] = useState([]);
+
+  useEffect(() => {
+    const now = new Date();
+    const result = [];
+    for (const u of users) {
+      for (const tp of u.testPays) {
+        if (!tp.level || tp.level === 'basic') continue;
+        const lockEndsAt = tp.lockEndsAt ? new Date(tp.lockEndsAt) : null;
+        const isLocked = !!(lockEndsAt && now < lockEndsAt);
+        const timeRemaining = lockEndsAt ? lockEndsAt - now : 0;
+        result.push({
+          uid: u.uid, name: u.name, email: u.email,
+          level: tp.level,
+          lockEndsAt: tp.lockEndsAt || null,
+          lockStartsAt: tp.lockStartsAt || null,
+          isLocked, timeRemaining,
+          hasPaid: tp.hasPaid || false,
+          testSubmittedAt: tp.testSubmittedAt || null,
+        });
+      }
+    }
+    result.sort((a, b) => (b.timeRemaining || 0) - (a.timeRemaining || 0));
+    setLockUsers(result);
+  }, [users]);
 
   // ── Load all data ──────────────────────────────────────────
   const loadAll = useCallback(async () => {
@@ -68,44 +103,78 @@ export default function MockTestAdminTab({ isDark }) {
       setPassPercent(pp);
       setNewPassPercent(String(pp));
 
-      // 2. Load all users from mockTests collection group
-      const testsSnap = await getDocs(collection(db, 'users'));
+      // 2. Use collectionGroup to fetch ONLY users who have taken tests
+      //    Fetch from both 'mockTests' and 'mockTestResults' subcollections
       const userMap = {};
 
-      for (const userDoc of testsSnap.docs) {
-        const uid = userDoc.id;
-        const testsRef = collection(db, 'users', uid, 'mockTests');
-        const testsQ = await getDocs(testsRef);
-        if (testsQ.empty) continue;
+      const addTestDocs = (snap) => {
+        for (const testDoc of snap.docs) {
+          const uid = testDoc.ref.parent.parent.id;
+          if (!uid) continue;
+          const testData = { id: testDoc.id, ...testDoc.data() };
+          if (!userMap[uid]) {
+            userMap[uid] = { uid, tests: [], certs: [], certPays: [], testPays: [], profileLoaded: false };
+          }
+          // avoid duplicates
+          if (!userMap[uid].tests.find(t => t.id === testData.id)) {
+            userMap[uid].tests.push(testData);
+          }
+        }
+      };
 
-        const tests = testsQ.docs.map(d => ({ id: d.id, ...d.data() }));
-        tests.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+      const [mockTestsSnap, mockTestResultsSnap] = await Promise.all([
+        getDocs(collectionGroup(db, 'mockTests')),
+        getDocs(collectionGroup(db, 'mockTestResults')),
+      ]);
 
-        const certsSnap = await getDocs(collection(db, 'users', uid, 'certificates'));
-        const certs = certsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      addTestDocs(mockTestsSnap);
+      addTestDocs(mockTestResultsSnap);
 
-        const certPaySnap = await getDocs(collection(db, 'users', uid, 'certificatePayments'));
-        const certPays = certPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
+      console.log(`[Admin] mockTests: ${mockTestsSnap.docs.length} | mockTestResults: ${mockTestResultsSnap.docs.length} | Unique test-takers: ${Object.keys(userMap).length}`);
 
-        const testPaySnap = await getDocs(collection(db, 'users', uid, 'mockTestPayments'));
-        const testPays = testPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
+      // Now fetch profile + subcollections only for users who have tests
+      await Promise.all(Object.keys(userMap).map(async (uid) => {
+        const entry = userMap[uid];
 
-        const latest = tests[0];
-        userMap[uid] = {
-          uid,
-          name: latest?.studentInfo?.fullName || latest?.studentInfo?.name || 'Unknown',
-          email: latest?.studentInfo?.email || latest?.userEmail || '—',
-          tests,
-          certs,
-          certPays,
-          testPays,
-          latestScore: latest?.score,
-          latestLevel: latest?.level,
-          latestTime: latest?.timeTaken,
-          latestDate: latest?.testDate || latest?.date,
-          totalTests: tests.length,
-        };
-      }
+        // Sort tests newest first
+        entry.tests.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
+        const latest = entry.tests[0];
+
+        // Fetch profile doc, certs, payments in parallel
+        const [profileSnap, certsSnap, certPaySnap, testPaySnap] = await Promise.all([
+          getDoc(doc(db, 'users', uid)),
+          getDocs(collection(db, 'users', uid, 'certificates')),
+          getDocs(collection(db, 'users', uid, 'certificatePayments')),
+          getDocs(collection(db, 'users', uid, 'mockTestPayments')),
+        ]);
+
+        const profileData = profileSnap.exists() ? profileSnap.data() : {};
+        entry.certs    = certsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        entry.certPays = certPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
+        entry.testPays = testPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
+
+        // Resolve name & email: profile doc first, then test studentInfo
+        entry.name =
+          profileData?.displayName ||
+          profileData?.fullName ||
+          profileData?.name ||
+          latest?.studentInfo?.fullName ||
+          latest?.studentInfo?.name ||
+          'Unknown';
+        entry.email =
+          profileData?.email ||
+          latest?.studentInfo?.email ||
+          latest?.userEmail ||
+          '—';
+
+        entry.latestScore = latest?.score;
+        entry.latestLevel = latest?.level;
+        entry.latestTime  = latest?.timeTaken;
+        entry.latestDate  = latest?.testDate || latest?.date;
+        entry.totalTests  = entry.tests.length;
+
+        console.log(`[Admin] UID: ${uid} | name: "${entry.name}" | email: "${entry.email}" | tests: ${entry.totalTests} | profileExists: ${profileSnap.exists()}`);
+      }));
 
       setUsers(Object.values(userMap).sort((a, b) => b.tests[0]?.timestamp?.toMillis?.() - a.tests[0]?.timestamp?.toMillis?.() || 0));
 
@@ -195,6 +264,91 @@ export default function MockTestAdminTab({ isDark }) {
     setUnlockLoading(false);
   };
 
+  // ── Delete all test data for a user ───────────────────────
+  const handleDeleteUser = async (uid) => {
+    setDeletingUser(uid);
+    try {
+      const { deleteDoc } = await import('firebase/firestore');
+      const subcollections = ['mockTests', 'certificates', 'certificatePayments', 'mockTestPayments'];
+      for (const sub of subcollections) {
+        const snap = await getDocs(collection(db, 'users', uid, sub));
+        await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      }
+      setUsers(prev => prev.filter(u => u.uid !== uid));
+      setConfirmDelete(null);
+      window.showToast?.('✅ User test data deleted successfully', 'success');
+    } catch (err) {
+      console.error(err);
+      window.showToast?.('❌ Delete failed', 'error');
+    }
+    setDeletingUser(null);
+  };
+
+  // ── Lock Manager actions ──────────────────────────────────
+  const fmtLockTime = (ms) => {
+    if (!ms || ms <= 0) return 'Expired';
+    const totalSecs = Math.floor(ms / 1000);
+    const d = Math.floor(totalSecs / 86400);
+    const h = Math.floor((totalSecs % 86400) / 3600);
+    const m = Math.floor((totalSecs % 3600) / 60);
+    const s = totalSecs % 60;
+    if (d > 0) return `${d}d ${h}h ${m}m`;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  const handleUnlockLock = async (uid, level) => {
+    const key = `${uid}_${level}`;
+    setLockActionLoading(key);
+    try {
+      const { updateDoc } = await import('firebase/firestore');
+      await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
+        lockEndsAt: null, lockStartsAt: null,
+      });
+      window.showToast?.(`✅ Lock removed for ${level} test`, 'success');
+      await loadAll();
+    } catch { window.showToast?.('❌ Unlock failed', 'error'); }
+    setLockActionLoading(null);
+  };
+
+  const handleExtendLock = async (uid, level, currentLockEndsAt) => {
+    const key = `${uid}_${level}`;
+    const days = parseInt(extendDays[key] || '0');
+    if (!days || days <= 0) { window.showToast?.('❌ Enter valid days to extend', 'error'); return; }
+    setLockActionLoading(key + '_extend');
+    try {
+      const { updateDoc } = await import('firebase/firestore');
+      const base = currentLockEndsAt ? new Date(currentLockEndsAt) : new Date();
+      const newEnd = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
+      await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
+        lockEndsAt: newEnd.toISOString(),
+      });
+      window.showToast?.(`✅ Lock extended by ${days} day(s)`, 'success');
+      setExtendDays(prev => ({ ...prev, [key]: '' }));
+      await loadAll();
+    } catch { window.showToast?.('❌ Extend failed', 'error'); }
+    setLockActionLoading(null);
+  };
+
+  const handleCompleteLock = async (uid, level) => {
+    const key = `${uid}_${level}`;
+    setLockActionLoading(key + '_complete');
+    try {
+      const { updateDoc } = await import('firebase/firestore');
+      const now = new Date();
+      const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
+        lockStartsAt: now.toISOString(),
+        lockEndsAt: lockEndsAt.toISOString(),
+        testSubmittedAt: now.toISOString(),
+      });
+      window.showToast?.(`✅ Full 7-day lock applied for ${level}`, 'success');
+      await loadAll();
+    } catch { window.showToast?.('❌ Lock failed', 'error'); }
+    setLockActionLoading(null);
+  };
+
   // ── Filter users ──────────────────────────────────────────
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -253,7 +407,25 @@ export default function MockTestAdminTab({ isDark }) {
         <StatCard icon={<Award/>} label="Cert Revenue" value={`₹${revenue.certPayments}`} sub="Basic certificates" color="#ec4899" isDark={isDark}/>
       </div>
 
-      {/* Price + Quick Unlock row */}
+      {/* ── Admin Sub-Tabs ── */}
+      <div style={{ display: 'flex', gap: '0.4rem', background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', borderRadius: 14, padding: 4, border: `1px solid ${isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'}`, width: 'fit-content' }}>
+        {[
+          { key: 'users',   icon: '👥', label: 'Users' },
+          { key: 'locks',   icon: '🔒', label: `Locks ${lockUsers.filter(l=>l.isLocked).length > 0 ? `(${lockUsers.filter(l=>l.isLocked).length})` : ''}` },
+          { key: 'revenue', icon: '💰', label: 'Revenue' },
+        ].map(t => (
+          <button key={t.key} onClick={() => setAdminTab(t.key)}
+            style={{ padding: '0.5rem 1.1rem', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', transition: 'all 0.2s', whiteSpace: 'nowrap',
+              background: adminTab === t.key ? 'linear-gradient(135deg,#6366f1,#8b5cf6)' : 'transparent',
+              color: adminTab === t.key ? '#fff' : isDark ? '#94a3b8' : '#64748b',
+              boxShadow: adminTab === t.key ? '0 3px 10px rgba(99,102,241,0.3)' : 'none' }}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ USERS TAB ══ */}
+      {adminTab === 'users' && (<>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
 
         {/* Certificate Price */}
@@ -393,8 +565,30 @@ export default function MockTestAdminTab({ isDark }) {
                       </button>
                     )}
 
-                    <div style={{ marginLeft: 'auto', color: isDark ? '#475569' : '#94a3b8' }}>
-                      {isExpanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      {/* Delete button — inline confirm */}
+                      {confirmDelete === u.uid ? (
+                        <>
+                          <span style={{ fontSize: '0.72rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600 }}>Sure?</span>
+                          <button onClick={e => { e.stopPropagation(); handleDeleteUser(u.uid); }}
+                            disabled={deletingUser === u.uid}
+                            style={{ padding: '0.3rem 0.65rem', background: 'linear-gradient(135deg,#ef4444,#dc2626)', border: 'none', borderRadius: 8, color: '#fff', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            {deletingUser === u.uid ? '⏳' : '✅ Yes'}
+                          </button>
+                          <button onClick={e => { e.stopPropagation(); setConfirmDelete(null); }}
+                            style={{ padding: '0.3rem 0.65rem', background: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0', border: 'none', borderRadius: 8, color: isDark ? '#94a3b8' : '#64748b', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer' }}>
+                            ✕
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={e => { e.stopPropagation(); setConfirmDelete(u.uid); }}
+                          style={{ padding: '0.3rem 0.5rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 8, color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                          <Trash2 size={14}/>
+                        </button>
+                      )}
+                      <div style={{ color: isDark ? '#475569' : '#94a3b8' }}>
+                        {isExpanded ? <ChevronUp size={16}/> : <ChevronDown size={16}/>}
+                      </div>
                     </div>
                   </div>
 
@@ -458,8 +652,10 @@ export default function MockTestAdminTab({ isDark }) {
           </div>
         )}
       </div>
+      </>)}
 
-      {/* Revenue breakdown */}
+      {/* ══ REVENUE TAB ══ */}
+      {adminTab === 'revenue' && (
       <div style={card()}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
           <DollarSign size={18} color="#f59e0b"/>
@@ -479,6 +675,126 @@ export default function MockTestAdminTab({ isDark }) {
           ))}
         </div>
       </div>
+      )}
+
+      {/* ══ LOCKS TAB ══ */}
+      {adminTab === 'locks' && (
+      <div style={card()}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#ef4444,#dc2626)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Lock size={18} color="#fff"/>
+            </div>
+            <div>
+              <div style={{ fontWeight: 900, color: isDark ? '#e2e8f0' : '#1e293b', fontSize: '0.95rem' }}>Test Lock Manager</div>
+              <div style={{ fontSize: '0.72rem', color: isDark ? '#64748b' : '#94a3b8' }}>Advanced & Pro test locks — unlock, extend, or force lock</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <span style={{ padding: '0.3rem 0.75rem', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, color: '#ef4444' }}>
+              🔒 {lockUsers.filter(l => l.isLocked).length} Locked
+            </span>
+            <span style={{ padding: '0.3rem 0.75rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, color: '#10b981' }}>
+              🔓 {lockUsers.filter(l => !l.isLocked).length} Unlocked
+            </span>
+          </div>
+        </div>
+
+        {/* Search + Tab switcher row */}
+        <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
+            <Search size={14} color="#64748b" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}/>
+            <input value={lockSearch} onChange={e => setLockSearch(e.target.value)}
+              placeholder="Search name / email..."
+              style={{ ...input, paddingLeft: 32, fontSize: '0.85rem' }}/>
+          </div>
+          <div style={{ display: 'flex', gap: '0.4rem', background: isDark ? 'rgba(255,255,255,0.05)' : '#f1f5f9', borderRadius: 12, padding: 4 }}>
+            {[{ key: 'locked', label: '🔒 Locked' }, { key: 'unlocked', label: '🔓 Unlocked' }].map(t => (
+              <button key={t.key} onClick={() => setLockTab(t.key)}
+                style={{ padding: '0.5rem 1.1rem', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: '0.82rem', transition: 'all 0.2s',
+                  background: lockTab === t.key ? (t.key === 'locked' ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'linear-gradient(135deg,#10b981,#059669)') : 'transparent',
+                  color: lockTab === t.key ? '#fff' : isDark ? '#94a3b8' : '#64748b',
+                  boxShadow: lockTab === t.key ? '0 3px 10px rgba(0,0,0,0.2)' : 'none' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Lock list */}
+        {(() => {
+          const filteredLocks = lockUsers
+            .filter(l => lockTab === 'locked' ? l.isLocked : !l.isLocked)
+            .filter(l => !lockSearch.trim() || l.name.toLowerCase().includes(lockSearch.toLowerCase()) || l.email.toLowerCase().includes(lockSearch.toLowerCase()));
+          if (filteredLocks.length === 0) return (
+            <div style={{ textAlign: 'center', padding: '2rem', color: isDark ? '#475569' : '#94a3b8', fontSize: '0.9rem' }}>
+              {lockSearch ? '❌ No users found' : lockTab === 'locked' ? '✅ No users are currently locked' : '📭 No unlocked paid test users'}
+            </div>
+          );
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {filteredLocks.map(lu => {
+                const key = `${lu.uid}_${lu.level}`;
+                const isActing = lockActionLoading === key || lockActionLoading === key + '_extend' || lockActionLoading === key + '_complete';
+                return (
+                  <div key={key} style={{ background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', borderRadius: 14, border: `1.5px solid ${lu.isLocked ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'}`, padding: '1rem 1.1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.85rem', flexWrap: 'wrap' }}>
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: lu.isLocked ? 'linear-gradient(135deg,#ef4444,#dc2626)' : 'linear-gradient(135deg,#10b981,#059669)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 800, fontSize: '0.9rem', flexShrink: 0 }}>
+                        {(lu.name[0] || '?').toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, color: isDark ? '#e2e8f0' : '#1e293b', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lu.name}</div>
+                        <div style={{ fontSize: '0.72rem', color: isDark ? '#64748b' : '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lu.email}</div>
+                      </div>
+                      <span style={{ padding: '0.25rem 0.65rem', background: lu.level === 'pro' ? 'rgba(245,158,11,0.15)' : 'rgba(99,102,241,0.12)', border: `1px solid ${lu.level === 'pro' ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: 20, fontSize: '0.7rem', fontWeight: 800, color: lu.level === 'pro' ? '#f59e0b' : '#6366f1', textTransform: 'uppercase' }}>
+                        {lu.level}
+                      </span>
+                      {lu.isLocked
+                        ? <span style={{ padding: '0.25rem 0.65rem', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', borderRadius: 20, fontSize: '0.7rem', fontWeight: 800, color: '#ef4444' }}>🔒 {fmtLockTime(lu.timeRemaining)} left</span>
+                        : <span style={{ padding: '0.25rem 0.65rem', background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.35)', borderRadius: 20, fontSize: '0.7rem', fontWeight: 800, color: '#10b981' }}>🔓 Unlocked</span>
+                      }
+                    </div>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.85rem', flexWrap: 'wrap' }}>
+                      {lu.lockStartsAt && <div style={{ fontSize: '0.72rem', color: isDark ? '#64748b' : '#94a3b8' }}>🕐 Started: <strong>{new Date(lu.lockStartsAt).toLocaleString('en-IN')}</strong></div>}
+                      {lu.lockEndsAt && <div style={{ fontSize: '0.72rem', color: lu.isLocked ? '#ef4444' : (isDark ? '#64748b' : '#94a3b8') }}>⏰ {lu.isLocked ? 'Ends' : 'Ended'}: <strong>{new Date(lu.lockEndsAt).toLocaleString('en-IN')}</strong></div>}
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      {lu.isLocked && (
+                        <button onClick={() => handleUnlockLock(lu.uid, lu.level)} disabled={isActing}
+                          style={{ padding: '0.5rem 1rem', background: isActing ? '#334155' : 'linear-gradient(135deg,#10b981,#059669)', border: 'none', borderRadius: 10, color: '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: isActing ? 'not-allowed' : 'pointer' }}>
+                          🔓 Unlock Now
+                        </button>
+                      )}
+                      {lu.isLocked && (
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
+                          <input type="number" min="1" max="30" placeholder="Days"
+                            value={extendDays[key] || ''}
+                            onChange={e => setExtendDays(prev => ({ ...prev, [key]: e.target.value }))}
+                            style={{ width: 70, padding: '0.45rem 0.6rem', background: isDark ? 'rgba(255,255,255,0.06)' : '#fff', border: `1.5px solid ${isDark ? 'rgba(255,255,255,0.12)' : '#e2e8f0'}`, borderRadius: 10, color: isDark ? '#e2e8f0' : '#1e293b', fontSize: '0.82rem', fontWeight: 700, outline: 'none' }}
+                          />
+                          <button onClick={() => handleExtendLock(lu.uid, lu.level, lu.lockEndsAt)} disabled={isActing || !extendDays[key]}
+                            style={{ padding: '0.5rem 0.9rem', background: isActing || !extendDays[key] ? '#334155' : 'linear-gradient(135deg,#f59e0b,#d97706)', border: 'none', borderRadius: 10, color: isActing || !extendDays[key] ? '#64748b' : '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: isActing || !extendDays[key] ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+                            ⏱️ Extend
+                          </button>
+                        </div>
+                      )}
+                      {!lu.isLocked && (
+                        <button onClick={() => handleCompleteLock(lu.uid, lu.level)} disabled={isActing}
+                          style={{ padding: '0.5rem 1rem', background: isActing ? '#334155' : 'linear-gradient(135deg,#ef4444,#dc2626)', border: 'none', borderRadius: 10, color: '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: isActing ? 'not-allowed' : 'pointer' }}>
+                          🔒 Force 7-Day Lock
+                        </button>
+                      )}
+                      {isActing && <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>⏳ Processing...</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+      </div>
+      )}
 
     </div>
   );

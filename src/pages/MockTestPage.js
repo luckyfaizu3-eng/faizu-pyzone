@@ -249,9 +249,23 @@ function MockTestPage() {
     } catch { /* use default 55 */ }
   };
 
+  // ── UPDATED: calculateTestStatus — basic bhi lock check karega ──
   const calculateTestStatus = (payment, level, userEmail, currentPrices) => {
     if (isAdmin(userEmail)) return { canTake: true, status: 'available', message: 'Admin — Free & Unlimited Access', color: '#10b981' };
-    if (level === 'basic') return { canTake: true, status: 'available', message: 'Free test — start anytime!', color: '#10b981' };
+
+    // ── Basic level — lock check bhi hoga ──
+    if (level === 'basic') {
+      if (payment?.lockEndsAt) {
+        const lockEnd = new Date(payment.lockEndsAt);
+        if (new Date() < lockEnd) return {
+          canTake: false, status: 'locked',
+          message: `Locked — Available in ${formatTimeRemaining(lockEnd - new Date())}`,
+          color: '#ef4444', timeRemaining: lockEnd - new Date()
+        };
+      }
+      return { canTake: true, status: 'available', message: 'Free test — start anytime!', color: '#10b981' };
+    }
+
     if (!payment?.hasPaid) return { canTake: true, status: 'available', message: 'Purchase to start test', color: '#10b981' };
     const now = new Date();
     if (payment.purchaseValidUntil) {
@@ -266,6 +280,7 @@ function MockTestPage() {
     return { canTake: true, status: 'available', message: 'Purchase to take test again', color: '#10b981' };
   };
 
+  // ── UPDATED: loadUserData — basic ka bhi payment fetch karega ──
   const loadUserData = useCallback(async () => {
     setLoading(true);
     try {
@@ -282,8 +297,10 @@ function MockTestPage() {
           paymentData[level] = { hasPaid: false };
           statusData[level] = { canTake: true, status: 'available', message: 'Admin — Free & Unlimited Access', color: '#10b981' };
         } else if (level === 'basic') {
-          paymentData[level] = { hasPaid: false };
-          statusData[level] = { canTake: true, status: 'available', message: 'Free test — start anytime!', color: '#10b981' };
+          // ── CHANGED: basic ka payment bhi fetch karo taaki lock check ho sake ──
+          const payment = await getPaymentDetails(user.uid, level);
+          paymentData[level] = payment || { hasPaid: false };
+          statusData[level] = calculateTestStatus(payment, level, user.email, currentPrices);
         } else {
           const payment = await getPaymentDetails(user.uid, level);
           paymentData[level] = payment;
@@ -321,8 +338,11 @@ function MockTestPage() {
     if (currentStep === 'form') formSubmittedRef.current = false;
   }, [currentStep]);
 
+  // ── UPDATED: handleBasicFreeStart — lock check add kiya ──
   const handleBasicFreeStart = async (plan) => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
+    const status = testStatus[plan.level];
+    if (status?.status === 'locked') { window.showToast?.(status.message, 'warning'); return; }
     setSelectedPlan(plan);
     if (!userDetails) { setCurrentStep('form'); return; }
     await startTest(plan);
@@ -418,7 +438,8 @@ function MockTestPage() {
     setLoading(true);
     window.showToast?.('⏳ Loading test questions...', 'info');
     try {
-      if (!isAdmin(user.email) && plan.level !== 'basic') {
+      // ── UPDATED: basic ke liye bhi testStartedAt update karo ──
+      if (!isAdmin(user.email)) {
         await updateTestAttempt(user.uid, plan.level, { testStartedAt: new Date().toISOString() });
       }
       const result = await getManualQuestions(plan.level);
@@ -436,6 +457,7 @@ function MockTestPage() {
     } finally { setLoading(false); }
   };
 
+  // ── UPDATED: handleTestComplete — sabke liye 7-day lock, ₹29 message removed ──
   const handleTestComplete = useCallback(async (results) => {
     if (!selectedPlan) return;
     setLoading(true);
@@ -443,7 +465,8 @@ function MockTestPage() {
       const now = new Date();
       const isPassed = isAdmin(user.email) ? true : results.percentage >= passPercent;
 
-      if (selectedPlan?.level !== 'basic' && !isAdmin(user.email)) {
+      // ── CHANGED: isBasic check hataya — ab sabke liye lock lagega ──
+      if (!isAdmin(user.email)) {
         const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         await updateTestAttempt(user.uid, selectedPlan.level, {
           testSubmittedAt: now.toISOString(), resultsViewedAt: now.toISOString(),
@@ -480,11 +503,8 @@ function MockTestPage() {
           };
           const certResult = await issueCertificate(user.uid, certificateData);
           if (certResult.success) {
-            if (selectedPlan.level === 'basic') {
-              window.showToast?.('🎉 Test passed! Visit Certificates tab to download your certificate (₹29)', 'success');
-            } else {
-              window.showToast?.('🎉 Certificate issued successfully!', 'success');
-            }
+            // ── CHANGED: ₹29 wala message hataya, sab ke liye ek hi message ──
+            window.showToast?.('🎉 Certificate issued successfully!', 'success');
             setUserCertificates(prev => [...prev, certResult.certificate]);
           }
         } else {
@@ -525,6 +545,7 @@ function MockTestPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // ── UPDATED: handleSelectPlan — basic ka lock bhi check karega ──
   const handleSelectPlan = async (plan) => {
     if (!user) { window.showToast?.('⚠️ Please login first!', 'warning'); return; }
     if (plan.level === 'basic') { await handleBasicFreeStart(plan); return; }
@@ -727,10 +748,10 @@ function MockTestPage() {
                     <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: 'linear-gradient(135deg, #ef4444, #dc2626)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Lock size={17} color="#fff" />
                     </div>
-                    <span style={{ fontWeight: '800', fontSize: 'clamp(0.82rem,2.2vw,0.92rem)', color: isDark ? '#fca5a5' : '#991b1b' }}>7-Day Lock (Paid Tests)</span>
+                    <span style={{ fontWeight: '800', fontSize: 'clamp(0.82rem,2.2vw,0.92rem)', color: isDark ? '#fca5a5' : '#991b1b' }}>7-Day Lock (All Tests)</span>
                   </div>
                   <p style={{ fontSize: 'clamp(0.72rem,1.8vw,0.8rem)', color: isDark ? '#f87171' : '#7f1d1d', margin: 0, lineHeight: '1.55' }}>
-                    After submitting an Advanced or Pro test, it locks for <strong>7 days</strong>. Purchase again to retry before the lock ends.
+                    After submitting <strong>any test</strong> (Basic, Advanced, or Pro), it locks for <strong>7 days</strong>. Basic test is free again after the lock ends.
                   </p>
                 </div>
 
@@ -789,7 +810,7 @@ function MockTestPage() {
                       <p style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 'clamp(0.8rem,2.5vw,0.95rem)', marginBottom: '1rem' }}>{plan.description}</p>
                       <div style={{ fontSize: 'clamp(2rem,6vw,2.5rem)', fontWeight: '900', color: isBasic || userIsAdmin ? '#10b981' : '#6366f1', marginBottom: '0.25rem' }}>{priceDisplay}</div>
 
-                      {/* ── Certificate info line — clear messaging ── */}
+                      {/* ── Certificate info line ── */}
                       {isBasic ? (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.4)', borderRadius: '20px', padding: '0.3rem 0.75rem', fontSize: '0.75rem', color: '#10b981', fontWeight: '700' }}>
                           <Award size={13} /> Test FREE · Certificate requires payment after passing
@@ -813,12 +834,33 @@ function MockTestPage() {
                     {hasCert && (<div style={{ padding: '0.65rem', background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#6366f1', fontWeight: '600' }}><Award size={16}/>Certificate Earned ✅</div>)}
                     {!isBasic && status.status === 'grace_period' && (<div style={{ padding: '0.65rem', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#10b981', fontWeight: '600' }}><Unlock size={16}/>Available — {timeRemainingDisplay} left</div>)}
                     {!isBasic && status.status === 'in_progress' && (<div style={{ padding: '0.65rem', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#f59e0b', fontWeight: '600' }}><TrendingUp size={16}/>Test In Progress — Resume</div>)}
-                    {!isBasic && status.status === 'locked' && (<div style={{ padding: '0.65rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#ef4444', fontWeight: '600' }}><Lock size={16}/>Locked — {timeRemainingDisplay} remaining</div>)}
 
+                    {/* ── UPDATED: sabke liye lock badge — isBasic check hata diya ── */}
+                    {status.status === 'locked' && (
+                      <div style={{ padding: '0.65rem', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', color: '#ef4444', fontWeight: '600' }}>
+                        <Lock size={16}/>Locked — {timeRemainingDisplay} remaining
+                      </div>
+                    )}
+
+                    {/* ── UPDATED: button — sabke liye lock check ── */}
                     <button onClick={() => handleSelectPlan(plan)}
-                      disabled={!isBasic && !userIsAdmin && status.status === 'locked'}
-                      style={{ width: '100%', background: (!isBasic && !userIsAdmin && status.status === 'locked') ? 'rgba(99,102,241,0.3)' : isBasic || userIsAdmin ? 'linear-gradient(135deg, #10b981, #059669)' : (status.status === 'grace_period' || status.status === 'in_progress') ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', padding: 'clamp(1rem,3vw,1.25rem)', borderRadius: '16px', fontSize: 'clamp(0.9rem,2.5vw,1.1rem)', fontWeight: '700', cursor: (!isBasic && !userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: '0 4px 20px rgba(99,102,241,0.4)', textTransform: 'uppercase', letterSpacing: '1px', opacity: (!isBasic && !userIsAdmin && status.status === 'locked') ? 0.6 : 1 }}>
-                      {isBasic ? <><Zap size={22}/>Start Free Test</>
+                      disabled={!userIsAdmin && status.status === 'locked'}
+                      style={{
+                        width: '100%',
+                        background: (!userIsAdmin && status.status === 'locked') ? 'rgba(99,102,241,0.3)'
+                          : isBasic || userIsAdmin ? 'linear-gradient(135deg, #10b981, #059669)'
+                          : (status.status === 'grace_period' || status.status === 'in_progress') ? 'linear-gradient(135deg, #10b981, #059669)'
+                          : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                        border: 'none', color: '#fff', padding: 'clamp(1rem,3vw,1.25rem)', borderRadius: '16px',
+                        fontSize: 'clamp(0.9rem,2.5vw,1.1rem)', fontWeight: '700',
+                        cursor: (!userIsAdmin && status.status === 'locked') ? 'not-allowed' : 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
+                        boxShadow: '0 4px 20px rgba(99,102,241,0.4)', textTransform: 'uppercase', letterSpacing: '1px',
+                        opacity: (!userIsAdmin && status.status === 'locked') ? 0.6 : 1
+                      }}>
+                      {/* ── UPDATED: basic lock bhi dikhao ── */}
+                      {isBasic && status.status === 'locked' ? <><Lock size={22}/>{timeRemainingDisplay} remaining</>
+                        : isBasic ? <><Zap size={22}/>Start Free Test</>
                         : userIsAdmin ? <><Zap size={22}/>Admin — Free Test</>
                         : status.status === 'locked' ? <><Lock size={22}/>{timeRemainingDisplay} remaining</>
                         : status.status === 'grace_period' || status.status === 'in_progress' ? <><Zap size={22}/>{status.status === 'in_progress' ? 'Resume Test' : 'Start Test'}</>
