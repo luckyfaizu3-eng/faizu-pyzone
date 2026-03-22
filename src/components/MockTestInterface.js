@@ -493,8 +493,61 @@ function WarningModal({ show, message, type, tabSwitches, onAcknowledge }) {
 }
 
 // ==========================================
-// INSTRUCTION SCREEN
+// ISOLATED TIMER — bilkul alag component
+// Kisi bhi state se connected nahi
+// Sirf timeLimit leta hai, onTick aur onExpire callback deta hai
 // ==========================================
+const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onExpire, onTick, isAdmin }) {
+  const [display, setDisplay]   = useState(TestUtils.formatTime(timeLimit * 60).display);
+  const timeLeftRef             = useRef(timeLimit * 60);
+  const firedRef                = useRef(false);
+  const intervalRef             = useRef(null);
+
+  useEffect(() => {
+    if (isAdmin) return;
+
+    intervalRef.current = setInterval(() => {
+      timeLeftRef.current -= 1;
+      const remaining = timeLeftRef.current;
+
+      // Display update
+      setDisplay(TestUtils.formatTime(remaining).display);
+
+      // Tick callback — parent ko batao (sound ke liye)
+      if (onTick) onTick(remaining);
+
+      // Time up — ek baar hi fire hoga
+      if (remaining <= 0 && !firedRef.current) {
+        firedRef.current = true;
+        clearInterval(intervalRef.current);
+        if (onExpire) onExpire();
+      }
+    }, 1000);
+
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ← sirf ek baar mount pe — KABHI reset nahi hoga
+
+  const remaining  = timeLeftRef.current;
+  const totalSecs  = timeLimit * 60;
+  const pct        = (remaining / totalSecs) * 100;
+  const theme      = pct > 50 ? THEME.timer.safe : pct > 20 ? THEME.timer.warning : THEME.timer.critical;
+  const isCritical = remaining < APP_CONFIG.CRITICAL_TIME_MINUTES * 60;
+  const isMobile   = window.innerWidth <= 768;
+
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:isMobile?'0.5rem 1rem':'0.65rem 1.25rem', background:theme.bg, borderRadius:'12px', border:`3px solid ${theme.border}` }}>
+      <Clock size={isMobile?18:22} color={theme.text} strokeWidth={2.5}
+        style={{ animation: isCritical ? 'shake 0.6s infinite' : 'none' }} />
+      <div style={{ fontSize:isMobile?'1.1rem':'1.4rem', fontWeight:'900', color:theme.text, fontFamily:'monospace',
+        animation: isCritical ? 'tickBlink 1s infinite' : 'none' }}>
+        {display}
+      </div>
+    </div>
+  );
+});
+
+
 function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, passPercent }) {
   const [accepted, setAccepted] = useState(false);
 
@@ -577,7 +630,7 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, pas
 function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail, studentInfo, passPercent }) {
   const [currentQuestion, setCurrentQuestion]   = useState(0);
   const [answers, setAnswers]                   = useState({});
-  const [timeLeft, setTimeLeft]                 = useState(timeLimit * 60); // sirf display ke liye
+  const answersRef                              = useRef({});
   const [tabSwitches, setTabSwitches]           = useState(0);
   const [blurCount, setBlurCount]               = useState(0);
   const [showWarning, setShowWarning]           = useState(false);
@@ -597,14 +650,13 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
   const lastActivityRef = useRef(Date.now());
   const inactivityRef   = useRef(null);
 
-  const isAdmin         = TestUtils.isAdmin(userEmail);
-  const answeredCount   = Object.keys(answers).length;
-  const allAnswered     = answeredCount === questions.length;
-  const timeData        = TestUtils.formatTime(timeLeft);
-  const timerTheme      = TestUtils.getTimerTheme(timeLeft, timeLimit * 60);
-  const isCritical      = timeLeft < APP_CONFIG.CRITICAL_TIME_MINUTES * 60;
-  const studentName     = studentInfo?.fullName || 'Student';
+  const isAdmin       = TestUtils.isAdmin(userEmail);
+  const answeredCount = Object.keys(answers).length;
+  const allAnswered   = answeredCount === questions.length;
+  const studentName   = studentInfo?.fullName || 'Student';
   const inactivityLimitMs = Math.max(60000, timeLimit * 60 * 1000 * APP_CONFIG.INACTIVITY_PERCENT);
+
+  const handleSubmitRef = useRef(null);
 
   const resetActivity = useCallback(() => { lastActivityRef.current = Date.now(); }, []);
 
@@ -617,25 +669,48 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
 
   const handleAcknowledge = useCallback(() => setShowWarning(false), []);
 
+  // Timer callbacks — IsolatedTimer se aate hain
+  const handleTimerTick = useCallback((remaining) => {
+    try { audioRef.current.playTick(remaining % 2 === 0); } catch (e) {}
+  }, []);
+
+  const handleTimerExpire = useCallback(() => {
+    try { audioRef.current.playAlarm(); } catch (e) {}
+    // Warning dikhao
+    setWarningMsg('TIME IS UP!\n\nYour test is being submitted automatically.');
+    setWarningType('final');
+    setShowWarning(true);
+    // Turant submit — koi delay nahi
+    if (handleSubmitRef.current) handleSubmitRef.current(false, 'time-up');
+  }, []);
+
   const handleAnswer = useCallback((qIndex, optIdx) => {
     if (isDisqualified) return;
     resetActivity();
-    setAnswers(prev => ({ ...prev, [qIndex]: optIdx }));
+    // Ref immediately update — timer ke liye koi block nahi
+    answersRef.current = { ...answersRef.current, [qIndex]: optIdx };
+    // State update defer karo — UI ke liye, timer affect nahi hoga
+    setTimeout(() => setAnswers({ ...answersRef.current }), 0);
   }, [isDisqualified, resetActivity]);
 
   const handleSubmit = useCallback((penalized = false, reason = '') => {
     if (hasSubmittedRef.current) return;
     FullscreenManager.exit();
-    if (!isAdmin && !allAnswered && !penalized) {
-      showWarningMessage(`Please answer ALL questions before submitting.\n(${answeredCount}/${questions.length} answered)`, 'normal');
+    const currentAnswers      = answersRef.current;
+    const currentAnsweredCount = Object.keys(currentAnswers).length;
+    if (!isAdmin && currentAnsweredCount < questions.length && !penalized) {
+      showWarningMessage(`Please answer ALL questions before submitting.\n(${currentAnsweredCount}/${questions.length} answered)`, 'normal');
       return;
     }
     hasSubmittedRef.current = true;
     const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const score     = TestUtils.calculateScore(answers, questions, tabSwitchRef.current, isAdmin, passPercent);
+    const score     = TestUtils.calculateScore(currentAnswers, questions, tabSwitchRef.current, isAdmin, passPercent);
     CleanupManager.performFullCleanup();
     onComplete({ ...score, timeTaken:`${Math.floor(timeTaken/60)}m ${timeTaken%60}s`, tabSwitches:tabSwitchRef.current, penalized, disqualificationReason:reason, studentInfo });
-  }, [answers, questions, isAdmin, allAnswered, answeredCount, studentInfo, onComplete, showWarningMessage, passPercent]);
+  }, [questions, isAdmin, studentInfo, onComplete, showWarningMessage, passPercent]);
+
+  // handleSubmitRef sync — timer expire ko latest version milega
+  useEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
 
   const handleNavigation = useCallback((dir) => {
     if (isDisqualified) return;
@@ -704,48 +779,7 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
     return FullscreenManager.onChange(handler);
   }, [isAdmin, showWarningMessage, isDisqualified]);
 
-  // ─── SINGLE STABLE TIMER ───────────────────────────────────────
-  // Ek hi interval — kabhi reset nahi hota re-render pe
-  // timeLeft ref se read karo, state sirf display ke liye
-  const timeLeftRef        = useRef(timeLimit * 60);
-  const alarmFiredRef      = useRef(false);
-  const isDisqualifiedRef  = useRef(false);
-
-  // Sync isDisqualified state → ref (interval closure ke liye)
-  useEffect(() => { isDisqualifiedRef.current = isDisqualified; }, [isDisqualified]);
-
-  useEffect(() => {
-    if (isAdmin) return;
-
-    const interval = setInterval(() => {
-      // Agar submit ho chuka ya disqualified — band karo
-      if (hasSubmittedRef.current || isDisqualifiedRef.current) {
-        clearInterval(interval);
-        return;
-      }
-
-      timeLeftRef.current -= 1;
-      const remaining = timeLeftRef.current;
-
-      // Display update
-      setTimeLeft(remaining);
-
-      // Tick sound — har second
-      try { audioRef.current.playTick(remaining % 2 === 0); } catch (e) {}
-
-      // Time up
-      if (remaining <= 0 && !alarmFiredRef.current) {
-        alarmFiredRef.current = true;
-        clearInterval(interval);
-        try { audioRef.current.playAlarm(); } catch (e) {}
-        showWarningMessage('TIME IS UP!\n\nYour test is being submitted automatically.', 'final', true);
-        setTimeout(() => handleSubmit(false, 'time-up'), APP_CONFIG.AUTO_SUBMIT_DELAY);
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]); // ← sirf mount pe — kabhi recreate nahi hoga
+  // timer display sirf IsolatedTimer component se aata hai — yahan kuch nahi
 
   // Tab switch
   useEffect(() => {
@@ -864,10 +898,12 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
                 {isDisqualified && <span style={{ background:'#dc2626', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'800' }}>DISQUALIFIED</span>}
               </div>
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:isMobile?'0.5rem 1rem':'0.65rem 1.25rem', background:timerTheme.bg, borderRadius:'12px', border:`3px solid ${timerTheme.border}` }}>
-              <Clock size={isMobile?18:22} color={timerTheme.text} strokeWidth={2.5} style={{ animation:isCritical?'shake 0.6s infinite':'none' }} />
-              <div style={{ fontSize:isMobile?'1.1rem':'1.4rem', fontWeight:'900', color:timerTheme.text, fontFamily:'monospace', animation:isCritical?'tickBlink 1s infinite':'none' }}>{timeData.display}</div>
-            </div>
+            <IsolatedTimer
+              timeLimit={timeLimit}
+              isAdmin={isAdmin}
+              onTick={handleTimerTick}
+              onExpire={handleTimerExpire}
+            />
           </div>
         </div>
       </div>
