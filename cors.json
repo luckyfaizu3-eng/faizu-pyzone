@@ -1,0 +1,1 @@
+[{"origin":["http://localhost:3000","https://faizupyzone.shop","https://www.faizupyzone.shop","https://faizupyzone.vercel.app"],"method":["GET","POST","PUT","DELETE","HEAD"],"maxAgeSeconds":3600,"responseHeader":["Content-Type","Authorization","Content-Length"]}]

@@ -10,7 +10,7 @@ import UserDetailsForm from '../components/UserDetailsForm';
 import CertificateViewer from '../components/CertificateViewer';
 import Certificatesection from '../components/Certificatesection';
 import SubmissionOverlay from '../components/SubmissionOverlay';
-import { generateAIReport } from '../components/AITestReport';
+import { generateAndSaveReport, fetchReportUrl } from '../components/AITestReport';
 import { db } from '../firebase';
 import { doc, getDoc, deleteDoc } from 'firebase/firestore';
 import {
@@ -235,7 +235,7 @@ function MockTestPage() {
 
   // ── AI Report states ──────────────────────────────────────
   const [overlayAiDone, setOverlayAiDone] = useState(false);
-  const [aiReports,     setAiReports]     = useState({}); // { latest: { pdfUrl, fileName } }
+  const [aiReports,     setAiReports]     = useState({});
 
   const formSubmittedRef = useRef(false);
 
@@ -291,10 +291,39 @@ function MockTestPage() {
     try {
       const detailsResult = await getUserDetails(user.uid);
       if (detailsResult.success) setUserDetails(detailsResult.details);
+
       const certsResult = await getAllCertificates(user.uid);
       if (certsResult.success) setUserCertificates(certsResult.certificates);
+
       const historyResult = await getTestHistory(user.uid);
-      if (historyResult.success) setTestHistory(historyResult.tests);
+      if (historyResult.success) {
+        setTestHistory(historyResult.tests);
+
+        // ── PDF URL fetch karo latest test ka Firestore se ──
+        if (historyResult.tests.length > 0) {
+          const latestTest = historyResult.tests[0];
+          try {
+            const reportData = await fetchReportUrl(
+              user.uid,
+              latestTest.level,
+              latestTest.testDate || latestTest.date
+            );
+            if (reportData?.downloadUrl) {
+              setAiReports({
+                latest: {
+                  pdfUrl:   reportData.downloadUrl,
+                  fileName: reportData.fileName,
+                  testData: latestTest,
+                  userId:   user.uid,
+                },
+                userId: user.uid,
+              });
+            }
+          } catch (e) {
+            // PDF nahi mili — koi baat nahi
+          }
+        }
+      }
 
       const statusData = {}, paymentData = {};
       const currentPrices = await getDoc(doc(db, 'settings', 'testPrices'))
@@ -339,8 +368,7 @@ function MockTestPage() {
     const status = testStatus[plan.level];
     if (status?.status === 'locked') { window.showToast?.(status.message, 'warning'); return; }
     setSelectedPlan(plan);
-    if (!userDetails) { setCurrentStep('form'); return; }
-    await startTest(plan);
+    setCurrentStep('form');
   };
 
   // ── handlePayment ─────────────────────────────────────────
@@ -463,7 +491,6 @@ function MockTestPage() {
       const now      = new Date();
       const isPassed = isAdmin(user.email) ? true : results.percentage >= passPercent;
 
-      // 7-day lock — sabke liye (basic + advanced + pro)
       if (!isAdmin(user.email)) {
         const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
         await updateTestAttempt(user.uid, selectedPlan.level, {
@@ -503,7 +530,6 @@ function MockTestPage() {
 
       await saveTestResult(user.uid, testData);
 
-      // Certificate
       if (isPassed) {
         const skipDuplicateCheck = isAdmin(user.email);
         const certCheck = skipDuplicateCheck
@@ -540,7 +566,6 @@ function MockTestPage() {
       setCurrentStep('plans');
       setTestQuestions([]);
 
-      // Show overlay — AI abhi shuru nahi hua (aiDone = false)
       setOverlayAiDone(false);
       setSubmitOverlayData({
         isPassed,
@@ -549,12 +574,15 @@ function MockTestPage() {
       });
       setShowSubmitOverlay(true);
 
-      // AI report — background mein generate karo
-      generateAIReport(testData).then(report => {
+      // Generate report in background
+      generateAndSaveReport(testData, user.uid).then(report => {
         if (report.success) {
-          setAiReports(prev => ({ ...prev, latest: report }));
+          setAiReports(prev => ({
+            ...prev,
+            latest: { ...report, testData, userId: user.uid },
+            userId: user.uid,
+          }));
         }
-        // AI success ya fail — dono mein overlay done karo
         setOverlayAiDone(true);
       });
 
@@ -562,7 +590,7 @@ function MockTestPage() {
       console.error('❌ Error processing test completion:', error);
       window.showToast?.('❌ Error saving results', 'error');
       setLoading(false);
-      setOverlayAiDone(true); // error pe bhi done karo
+      setOverlayAiDone(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPlan, user, userDetails, passPercent]);
@@ -591,14 +619,12 @@ function MockTestPage() {
     if (plan.level === 'basic') { await handleBasicFreeStart(plan); return; }
     setSelectedPlan(plan);
     if (isAdmin(user.email)) {
-      if (!userDetails) { setCurrentStep('form'); return; }
-      await startTest(plan); return;
+      setCurrentStep('form'); return;
     }
     const status = testStatus[plan.level];
     if (status?.status === 'locked') { window.showToast?.(status.message, 'warning'); return; }
     if (paymentDetails[plan.level]?.hasPaid && (status?.status === 'grace_period' || status?.status === 'in_progress')) {
-      if (!userDetails) { setCurrentStep('form'); return; }
-      await startTest(plan); return;
+      setCurrentStep('form'); return;
     }
     const planPrice = prices[plan.level] ?? plan.price;
     if (planPrice === 0 || planPrice === 'Free' || planPrice === 'free') {
@@ -640,11 +666,11 @@ function MockTestPage() {
   }
 
   if (currentStep === 'test' && testQuestions.length > 0) {
-    return <MockTestInterface questions={testQuestions} onComplete={handleTestComplete} onExit={handleExitTest} testTitle={selectedPlan?.name} timeLimit={selectedPlan?.timeLimit} userEmail={user?.email} testLevel={selectedPlan?.level} />;
+    return <MockTestInterface questions={testQuestions} onComplete={handleTestComplete} onExit={handleExitTest} testTitle={selectedPlan?.name} timeLimit={selectedPlan?.timeLimit} userEmail={user?.email} testLevel={selectedPlan?.level} studentInfo={userDetails} passPercent={passPercent} />;
   }
 
   if (currentStep === 'form') {
-    return <UserDetailsForm onSubmit={handleFormSubmit} onCancel={backToPlans} />;
+    return <UserDetailsForm onSubmit={handleFormSubmit} onCancel={backToPlans} defaultValues={userDetails} />;
   }
 
   const TABS = [
@@ -737,7 +763,6 @@ function MockTestPage() {
         {/* ── TESTS TAB ── */}
         {activeTab === 'tests' && (
           <div style={{ animation: `${slideDir === 'right' ? 'slideInRight' : 'slideInLeft'} 0.35s cubic-bezier(0.25,0.46,0.45,0.94) both` }}>
-            {/* Guidelines */}
             <div style={{ marginBottom: '2.5rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.25rem', justifyContent: 'center' }}>
                 <div style={{ height: '2px', flex: 1, maxWidth: '80px', background: 'linear-gradient(90deg, transparent, rgba(99,102,241,0.4))' }} />

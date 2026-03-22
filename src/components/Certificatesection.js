@@ -151,7 +151,7 @@ function AIReportBanner({ isDark, savedReport }) {
           </div>
         </div>
       </div>
-      <DownloadAIReportButton isDark={isDark} savedReport={savedReport} />
+      <DownloadAIReportButton isDark={isDark} userId={savedReport?.userId} testData={savedReport?.testData} savedReport={savedReport} />
     </div>
   );
 }
@@ -397,7 +397,12 @@ function CertificateSection({
                     <div style={{ fontSize: '0.75rem', color: isDark ? '#94a3b8' : '#64748b', marginBottom: '0.75rem', lineHeight: 1.5 }}>
                       Personalized analysis with strengths, weak areas &amp; improvement tips
                     </div>
-                    <DownloadAIReportButton isDark={isDark} savedReport={aiReports.latest} />
+                    <DownloadAIReportButton
+                      isDark={isDark}
+                      userId={aiReports?.userId}
+                      testData={test}
+                      savedReport={aiReports.latest}
+                    />
                   </div>
                 )}
 
