@@ -577,7 +577,7 @@ function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, pas
 function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail, studentInfo, passPercent }) {
   const [currentQuestion, setCurrentQuestion]   = useState(0);
   const [answers, setAnswers]                   = useState({});
-  const [timeLeft, setTimeLeft]                 = useState(timeLimit * 60);
+  const [timeLeft, setTimeLeft]                 = useState(timeLimit * 60); // sirf display ke liye
   const [tabSwitches, setTabSwitches]           = useState(0);
   const [blurCount, setBlurCount]               = useState(0);
   const [showWarning, setShowWarning]           = useState(false);
@@ -704,26 +704,48 @@ function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail,
     return FullscreenManager.onChange(handler);
   }, [isAdmin, showWarningMessage, isDisqualified]);
 
-  // Timer
+  // ─── SINGLE STABLE TIMER ───────────────────────────────────────
+  // Ek hi interval — kabhi reset nahi hota re-render pe
+  // timeLeft ref se read karo, state sirf display ke liye
+  const timeLeftRef        = useRef(timeLimit * 60);
+  const alarmFiredRef      = useRef(false);
+  const isDisqualifiedRef  = useRef(false);
+
+  // Sync isDisqualified state → ref (interval closure ke liye)
+  useEffect(() => { isDisqualifiedRef.current = isDisqualified; }, [isDisqualified]);
+
   useEffect(() => {
-    if (timeLeft <= 0 || hasSubmittedRef.current || isDisqualified) {
-      if (timeLeft <= 0 && !hasSubmittedRef.current && !isDisqualified) {
-        audioRef.current.playAlarm();
+    if (isAdmin) return;
+
+    const interval = setInterval(() => {
+      // Agar submit ho chuka ya disqualified — band karo
+      if (hasSubmittedRef.current || isDisqualifiedRef.current) {
+        clearInterval(interval);
+        return;
+      }
+
+      timeLeftRef.current -= 1;
+      const remaining = timeLeftRef.current;
+
+      // Display update
+      setTimeLeft(remaining);
+
+      // Tick sound — har second
+      try { audioRef.current.playTick(remaining % 2 === 0); } catch (e) {}
+
+      // Time up
+      if (remaining <= 0 && !alarmFiredRef.current) {
+        alarmFiredRef.current = true;
+        clearInterval(interval);
+        try { audioRef.current.playAlarm(); } catch (e) {}
         showWarningMessage('TIME IS UP!\n\nYour test is being submitted automatically.', 'final', true);
         setTimeout(() => handleSubmit(false, 'time-up'), APP_CONFIG.AUTO_SUBMIT_DELAY);
       }
-      return;
-    }
-    const t = setInterval(() => setTimeLeft(p => p - 1), 1000);
-    return () => clearInterval(t);
-  }, [timeLeft, showWarningMessage, handleSubmit, isDisqualified]);
+    }, 1000);
 
-  // Tick sound
-  useEffect(() => {
-    if (isAdmin || timeLeft <= 0 || hasSubmittedRef.current || isDisqualified) return;
-    const t = setInterval(() => audioRef.current.playTick(timeLeft % 2 === 0), 1000);
-    return () => clearInterval(t);
-  }, [timeLeft, isAdmin, isDisqualified]);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]); // ← sirf mount pe — kabhi recreate nahi hoga
 
   // Tab switch
   useEffect(() => {
