@@ -77,10 +77,14 @@ class ScreenRecordBlocker {
 
 // ─────────────────────────────────────────────
 // ANTI SCREENSHOT HOOK
+// OS-level screenshots cannot be blocked by browser.
+// Best protection: blur on focus loss + flash on PrintScreen + watermark
 // ─────────────────────────────────────────────
 function useAntiScreenshot(active) {
   useEffect(() => {
     if (!active) return;
+
+    // 1. Block keyboard shortcuts
     const handler = (e) => {
       const ctrl = e.ctrlKey || e.metaKey;
       const key  = e.key?.toLowerCase();
@@ -88,21 +92,63 @@ function useAntiScreenshot(active) {
         e.key === 'PrintScreen' ||
         (ctrl && key === 'p') ||
         (ctrl && key === 's') ||
-        (e.metaKey && e.shiftKey && ['3','4','s'].includes(key)) ||
-        (ctrl && e.shiftKey && key === 's');
-      if (blocked) { e.preventDefault(); e.stopPropagation(); }
+        (ctrl && key === 'u') ||
+        (e.metaKey && e.shiftKey && ['3','4','5','s'].includes(key)) ||
+        (ctrl && e.shiftKey && ['s','i','j','c'].includes(key)) ||
+        e.key === 'F12';
+      if (blocked) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.key === 'PrintScreen') {
+          const flash = document.getElementById('__cert_flash__');
+          if (flash) { flash.style.display = 'block'; setTimeout(() => { flash.style.display = 'none'; }, 500); }
+        }
+      }
     };
+
+    // 2. Block right-click & print
     const blockContext = (e) => e.preventDefault();
     const blockPrint   = (e) => e.preventDefault();
+
+    // 3. Blur cert when window loses focus (snipping tool, alt+tab)
+    const handleBlur = () => {
+      const el = document.getElementById('__cert_content__');
+      if (el) el.style.filter = 'blur(20px) brightness(0.2)';
+    };
+    const handleFocus = () => {
+      const el = document.getElementById('__cert_content__');
+      if (el) el.style.filter = '';
+    };
+
+    // 4. Inject protective CSS
+    const styleEl = document.createElement('style');
+    styleEl.id = '__cert_protect_style__';
+    styleEl.textContent = `
+      #__cert_content__ { transition: filter 0.1s; }
+      #__cert_content__ * { -webkit-user-select:none!important; user-select:none!important; -webkit-touch-callout:none!important; }
+      @media print {
+        body * { visibility:hidden!important; display:none!important; }
+        body::after { content:'PySkill — Printing Disabled'; visibility:visible!important; display:block!important; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); font-size:2rem; font-weight:900; color:#000; }
+      }
+    `;
+    document.head.appendChild(styleEl);
+
     document.addEventListener('keydown',     handler,     { capture: true });
     document.addEventListener('contextmenu', blockContext, { capture: true });
     window.addEventListener('beforeprint',   blockPrint);
+    window.addEventListener('blur',          handleBlur);
+    window.addEventListener('focus',         handleFocus);
     ScreenRecordBlocker.enable();
+
     return () => {
       document.removeEventListener('keydown',     handler,     true);
       document.removeEventListener('contextmenu', blockContext, true);
       window.removeEventListener('beforeprint',   blockPrint);
+      window.removeEventListener('blur',          handleBlur);
+      window.removeEventListener('focus',         handleFocus);
       ScreenRecordBlocker.disable();
+      const s = document.getElementById('__cert_protect_style__');
+      if (s) s.remove();
     };
   }, [active]);
 }
@@ -688,7 +734,9 @@ export default function CertificateViewer({ certificate, onClose, user }) {
   const [certPaymentStatus,   setCertPaymentStatus]   = useState(null);
   const [certPrice,           setCertPrice]           = useState(29);
   const [showAdminPricePanel, setShowAdminPricePanel] = useState(false);
-  const [previewPhase,        setPreviewPhase]        = useState('counting'); // 'counting' | 'locked'
+  const previewKey      = `cert_preview_${(certificate || {}).certificateId || (certificate || {}).id || 'basic'}`;
+  const alreadySeen     = typeof window !== 'undefined' && localStorage.getItem(previewKey) === 'true';
+  const [previewPhase,    setPreviewPhase]    = useState(alreadySeen ? 'locked' : 'counting');
   const [previewSecsLeft,     setPreviewSecsLeft]     = useState(10);
   const [isExpired,           setIsExpired]           = useState(false);
 
@@ -733,7 +781,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
     if (previewPhase !== 'counting') return;
     const iv = setInterval(() => {
       setPreviewSecsLeft(prev => {
-        if (prev <= 1) { clearInterval(iv); setPreviewPhase('locked'); return 0; }
+        if (prev <= 1) { clearInterval(iv); setPreviewPhase('locked'); localStorage.setItem(previewKey, 'true'); return 0; }
         return prev - 1;
       });
     }, 1000);
@@ -803,8 +851,11 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:22, width:'100%', maxWidth:920, paddingTop:20 }}>
 
+          {/* Black flash overlay — fires on PrintScreen attempt */}
+          <div id="__cert_flash__" style={{ display:'none', position:'fixed', inset:0, background:'#000', zIndex:99999999, pointerEvents:'none' }} />
+
           {/* Certificate preview */}
-          <div style={{ position:'relative', width:previewW, flexShrink:0 }}>
+          <div id="__cert_content__" style={{ position:'relative', width:previewW, flexShrink:0 }}>
 
             {/* Cert box */}
             <div style={{ width:previewW, height:previewH, borderRadius:16, overflow:'hidden', boxShadow:'0 28px 90px rgba(0,0,0,0.85)', transition:'filter 0.5s ease', filter: isLocked ? 'blur(14px) brightness(0.4)' : 'none', pointerEvents: isLocked ? 'none' : 'auto', userSelect:'none', WebkitUserSelect:'none' }}>
