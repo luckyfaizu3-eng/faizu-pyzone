@@ -786,6 +786,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
       });
     }, 1000);
     return () => clearInterval(iv);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [previewPhase, userIsAdmin, certPaymentStatus]);
 
   const checking    = certPaymentStatus === null && !isExpired;
