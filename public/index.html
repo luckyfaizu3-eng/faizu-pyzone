@@ -31,13 +31,28 @@
     <link rel="alternate" hreflang="en-IN" href="https://faizupyzone.shop/" />
     <link rel="alternate" hreflang="x-default" href="https://faizupyzone.shop/" />
 
-    <!-- =====================================================
-         INLINE SVG LOGO — No external file needed!
-         SVG encoded as base64 data URI
-         Used for: favicon, apple-touch-icon, og:image
-    ====================================================== -->
+    <!-- ✅ Dynamic canonical + title for blog URL -->
     <script>
-      // Pyskill Logo SVG — inline, no file needed
+      (function() {
+        var path = window.location.pathname;
+        if (path === '/blog/python-mock-test-free-with-certificate') {
+          // Update title
+          document.title = 'Python Mock Test 2026 — Free Online Practice with Certificate | FaizuPyzone';
+          // Update canonical
+          var canon = document.querySelector('link[rel="canonical"]');
+          if (canon) canon.href = 'https://faizupyzone.shop/blog/python-mock-test-free-with-certificate';
+          // Update og:url
+          var ogUrl = document.querySelector('meta[property="og:url"]');
+          if (ogUrl) ogUrl.setAttribute('content', 'https://faizupyzone.shop/blog/python-mock-test-free-with-certificate');
+          // Update description
+          var desc = document.querySelector('meta[name="description"]');
+          if (desc) desc.setAttribute('content', 'Take free Python mock tests online with certificate. Basic, Advanced, Pro levels — 60 questions each. Anti-cheat exam system. Score 55%+ and download your Python certificate instantly. FaizuPyzone — trusted by 1200+ students in Kashmir and India.');
+        }
+      })();
+    </script>
+
+    <!-- Inline SVG Logo -->
+    <script>
       const LOGO_SVG = `<svg width="512" height="512" viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -71,32 +86,12 @@
   <circle cx="250" cy="100" r="3" fill="#0066FF" opacity="0.5"/>
   <circle cx="350" cy="115" r="3" fill="#00D4FF" opacity="0.5"/>
 </svg>`;
-
-      // Convert SVG to base64 data URI
       const LOGO_URI = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(LOGO_SVG)));
-
-      // Inject favicon dynamically
       (function() {
-        // Favicon
-        const favicon = document.createElement('link');
-        favicon.rel = 'icon';
-        favicon.type = 'image/svg+xml';
-        favicon.href = LOGO_URI;
-        document.head.appendChild(favicon);
-
-        // Apple touch icon
-        const apple = document.createElement('link');
-        apple.rel = 'apple-touch-icon';
-        apple.href = LOGO_URI;
-        document.head.appendChild(apple);
-
-        // og:image
-        const ogImage = document.querySelector('meta[property="og:image"]');
-        if (ogImage) ogImage.setAttribute('content', LOGO_URI);
-
-        // twitter:image
-        const twImage = document.querySelector('meta[name="twitter:image"]');
-        if (twImage) twImage.setAttribute('content', LOGO_URI);
+        const favicon = document.createElement('link'); favicon.rel = 'icon'; favicon.type = 'image/svg+xml'; favicon.href = LOGO_URI; document.head.appendChild(favicon);
+        const apple = document.createElement('link'); apple.rel = 'apple-touch-icon'; apple.href = LOGO_URI; document.head.appendChild(apple);
+        const ogImage = document.querySelector('meta[property="og:image"]'); if (ogImage) ogImage.setAttribute('content', LOGO_URI);
+        const twImage = document.querySelector('meta[name="twitter:image"]'); if (twImage) twImage.setAttribute('content', LOGO_URI);
       })();
     </script>
 
@@ -185,6 +180,114 @@
     }
     </script>
 
+    <!-- JSON-LD: BlogPosting — Blog pe crawlers ke liye -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BlogPosting",
+      "headline": "Python Mock Test 2026 — Free Online Practice with Certificate",
+      "description": "Take free Python mock tests online with certificate. Basic, Advanced, Pro levels — 60 questions each. Anti-cheat exam system. Score 55%+ and download your Python certificate instantly.",
+      "url": "https://faizupyzone.shop/blog/python-mock-test-free-with-certificate",
+      "datePublished": "2026-03-18",
+      "dateModified": "2026-04-01",
+      "author": {
+        "@type": "Person",
+        "name": "Faizan Tariq",
+        "url": "https://instagram.com/code_with_06"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "FaizuPyzone",
+        "url": "https://faizupyzone.shop",
+        "logo": { "@type": "ImageObject", "url": "https://faizupyzone.shop/logo192.png" }
+      },
+      "mainEntityOfPage": {
+        "@type": "WebPage",
+        "@id": "https://faizupyzone.shop/blog/python-mock-test-free-with-certificate"
+      },
+      "keywords": "Python mock test, Python certificate, free Python test, Python exam 2026, FaizuPyzone, anti-cheat Python test, Python online test India",
+      "articleSection": "Python Learning",
+      "inLanguage": "en-IN",
+      "wordCount": "3500",
+      "image": "https://faizupyzone.shop/logo192.png"
+    }
+    </script>
+
+    <!-- JSON-LD: HowTo — AI tools (ChatGPT/Claude/Gemini) ye read karte hain -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "HowTo",
+      "name": "How to get a free Python certificate from FaizuPyzone",
+      "description": "Step by step guide to earn a verified Python certificate from FaizuPyzone mock test platform",
+      "totalTime": "PT60M",
+      "estimatedCost": { "@type": "MonetaryAmount", "currency": "INR", "value": "0" },
+      "step": [
+        { "@type": "HowToStep", "position": 1, "name": "Go to faizupyzone.shop", "text": "Visit faizupyzone.shop and click on Mock Tests section." },
+        { "@type": "HowToStep", "position": 2, "name": "Choose Basic level (free)", "text": "Select the Basic Python mock test — it is completely free, no payment needed." },
+        { "@type": "HowToStep", "position": 3, "name": "Fill your details", "text": "Enter your full name, age, and address. These appear on your certificate." },
+        { "@type": "HowToStep", "position": 4, "name": "Take the 60-minute test", "text": "Answer 60 Python MCQ questions in the anti-cheat fullscreen environment." },
+        { "@type": "HowToStep", "position": 5, "name": "Score 55% or above", "text": "Pass with at least 55% correct answers to unlock the certificate." },
+        { "@type": "HowToStep", "position": 6, "name": "Write a review and download", "text": "Write a student review on the homepage, then download your certificate as PDF or 4K PNG instantly." }
+      ]
+    }
+    </script>
+
+    <!-- JSON-LD: Course -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Course",
+      "name": "Python Mock Test — FaizuPyzone",
+      "description": "Free Python mock test with instant certificate. 3 difficulty levels — Basic (free), Advanced, Pro. Anti-cheat proctored exam trusted by 1200+ students in India.",
+      "url": "https://faizupyzone.shop/#mocktests",
+      "provider": {
+        "@type": "Organization",
+        "name": "Pyskill (FaizuPyzone)",
+        "url": "https://faizupyzone.shop"
+      },
+      "hasCourseInstance": [
+        {
+          "@type": "CourseInstance",
+          "name": "Basic Python Mock Test",
+          "description": "60 Python questions, 60 minutes. Certificate on 55%+. Completely free.",
+          "courseMode": "online",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "INR",
+            "availability": "https://schema.org/InStock",
+            "url": "https://faizupyzone.shop/#mocktests"
+          }
+        },
+        {
+          "@type": "CourseInstance",
+          "name": "Advanced Python Mock Test",
+          "description": "60 Python OOP/File handling questions, 120 minutes. Certificate on 55%+.",
+          "courseMode": "online",
+          "offers": {
+            "@type": "Offer",
+            "price": "99",
+            "priceCurrency": "INR",
+            "url": "https://faizupyzone.shop/#mocktests"
+          }
+        },
+        {
+          "@type": "CourseInstance",
+          "name": "Pro Python Mock Test",
+          "description": "60 advanced Python questions (decorators, generators, concurrency), 180 minutes.",
+          "courseMode": "online",
+          "offers": {
+            "@type": "Offer",
+            "price": "199",
+            "priceCurrency": "INR",
+            "url": "https://faizupyzone.shop/#mocktests"
+          }
+        }
+      ]
+    }
+    </script>
+
     <!-- JSON-LD: FAQPage -->
     <script type="application/ld+json">
     {
@@ -209,12 +312,22 @@
         {
           "@type": "Question",
           "name": "Does FaizuPyzone have an anti-cheat system?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Yes. FaizuPyzone uses a professional anti-cheat proctoring system — fullscreen lock, tab-switch detection, copy-paste block, screen recording block, DevTools detection." }
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. FaizuPyzone uses a professional anti-cheat proctoring system — fullscreen lock, tab-switch detection (3 = fail), copy-paste block, screen recording block, DevTools detection, and a personal watermark on every screen." }
         },
         {
           "@type": "Question",
           "name": "Is the FaizuPyzone certificate valid for LinkedIn and jobs?",
           "acceptedAnswer": { "@type": "Answer", "text": "Yes. FaizuPyzone certificates include a unique certificate ID and QR code. Employers and colleges can verify it instantly at faizupyzone.shop." }
+        },
+        {
+          "@type": "Question",
+          "name": "What Python topics are covered in the mock test?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Basic: Variables, loops, conditions, functions, I/O. Advanced: OOP, file handling, exceptions, modules, list comprehensions. Pro: Decorators, generators, concurrency, design patterns, performance optimization." }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I take the Python mock test on mobile?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Enable desktop site mode in your browser (three dots menu then Desktop site) for the best anti-cheat experience on mobile." }
         }
       ]
     }
@@ -231,7 +344,8 @@
         { "@type": "ListItem", "position": 3, "name": "Python Notes PDF",        "item": "https://faizupyzone.shop/#products" },
         { "@type": "ListItem", "position": 4, "name": "Leaderboard",             "item": "https://faizupyzone.shop/#leaderboard" },
         { "@type": "ListItem", "position": 5, "name": "Python Compiler",         "item": "https://faizupyzone.shop/#compiler" },
-        { "@type": "ListItem", "position": 6, "name": "30-Day Streak Challenge", "item": "https://faizupyzone.shop/#streak" }
+        { "@type": "ListItem", "position": 6, "name": "30-Day Streak Challenge", "item": "https://faizupyzone.shop/#streak" },
+        { "@type": "ListItem", "position": 7, "name": "Blog — Python Mock Test", "item": "https://faizupyzone.shop/blog/python-mock-test-free-with-certificate" }
       ]
     }
     </script>

@@ -49,6 +49,77 @@ function PythonLogo({ size = 24, style = {} }) {
   );
 }
 
+// ─────────────────────────────────────────────
+// LAYER 1 — "Future Self" CertBadgePlant
+// Shows during test / on page to plant the certificate idea early 🧠
+// ─────────────────────────────────────────────
+function CertBadgePlant({ accentColor = '#6366f1', totalDownloads = 1247 }) {
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+      padding: '0.3rem 0.75rem',
+      background: 'rgba(99,102,241,0.08)',
+      border: '1px solid rgba(99,102,241,0.18)',
+      borderRadius: 99,
+      fontSize: '0.7rem', fontWeight: 700,
+      color: '#6366f1',
+      animation: 'fadeIn 0.5s ease both',
+      whiteSpace: 'nowrap',
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: '50%',
+        background: '#10b981', display: 'inline-block',
+        animation: 'livePulse 1.5s infinite', flexShrink: 0,
+      }}/>
+      {totalDownloads.toLocaleString()} students certified on PySkill
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
+// LAYER 4 — Specimen watermark overlay
+// Used inside CertificateViewer when certificate is locked
+// ─────────────────────────────────────────────
+function SpecimenOverlay() {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      zIndex: 20, pointerEvents: 'none',
+    }}>
+      {/* Red stamp */}
+      <div style={{
+        border: '5px solid rgba(239,68,68,0.75)',
+        borderRadius: 8, padding: '0.6rem 2rem',
+        transform: 'rotate(-12deg)',
+        background: 'rgba(239,68,68,0.08)',
+        backdropFilter: 'blur(2px)',
+      }}>
+        <span style={{
+          fontFamily: '"Courier New", monospace',
+          fontSize: 'clamp(1.1rem, 3vw, 1.8rem)',
+          fontWeight: 900, letterSpacing: '0.15em',
+          color: 'rgba(239,68,68,0.85)',
+          textTransform: 'uppercase',
+        }}>
+          ⛔ SPECIMEN
+        </span>
+      </div>
+      <div style={{
+        marginTop: '0.75rem',
+        fontFamily: '"Courier New", monospace',
+        fontSize: 'clamp(0.65rem, 1.5vw, 0.82rem)',
+        fontWeight: 700, letterSpacing: '0.08em',
+        color: 'rgba(239,68,68,0.65)',
+        textTransform: 'uppercase',
+      }}>
+        NOT VALID FOR USE — DOWNLOAD TO ACTIVATE
+      </div>
+    </div>
+  );
+}
+
 const DEFAULT_PRICES = { basic: 0, advanced: 199, pro: 299 };
 
 const formatTimeRemaining = (milliseconds) => {
@@ -229,7 +300,7 @@ function MockTestPage() {
   const [showCouponModal,      setShowCouponModal]      = useState(false);
   const [couponPlan,           setCouponPlan]           = useState(null);
   const [showSubmitOverlay,    setShowSubmitOverlay]    = useState(false);
-  const [submitOverlayData,    setSubmitOverlayData]    = useState({ isPassed: false, score: 0, testType: 'python' });
+  const [submitOverlayData,    setSubmitOverlayData]    = useState({ isPassed: false, score: 0, testType: 'python', studentName: '' });
   const [slideDir,             setSlideDir]             = useState('none');
   const [passPercent,          setPassPercent]          = useState(55);
 
@@ -567,10 +638,13 @@ function MockTestPage() {
       setTestQuestions([]);
 
       setOverlayAiDone(false);
+
+      // ── LAYER 3: Include studentName in overlay data ──
       setSubmitOverlayData({
         isPassed,
-        score:    results.percentage,
-        testType: selectedPlan?.level || 'python',
+        score:       results.percentage,
+        testType:    selectedPlan?.level || 'python',
+        studentName: results.studentInfo?.fullName || userDetails?.fullName || user?.displayName || '',
       });
       setShowSubmitOverlay(true);
 
@@ -710,6 +784,7 @@ function MockTestPage() {
           isPassed={submitOverlayData.isPassed}
           score={submitOverlayData.score}
           testType={submitOverlayData.testType}
+          studentName={submitOverlayData.studentName}
           aiDone={overlayAiDone}
           onDone={() => {
             setShowSubmitOverlay(false);
@@ -728,9 +803,15 @@ function MockTestPage() {
               <PythonLogo size={48} /> Python Mock Tests
             </span>
           </h1>
-          <p style={{ fontSize: 'clamp(0.9rem, 3vw, 1.2rem)', color: isDark ? '#94a3b8' : '#64748b', maxWidth: '600px', margin: '0 auto 2rem', padding: '0 1rem' }}>
+          <p style={{ fontSize: 'clamp(0.9rem, 3vw, 1.2rem)', color: isDark ? '#94a3b8' : '#64748b', maxWidth: '600px', margin: '0 auto 1rem', padding: '0 1rem' }}>
             Professional certification tests with instant results
           </p>
+
+          {/* ── LAYER 1: CertBadgePlant — plants certificate idea before test starts 🧠 ── */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <CertBadgePlant />
+          </div>
+
           <button onClick={() => window.location.href = '/'}
             style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', color: '#fff', padding: 'clamp(0.75rem, 2vw, 1rem) clamp(1.5rem, 4vw, 2.5rem)', borderRadius: '12px', fontSize: 'clamp(0.85rem, 2.5vw, 1rem)', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 15px rgba(99,102,241,0.4)' }}>
             🏠 Back to Home
@@ -1002,3 +1083,19 @@ function MockTestPage() {
 }
 
 export default MockTestPage;
+
+// ─────────────────────────────────────────────
+// EXPORT SpecimenOverlay for use in CertificateViewer.jsx
+// ─────────────────────────────────────────────
+// In CertificateViewer.jsx, import and use like this:
+//
+//   import { SpecimenOverlay } from './MockTestPage';
+//   // OR copy the SpecimenOverlay component directly into CertificateViewer.jsx
+//
+// Then replace the existing locked overlay:
+//   {isLocked && <SpecimenOverlay />}
+//
+// Also change the blur filter on the cert box:
+//   filter: isLocked ? 'brightness(0.55)' : 'none',
+// ─────────────────────────────────────────────
+export { SpecimenOverlay };

@@ -2,12 +2,12 @@
 <urlset
   xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
   xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
-  xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  xmlns:xhtml="http://www.w3.org/1999/xhtml"
+  xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">
 
-  <!-- ✅ Homepage — highest priority -->
   <url>
     <loc>https://faizupyzone.shop/</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
     <image:image>
@@ -19,10 +19,9 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://faizupyzone.shop/"/>
   </url>
 
-  <!-- ✅ Mock Tests section -->
   <url>
     <loc>https://faizupyzone.shop/#mocktests</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.95</priority>
     <image:image>
@@ -32,65 +31,73 @@
     </image:image>
   </url>
 
-  <!-- ✅ Mock Test page (duplicate removed, kept best slug) -->
-  <url>
-    <loc>https://faizupyzone.shop/#mock-test</loc>
-    <lastmod>2026-03-18</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-
-  <!-- ✅ Products / Notes PDF -->
   <url>
     <loc>https://faizupyzone.shop/#products</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
     <image:image>
       <image:loc>https://faizupyzone.shop/logo512.png</image:loc>
       <image:title>Python Notes PDF, Ethical Hacking, AI ML, Web Dev Study Material</image:title>
-      <image:caption>Download Python notes PDF, Ethical Hacking notes, AI &amp; ML, Web Development study material</image:caption>
+      <image:caption>Download Python notes PDF, Ethical Hacking notes, AI and ML, Web Development study material</image:caption>
     </image:image>
   </url>
 
-  <!-- ✅ Leaderboard -->
   <url>
     <loc>https://faizupyzone.shop/#leaderboard</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.7</priority>
   </url>
 
-  <!-- ✅ 30-Day Streak Challenge — was MISSING! -->
   <url>
     <loc>https://faizupyzone.shop/#streak</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
   </url>
 
-  <!-- ✅ Python Compiler — was MISSING! -->
   <url>
     <loc>https://faizupyzone.shop/#compiler</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
 
-  <!-- ✅ Blog — was MISSING! -->
   <url>
-    <loc>https://faizupyzone.shop/#blog-mock-test</loc>
-    <lastmod>2026-03-18</lastmod>
+    <loc>https://faizupyzone.shop/#blog</loc>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.75</priority>
   </url>
 
-  <!-- ✅ Certificate Verify page — was MISSING! -->
   <url>
     <loc>https://faizupyzone.shop/#verify</loc>
-    <lastmod>2026-03-18</lastmod>
+    <lastmod>2026-04-01</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.65</priority>
+  </url>
+
+  <!-- BLOG POST — Python Mock Test — Real crawlable URL -->
+  <url>
+    <loc>https://faizupyzone.shop/blog/python-mock-test-free-with-certificate</loc>
+    <lastmod>2026-04-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.95</priority>
+    <image:image>
+      <image:loc>https://faizupyzone.shop/logo512.png</image:loc>
+      <image:title>Python Mock Test 2026 — Free with Certificate | FaizuPyzone</image:title>
+      <image:caption>Free Python mock test online with instant QR-verified certificate. 3 levels, 60 questions, anti-cheat.</image:caption>
+    </image:image>
+    <news:news>
+      <news:publication>
+        <news:name>FaizuPyzone Blog</news:name>
+        <news:language>en</news:language>
+      </news:publication>
+      <news:publication_date>2026-03-18</news:publication_date>
+      <news:title>Python Mock Test 2026 — Free Online Practice with Certificate</news:title>
+      <news:keywords>Python mock test, Python certificate, free Python test, Python exam 2026, FaizuPyzone, anti-cheat Python test</news:keywords>
+    </news:news>
   </url>
 
 </urlset>

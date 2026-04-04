@@ -1,12 +1,15 @@
 // @ts-nocheck
-// CertificateViewer.jsx — ENHANCED
-// ✅ 10-second free preview → then blur + lock
+// CertificateViewer.jsx — PSYCHOLOGICAL CONVERSION SYSTEM
+// ✅ 10-second free preview → then SPECIMEN stamp (not blur)
 // ✅ Anti-screenshot: CSS + overlay + key blocks
 // ✅ getDisplayMedia blocked (screen recording)
-// ✅ Beautiful 24hr countdown FOMO timer
+// ✅ 24hr countdown FOMO timer
 // ✅ 24hr auto-delete from Firestore (unpaid only)
 // ✅ Payment → LIFETIME access, never deleted
-// ✅ Loss Aversion + Social Proof messaging
+// ✅ Layer 4 — Full certificate with ⛔ SPECIMEN watermark
+// ✅ Layer 7 — Recruiter fear angle
+// ✅ Price anchor (admin controlled)
+// ✅ 100% English — no Hindi anywhere
 
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
@@ -77,14 +80,11 @@ class ScreenRecordBlocker {
 
 // ─────────────────────────────────────────────
 // ANTI SCREENSHOT HOOK
-// OS-level screenshots cannot be blocked by browser.
-// Best protection: blur on focus loss + flash on PrintScreen + watermark
 // ─────────────────────────────────────────────
 function useAntiScreenshot(active) {
   useEffect(() => {
     if (!active) return;
 
-    // 1. Block keyboard shortcuts
     const handler = (e) => {
       const ctrl = e.ctrlKey || e.metaKey;
       const key  = e.key?.toLowerCase();
@@ -106,11 +106,9 @@ function useAntiScreenshot(active) {
       }
     };
 
-    // 2. Block right-click & print
     const blockContext = (e) => e.preventDefault();
     const blockPrint   = (e) => e.preventDefault();
 
-    // 3. Blur cert when window loses focus (snipping tool, alt+tab)
     const handleBlur = () => {
       const el = document.getElementById('__cert_content__');
       if (el) el.style.filter = 'blur(20px) brightness(0.2)';
@@ -120,7 +118,6 @@ function useAntiScreenshot(active) {
       if (el) el.style.filter = '';
     };
 
-    // 4. Inject protective CSS
     const styleEl = document.createElement('style');
     styleEl.id = '__cert_protect_style__';
     styleEl.textContent = `
@@ -221,18 +218,15 @@ function FomoTimer({ issuedAt, onExpired }) {
         @keyframes livePulse   { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
       `}</style>
 
-      {/* Top shimmer bar */}
       <div style={{ position:'absolute', top:0, left:0, right:0, height:3, overflow:'hidden' }}>
         <div style={{ position:'absolute', inset:0, background:`linear-gradient(90deg, transparent, ${color}, transparent)`, animation:'shimmer 2.5s infinite' }} />
       </div>
 
-      {/* Label */}
       <div style={{ fontSize:'0.68rem', fontWeight:800, letterSpacing:'0.18em', color, marginBottom:'0.75rem', textTransform:'uppercase', display:'flex', alignItems:'center', justifyContent:'center', gap:'0.4rem' }}>
         <span style={{ animation: urgent ? 'blink 0.5s infinite' : 'none' }}>⚠️</span>
         Certificate expires in
       </div>
 
-      {/* Digit blocks */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'0.4rem' }}>
         {[
           { val: pad(time.h), label: 'HRS' },
@@ -255,12 +249,10 @@ function FomoTimer({ issuedAt, onExpired }) {
         ))}
       </div>
 
-      {/* Progress bar */}
       <div style={{ marginTop:'1rem', height:5, background:'rgba(255,255,255,0.1)', borderRadius:99, overflow:'hidden' }}>
         <div style={{ height:'100%', width:`${pct}%`, background:`linear-gradient(90deg,${color}88,${color})`, borderRadius:99, transition:'width 1s linear' }} />
       </div>
 
-      {/* Warning message */}
       <div style={{ marginTop:'0.65rem', fontSize:'0.72rem', color: urgent ? '#fca5a5' : warning ? '#fcd34d' : '#94a3b8', fontWeight:600 }}>
         {urgent
           ? '🔴 Last chance! Certificate deletes very soon!'
@@ -474,6 +466,58 @@ function CertSVG({ cert, sigBase64 }) {
 }
 
 // ─────────────────────────────────────────────
+// SPECIMEN OVERLAY — Layer 4
+// Full certificate visible but stamped ⛔ SPECIMEN
+// Much more powerful than blur — user can see
+// exactly what they're missing!
+// ─────────────────────────────────────────────
+function SpecimenOverlay() {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 20,
+      display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      pointerEvents: 'none',
+    }}>
+      {/* Red stamp */}
+      <div style={{
+        border: '5px solid rgba(239,68,68,0.8)',
+        borderRadius: 8,
+        padding: '0.5rem 2rem',
+        transform: 'rotate(-12deg)',
+        background: 'rgba(239,68,68,0.08)',
+        backdropFilter: 'blur(1px)',
+        boxShadow: '0 0 30px rgba(239,68,68,0.2)',
+      }}>
+        <span style={{
+          fontFamily: '"Courier New", monospace',
+          fontSize: 'clamp(1rem, 3vw, 1.75rem)',
+          fontWeight: 900,
+          letterSpacing: '0.15em',
+          color: 'rgba(239,68,68,0.85)',
+          textTransform: 'uppercase',
+          display: 'block',
+        }}>
+          ⛔ SPECIMEN
+        </span>
+      </div>
+      <div style={{
+        marginTop: '0.6rem',
+        fontFamily: '"Courier New", monospace',
+        fontSize: 'clamp(0.6rem, 1.5vw, 0.78rem)',
+        fontWeight: 700,
+        letterSpacing: '0.06em',
+        color: 'rgba(239,68,68,0.7)',
+        textTransform: 'uppercase',
+        transform: 'rotate(-12deg)',
+      }}>
+        NOT VALID — DOWNLOAD TO ACTIVATE
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────
 // DOWNLOAD HELPERS
 // ─────────────────────────────────────────────
 async function downloadAsPDF(cert) {
@@ -588,7 +632,10 @@ function AdminPricePanel({ currentPrice, onClose, onSaved }) {
 }
 
 // ─────────────────────────────────────────────
-// CERT PAYMENT + COUPON PANEL
+// CERT PAYMENT PANEL — PSYCHOLOGICAL CONVERSION
+// Layer 4: Specimen stamp (not blur)
+// Layer 7: Recruiter fear angle
+// Price anchor: admin controlled
 // ─────────────────────────────────────────────
 function CertPaymentPanel({ certPrice, userId, level, onPaid, onClose, issuedAt }) {
   const [couponCode,   setCouponCode]   = useState('');
@@ -613,7 +660,7 @@ function CertPaymentPanel({ certPrice, userId, level, onPaid, onClose, issuedAt 
       couponDiscount: coupon?.discountAmount || certPrice,
       lifetime: true,
     });
-    if (result.success) { window.showToast?.('🎉 Certificate unlocked for FREE!', 'success'); onPaid(); }
+    if (result.success) { window.showToast?.('🎉 Certificate unlocked!', 'success'); onPaid(); }
     else { window.showToast?.('❌ Unlock failed, please try again', 'error'); }
   };
 
@@ -623,20 +670,19 @@ function CertPaymentPanel({ certPrice, userId, level, onPaid, onClose, issuedAt 
     if (couponResult?.valid && couponResult.couponId) await markCouponUsed(couponResult.couponId);
     const options = {
       key: RAZORPAY_KEY_ID, amount: finalPrice * 100, currency: 'INR',
-      name: 'PySkill', description: 'Basic Python Certificate — Lifetime Access',
+      name: 'PySkill', description: 'Python Certificate — Lifetime Access',
       handler: async function(response) {
         const result = await saveCertificatePayment(userId, level, {
           paymentId: response.razorpay_payment_id, amount: finalPrice, originalAmount: certPrice,
           couponCode: couponResult?.couponData?.code || null,
-          couponDiscount: couponResult?.discountAmount || 0,
-          lifetime: true,
+          couponDiscount: couponResult?.discountAmount || 0, lifetime: true,
         });
         if (result.success) { window.showToast?.('✅ Certificate unlocked! Lifetime access granted.', 'success'); onPaid(); }
         else { window.showToast?.('❌ Unlock failed, please contact support', 'error'); }
       },
       prefill: {},
       theme: { color: '#6366f1' },
-      modal: { ondismiss: () => window.showToast?.('❌ Payment cancelled', 'info') },
+      modal: { ondismiss: () => window.showToast?.('Payment cancelled', 'info') },
     };
     try {
       const rzp = new window.Razorpay(options);
@@ -645,82 +691,137 @@ function CertPaymentPanel({ certPrice, userId, level, onPaid, onClose, issuedAt 
     } catch { window.showToast?.('❌ Payment could not be opened', 'error'); }
   };
 
+  // Price anchor — show 8x value above admin price
+  const anchorValue = Math.max(certPrice * 8, 499);
+
   return (
-    <div style={{ background:'linear-gradient(135deg,rgba(99,102,241,0.15),rgba(236,72,153,0.1))', border:'1.5px solid rgba(99,102,241,0.4)', borderRadius:20, padding:'1.5rem 2rem', textAlign:'center', maxWidth:500, width:'100%' }}>
+    <div style={{ width:'100%', maxWidth:500, display:'flex', flexDirection:'column', gap:'0.85rem' }}>
 
       {/* FOMO Timer */}
-      {issuedAt && <div style={{ marginBottom:'1.25rem' }}><FomoTimer issuedAt={issuedAt} onExpired={onClose} /></div>}
+      {issuedAt && <FomoTimer issuedAt={issuedAt} onExpired={onClose} />}
 
-      <div style={{ fontSize:'2rem', marginBottom:8 }}>🏆</div>
-      <p style={{ margin:'0 0 4px', fontSize:15, fontWeight:800, color:'#e2e8f0', fontFamily:'"Cinzel",serif', letterSpacing:1 }}>
-        SECURE YOUR CERTIFICATE NOW
-      </p>
-      <p style={{ margin:'0 0 6px', fontSize:12, color:'#94a3b8', lineHeight:1.7 }}>
-        You passed the test! Pay once to unlock your certificate download.
-      </p>
-      <p style={{ margin:'0 0 18px', fontSize:11, color:'#a78bfa', fontWeight:700 }}>
-        ✅ Lifetime access — pay once, download anytime forever!
-      </p>
+      {/* Main panel */}
+      <div style={{
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)',
+        borderRadius: 24, padding: '1.75rem',
+        border: '1px solid rgba(99,102,241,0.3)',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
+      }}>
 
-      {/* Social proof */}
-      <div style={{ marginBottom:'1.25rem' }}><SocialProof /></div>
+        {/* Header */}
+        <div style={{ textAlign:'center', marginBottom:'1.5rem' }}>
+          <div style={{ fontSize:'2.5rem', marginBottom:'0.75rem' }}>🏆</div>
+          <h3 style={{ margin:'0 0 0.4rem', fontFamily:'"Cinzel",serif', fontSize:'clamp(1rem,3vw,1.2rem)', fontWeight:700, letterSpacing:'0.05em', color:'#e2e8f0' }}>
+            YOUR CERTIFICATE IS READY
+          </h3>
+          <p style={{ margin:0, fontSize:'0.82rem', color:'#64748b', lineHeight:1.6 }}>
+            You passed the test — make it official.
+          </p>
+        </div>
 
-      {/* Loss aversion */}
-      <div style={{ padding:'0.65rem 1rem', background:'rgba(239,68,68,0.1)', border:'1.5px solid rgba(239,68,68,0.35)', borderRadius:12, marginBottom:'1.25rem', fontSize:'0.78rem', color:'#fca5a5', fontWeight:700, lineHeight:1.6 }}>
-        ⚠️ You worked hard to pass — don&apos;t let it disappear!<br/>
-        <span style={{ color:'#f87171' }}>Certificate is permanently deleted after 24 hours if not secured.</span>
-      </div>
+        {/* Recruiter value props — Layer 7 */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0.6rem', marginBottom:'1.25rem' }}>
+          {[
+            { icon:'💼', text:'LinkedIn verified' },
+            { icon:'📄', text:'Resume ready' },
+            { icon:'🔗', text:'QR scan proof' },
+            { icon:'♾️', text:'Lifetime valid' },
+          ].map((item, i) => (
+            <div key={i} style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.55rem 0.75rem', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:10 }}>
+              <span style={{ fontSize:'0.9rem' }}>{item.icon}</span>
+              <span style={{ fontSize:'0.75rem', fontWeight:600, color:'#94a3b8' }}>{item.text}</span>
+            </div>
+          ))}
+        </div>
 
-      {/* Coupon input */}
-      <div style={{ display:'flex', gap:'0.5rem', marginBottom:'0.85rem' }}>
-        <input type="text" placeholder="🎟️ Coupon code (optional)" value={couponCode}
-          onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponResult(null); setFinalPrice(certPrice); }}
-          onKeyDown={e => e.key === 'Enter' && handleCheckCoupon()}
-          autoComplete="off" autoCapitalize="characters" spellCheck={false}
-          style={{ flex:1, padding:'0.75rem 1rem', border:`2px solid ${couponResult?.valid?'#10b981':couponResult?.valid===false?'#ef4444':'rgba(99,102,241,0.3)'}`, borderRadius:12, fontSize:'0.9rem', fontWeight:700, fontFamily:'monospace', letterSpacing:'1px', background:'rgba(255,255,255,0.06)', color:'#e2e8f0', outline:'none' }}
-        />
-        <button onClick={handleCheckCoupon} disabled={checking || !couponCode.trim()}
-          style={{ padding:'0.75rem 1rem', background:checking||!couponCode.trim()?'#334155':'linear-gradient(135deg,#6366f1,#8b5cf6)', border:'none', borderRadius:12, color:checking||!couponCode.trim()?'#64748b':'#fff', fontWeight:700, cursor:checking||!couponCode.trim()?'not-allowed':'pointer', fontSize:'0.82rem', whiteSpace:'nowrap' }}>
-          {checking ? '⏳' : 'Apply'}
+        {/* Recruiter fear strip — Layer 7 */}
+        <div style={{ padding:'0.75rem 1rem', marginBottom:'1.25rem', background:'rgba(99,102,241,0.08)', border:'1px solid rgba(99,102,241,0.2)', borderRadius:12 }}>
+          <p style={{ margin:0, fontSize:'0.8rem', color:'#a5b4fc', lineHeight:1.65 }}>
+            <strong style={{ color:'#c7d2fe' }}>India has 2.3 lakh+ Python job openings every month.</strong>{' '}
+            Recruiters ask for verified proof. A certificate with a scannable QR code sets you apart instantly.
+          </p>
+        </div>
+
+        {/* Price anchor — admin controlled */}
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0.85rem 1rem', marginBottom:'1.25rem', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:14 }}>
+          <div>
+            <div style={{ fontSize:'0.7rem', fontWeight:700, color:'#475569', letterSpacing:'0.12em', textTransform:'uppercase', marginBottom:4 }}>
+              Certificate Value
+            </div>
+            <div style={{ display:'flex', alignItems:'baseline', gap:'0.5rem' }}>
+              <span style={{ fontSize:'0.9rem', color:'#475569', textDecoration:'line-through' }}>₹{anchorValue}</span>
+              <span style={{ fontSize:'1.8rem', fontWeight:900, color: finalPrice === 0 ? '#10b981' : '#818cf8', fontFamily:'"Cinzel",serif' }}>
+                {finalPrice === 0 ? 'FREE' : `₹${finalPrice}`}
+              </span>
+            </div>
+          </div>
+          <div style={{ padding:'0.4rem 0.85rem', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius:99, fontSize:'0.72rem', fontWeight:800, color:'#fff', letterSpacing:'0.08em' }}>
+            LIFETIME ACCESS
+          </div>
+        </div>
+
+        {/* Coupon input */}
+        <div style={{ display:'flex', gap:'0.5rem', marginBottom: couponResult ? '0.75rem' : '1.25rem' }}>
+          <input
+            type="text" placeholder="🎟️ Coupon code (optional)"
+            value={couponCode}
+            onChange={e => { setCouponCode(e.target.value.toUpperCase()); setCouponResult(null); setFinalPrice(certPrice); }}
+            onKeyDown={e => e.key === 'Enter' && handleCheckCoupon()}
+            autoComplete="off" autoCapitalize="characters" spellCheck={false}
+            style={{ flex:1, padding:'0.75rem 1rem', border:`2px solid ${couponResult?.valid?'#10b981':couponResult?.valid===false?'#ef4444':'rgba(255,255,255,0.1)'}`, borderRadius:12, fontSize:'0.88rem', fontWeight:700, fontFamily:'monospace', letterSpacing:'1px', background:'rgba(255,255,255,0.06)', color:'#e2e8f0', outline:'none' }}
+          />
+          <button onClick={handleCheckCoupon} disabled={checking || !couponCode.trim()}
+            style={{ padding:'0.75rem 1rem', background:checking||!couponCode.trim()?'rgba(255,255,255,0.06)':'linear-gradient(135deg,#6366f1,#8b5cf6)', border:'none', borderRadius:12, color:checking||!couponCode.trim()?'#475569':'#fff', fontWeight:700, cursor:checking||!couponCode.trim()?'not-allowed':'pointer', fontSize:'0.82rem', whiteSpace:'nowrap' }}>
+            {checking ? '⏳' : 'Apply'}
+          </button>
+        </div>
+
+        {/* Coupon result */}
+        {couponResult && (
+          <div style={{ padding:'0.85rem 1rem', borderRadius:12, marginBottom:'1rem', background:couponResult.valid?'rgba(16,185,129,0.1)':'rgba(239,68,68,0.1)', border:`1.5px solid ${couponResult.valid?'#10b981':'#ef4444'}` }}>
+            {couponResult.valid ? (
+              <>
+                <div style={{ fontWeight:800, color:'#10b981', marginBottom:6, fontSize:'0.88rem' }}>{couponResult.message}</div>
+                <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap' }}>
+                  <span style={{ color:'#475569', fontSize:'0.85rem', textDecoration:'line-through' }}>₹{certPrice}</span>
+                  <span style={{ fontSize:'1.3rem', fontWeight:900, color:couponResult.isFree?'#8b5cf6':'#10b981' }}>{couponResult.isFree?'🆓 FREE':`₹${couponResult.finalPrice}`}</span>
+                  <span style={{ background:'#10b981', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:20, fontSize:'0.7rem', fontWeight:700 }}>{couponResult.discountText}</span>
+                </div>
+              </>
+            ) : (
+              <div style={{ fontWeight:700, color:'#ef4444', fontSize:'0.85rem' }}>{couponResult.error}</div>
+            )}
+          </div>
+        )}
+
+        {/* CTA Button */}
+        <button
+          onClick={handlePayNow}
+          style={{ width:'100%', padding:'1rem', background: finalPrice===0 ? 'linear-gradient(135deg,#8b5cf6,#6366f1)' : 'linear-gradient(135deg,#6366f1,#4f46e5)', border:'none', borderRadius:14, color:'#fff', fontWeight:800, fontSize:'1rem', cursor:'pointer', letterSpacing:'0.04em', fontFamily:'"Cinzel",serif', boxShadow:'0 8px 30px rgba(99,102,241,0.5)', marginBottom:'0.75rem', transition:'transform 0.15s, box-shadow 0.15s' }}
+          onMouseEnter={e => { e.currentTarget.style.transform='translateY(-2px)'; e.currentTarget.style.boxShadow='0 12px 40px rgba(99,102,241,0.65)'; }}
+          onMouseLeave={e => { e.currentTarget.style.transform='translateY(0)'; e.currentTarget.style.boxShadow='0 8px 30px rgba(99,102,241,0.5)'; }}
+        >
+          {finalPrice === 0 ? '🆓 UNLOCK FOR FREE — DOWNLOAD NOW' : `🔐 SECURE MY CERTIFICATE — ₹${finalPrice}`}
+        </button>
+
+        {/* Deletion warning */}
+        <div style={{ padding:'0.65rem 0.85rem', background:'rgba(239,68,68,0.08)', border:'1px solid rgba(239,68,68,0.2)', borderRadius:10, marginBottom:'0.6rem' }}>
+          <p style={{ margin:0, fontSize:'0.75rem', color:'#fca5a5', fontWeight:600, textAlign:'center', lineHeight:1.5 }}>
+            ⚠️ Certificate is <strong>permanently deleted</strong> after 24 hours if not secured.
+          </p>
+        </div>
+
+        <button onClick={onClose} style={{ background:'none', border:'none', color:'#334155', cursor:'pointer', fontSize:'0.8rem', fontWeight:600, width:'100%', textAlign:'center' }}>
+          Maybe later
         </button>
       </div>
 
-      {/* Coupon result */}
-      {couponResult && (
-        <div style={{ padding:'0.85rem 1rem', borderRadius:12, marginBottom:'0.85rem', background:couponResult.valid?'rgba(16,185,129,0.15)':'rgba(239,68,68,0.15)', border:`2px solid ${couponResult.valid?'#10b981':'#ef4444'}`, textAlign:'left' }}>
-          {couponResult.valid ? (
-            <>
-              <div style={{ fontWeight:800, color:'#10b981', marginBottom:6, fontSize:'0.9rem' }}>{couponResult.message}</div>
-              <div style={{ display:'flex', gap:'0.5rem', alignItems:'center', flexWrap:'wrap' }}>
-                <span style={{ color:'#64748b', fontSize:'0.85rem', textDecoration:'line-through' }}>₹{certPrice}</span>
-                <span style={{ fontSize:'1.3rem', fontWeight:900, color:couponResult.isFree?'#8b5cf6':'#10b981' }}>{couponResult.isFree?'🆓 FREE':`₹${couponResult.finalPrice}`}</span>
-                <span style={{ background:'#10b981', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:20, fontSize:'0.7rem', fontWeight:700 }}>{couponResult.discountText}</span>
-              </div>
-            </>
-          ) : (
-            <div style={{ fontWeight:700, color:'#ef4444', fontSize:'0.88rem' }}>{couponResult.error}</div>
-          )}
-        </div>
-      )}
-
-      {/* Price summary */}
-      <div style={{ padding:'0.75rem 1rem', background:'rgba(99,102,241,0.08)', borderRadius:12, marginBottom:'1rem', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <span style={{ color:'#94a3b8', fontSize:'0.85rem', fontWeight:600 }}>Amount to Pay</span>
-        <div style={{ textAlign:'right' }}>
-          {couponResult?.valid && <div style={{ fontSize:'0.75rem', color:'#64748b', textDecoration:'line-through' }}>₹{certPrice}</div>}
-          <span style={{ fontSize:'1.4rem', fontWeight:900, color:finalPrice===0?'#10b981':'#6366f1' }}>{finalPrice===0?'🆓 FREE':`₹${finalPrice}`}</span>
-        </div>
+      {/* Social proof strip */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'0.5rem', padding:'0.6rem 1rem', background:'rgba(16,185,129,0.08)', border:'1px solid rgba(16,185,129,0.2)', borderRadius:12 }}>
+        <span style={{ width:8, height:8, borderRadius:'50%', background:'#10b981', display:'inline-block', animation:'livePulse 1.5s infinite', flexShrink:0 }}/>
+        <SocialProof />
       </div>
 
-      {/* Pay button */}
-      <button onClick={handlePayNow}
-        style={{ width:'100%', background:finalPrice===0?'linear-gradient(135deg,#8b5cf6,#6366f1)':'linear-gradient(135deg,#6366f1,#ec4899)', border:'none', color:'#fff', padding:'13px 28px', borderRadius:50, fontWeight:800, fontSize:14, cursor:'pointer', letterSpacing:1, boxShadow:'0 4px 20px rgba(99,102,241,0.5)', fontFamily:'"Cinzel",serif', marginBottom:'0.65rem' }}>
-        {finalPrice===0 ? '🆓 UNLOCK FREE — DOWNLOAD NOW' : `💳 PAY ₹${finalPrice} → LIFETIME ACCESS`}
-      </button>
-
-      <button onClick={onClose} style={{ background:'none', border:'none', color:'#475569', cursor:'pointer', fontSize:'0.82rem', fontWeight:600 }}>
-        Cancel
-      </button>
     </div>
   );
 }
@@ -734,11 +835,11 @@ export default function CertificateViewer({ certificate, onClose, user }) {
   const [certPaymentStatus,   setCertPaymentStatus]   = useState(null);
   const [certPrice,           setCertPrice]           = useState(29);
   const [showAdminPricePanel, setShowAdminPricePanel] = useState(false);
-  const previewKey      = `cert_preview_${(certificate || {}).certificateId || (certificate || {}).id || 'basic'}`;
-  const alreadySeen     = typeof window !== 'undefined' && localStorage.getItem(previewKey) === 'true';
+  const previewKey  = `cert_preview_${(certificate || {}).certificateId || (certificate || {}).id || 'basic'}`;
+  const alreadySeen = typeof window !== 'undefined' && localStorage.getItem(previewKey) === 'true';
   const [previewPhase,    setPreviewPhase]    = useState(alreadySeen ? 'locked' : 'counting');
-  const [previewSecsLeft,     setPreviewSecsLeft]     = useState(10);
-  const [isExpired,           setIsExpired]           = useState(false);
+  const [previewSecsLeft, setPreviewSecsLeft] = useState(10);
+  const [isExpired,       setIsExpired]       = useState(false);
 
   const cert        = certificate || {};
   const level       = (cert.level || 'basic').toLowerCase();
@@ -749,10 +850,9 @@ export default function CertificateViewer({ certificate, onClose, user }) {
   const scale       = previewW / 1056;
   const previewH    = 748 * scale;
 
-  // Anti-screenshot active for unpaid basic
   useAntiScreenshot(!userIsAdmin && needsPayment);
 
-  // ── Init ──────────────────────────────────
+  // Init
   useEffect(() => {
     const init = async () => {
       try {
@@ -774,7 +874,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
     init();
   }, [user?.uid, level, userIsAdmin, needsPayment, cert.id, cert.issuedAt]);
 
-  // ── 10-second preview countdown ──────────
+  // 10-second preview countdown
   useEffect(() => {
     if (userIsAdmin) return;
     if (certPaymentStatus?.hasPaid) return;
@@ -809,7 +909,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
   if (!certificate) return null;
 
-  // ── Expired state ──────────────────────────
+  // Expired state
   if (isExpired) {
     return (
       <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.95)', zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', backdropFilter:'blur(8px)' }}>
@@ -832,6 +932,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
     <>
       <style>{FONT_STYLE}</style>
       <style>{`
+        @keyframes livePulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
         @media print {
           body * { visibility: hidden !important; display: none !important; }
           body::after { content: 'PySkill — Screenshots & Printing Disabled'; visibility: visible !important; display: block !important; position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 2rem; font-weight: 900; color: #000; }
@@ -852,20 +953,27 @@ export default function CertificateViewer({ certificate, onClose, user }) {
 
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:22, width:'100%', maxWidth:920, paddingTop:20 }}>
 
-          {/* Black flash overlay — fires on PrintScreen attempt */}
+          {/* Black flash overlay */}
           <div id="__cert_flash__" style={{ display:'none', position:'fixed', inset:0, background:'#000', zIndex:99999999, pointerEvents:'none' }} />
 
           {/* Certificate preview */}
           <div id="__cert_content__" style={{ position:'relative', width:previewW, flexShrink:0 }}>
 
-            {/* Cert box */}
-            <div style={{ width:previewW, height:previewH, borderRadius:16, overflow:'hidden', boxShadow:'0 28px 90px rgba(0,0,0,0.85)', transition:'filter 0.5s ease', filter: isLocked ? 'blur(14px) brightness(0.4)' : 'none', pointerEvents: isLocked ? 'none' : 'auto', userSelect:'none', WebkitUserSelect:'none' }}>
+            {/* Cert box — dimmed when locked, NOT blurred */}
+            <div style={{
+              width:previewW, height:previewH, borderRadius:16, overflow:'hidden',
+              boxShadow:'0 28px 90px rgba(0,0,0,0.85)',
+              transition:'filter 0.5s ease',
+              filter: isLocked ? 'brightness(0.5)' : 'none',
+              pointerEvents: isLocked ? 'none' : 'auto',
+              userSelect:'none', WebkitUserSelect:'none',
+            }}>
               <div style={{ transform:`scale(${scale})`, transformOrigin:'top left', width:1056, height:748 }}>
                 <CertSVG cert={cert} />
               </div>
             </div>
 
-            {/* Transparent overlay blocks right-click + drag on unpaid cert */}
+            {/* Transparent overlay blocks right-click + drag */}
             {!canDownload && (
               <div
                 style={{ position:'absolute', inset:0, zIndex:10, cursor:'not-allowed' }}
@@ -874,7 +982,7 @@ export default function CertificateViewer({ certificate, onClose, user }) {
               />
             )}
 
-            {/* 10-second preview countdown badge */}
+            {/* 10-second free preview badge */}
             {!canDownload && !userIsAdmin && previewPhase === 'counting' && (
               <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'flex-end', justifyContent:'flex-start', padding:'1rem', zIndex:20, pointerEvents:'none' }}>
                 <div style={{ background:'rgba(0,0,0,0.75)', border:'2px solid rgba(255,255,255,0.25)', borderRadius:14, padding:'0.5rem 1rem', backdropFilter:'blur(6px)' }}>
@@ -884,18 +992,9 @@ export default function CertificateViewer({ certificate, onClose, user }) {
               </div>
             )}
 
-            {/* Locked overlay */}
-            {isLocked && (
-              <div style={{ position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', zIndex:20, gap:'0.75rem' }}>
-                <div style={{ fontSize:'3rem' }}>🔒</div>
-                <div style={{ color:'#fff', fontWeight:800, fontSize:'1.2rem', fontFamily:'"Cinzel",serif', textAlign:'center', textShadow:'0 2px 8px rgba(0,0,0,0.8)' }}>
-                  Preview Ended
-                </div>
-                <div style={{ color:'rgba(255,255,255,0.6)', fontSize:'0.82rem' }}>
-                  Unlock to download your certificate
-                </div>
-              </div>
-            )}
+            {/* ⛔ SPECIMEN stamp — Layer 4 */}
+            {isLocked && <SpecimenOverlay />}
+
           </div>
 
           {/* Payment panel */}
