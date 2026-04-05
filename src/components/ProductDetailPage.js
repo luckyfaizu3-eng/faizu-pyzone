@@ -1,8 +1,10 @@
 import React from 'react';
-import { X, Star, Download, ShoppingCart, Zap, CheckCircle, Shield, ArrowLeft, ChevronLeft, ChevronRight, MessageCircle, Send } from 'lucide-react';
+import { X, Star, Download, ShoppingCart, Zap, CheckCircle, Shield, ArrowLeft, ChevronLeft, ChevronRight, MessageCircle, Send, Tag, Loader } from 'lucide-react';
 import { useCart } from '../App';
 import { useAuth } from '../App';
 import ReviewSection from './ReviewSection';
+import { db } from '../firebase';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 
 function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, isIndia, geoPrice }) {
   const { addToCart } = useCart();
@@ -14,19 +16,115 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
   const [showReviewForm, setShowReviewForm] = React.useState(false);
   const [newReview, setNewReview] = React.useState({ rating: 5, comment: '' });
 
+  // ── Coupon states ──
+  const [couponCode, setCouponCode] = React.useState('');
+  const [appliedCoupon, setAppliedCoupon] = React.useState(null);
+  const [couponError, setCouponError] = React.useState('');
+  const [couponLoading, setCouponLoading] = React.useState(false);
+
   if (!product) return null;
 
-  // ✅ Fallback geoPrice in case not passed (e.g. direct render)
   const resolvePrice = (inrPrice) => {
     if (geoPrice && geoData) return geoPrice(inrPrice, geoData);
     return { symbol: '₹', display: `₹${inrPrice}` };
   };
 
-  const priceInfo     = resolvePrice(product.price);
-  const origPriceInfo = product.originalPrice ? resolvePrice(product.originalPrice) : null;
-  const savingsInfo   = product.isBundle && product.bundleInfo?.savings
-                          ? resolvePrice(product.bundleInfo.savings)
-                          : null;
+  // ── Coupon discount calculation ──
+  const getDiscountedINRPrice = () => {
+    if (!appliedCoupon) return product.price;
+    if (appliedCoupon.discountType === 'percent') {
+      return Math.round(product.price - (product.price * appliedCoupon.discountValue / 100));
+    }
+    return Math.max(0, product.price - appliedCoupon.discountValue);
+  };
+
+  const discountedINRPrice = getDiscountedINRPrice();
+  const priceInfo         = resolvePrice(discountedINRPrice);
+  const origPriceInfo     = product.originalPrice ? resolvePrice(product.originalPrice) : null;
+  // If coupon is applied, show the pre-coupon product price as strikethrough
+  const couponStrikeInfo  = appliedCoupon ? resolvePrice(product.price) : null;
+  const savingsInfo       = product.isBundle && product.bundleInfo?.savings
+                              ? resolvePrice(product.bundleInfo.savings)
+                              : null;
+
+  const isFreeProduct = !product.price || product.price === 0;
+
+  // ── Apply coupon ──
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (!code) return;
+
+    setCouponLoading(true);
+    setCouponError('');
+    setAppliedCoupon(null);
+
+    try {
+      const q = query(
+        collection(db, 'coupons'),
+        where('code', '==', code),
+        where('isActive', '==', true)
+      );
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        setCouponError('Invalid or inactive coupon code.');
+        setCouponLoading(false);
+        return;
+      }
+
+      const coupon = { id: snapshot.docs[0].id, ...snapshot.docs[0].data() };
+
+      // Check expiry
+      if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
+        setCouponError('This coupon has expired.');
+        setCouponLoading(false);
+        return;
+      }
+
+      // Check max uses
+      if (coupon.maxUses && coupon.usedCount >= coupon.maxUses) {
+        setCouponError('This coupon has reached its usage limit.');
+        setCouponLoading(false);
+        return;
+      }
+
+      // Check minimum order value (using INR base price)
+      if (coupon.minOrderValue && product.price < coupon.minOrderValue) {
+        setCouponError(`Minimum order value of ₹${coupon.minOrderValue} required.`);
+        setCouponLoading(false);
+        return;
+      }
+
+      // Check if coupon applies to this product
+      if (coupon.applicableProducts === 'selected') {
+        if (!coupon.selectedProductIds?.includes(product.id)) {
+          setCouponError('This coupon is not applicable to this product.');
+          setCouponLoading(false);
+          return;
+        }
+      }
+
+      // Check free products
+      if (isFreeProduct) {
+        setCouponError('Coupons cannot be applied to free products.');
+        setCouponLoading(false);
+        return;
+      }
+
+      setAppliedCoupon(coupon);
+      window.showToast?.('Coupon applied successfully!', 'success');
+    } catch (err) {
+      setCouponError('Failed to validate coupon. Please try again.');
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponError('');
+  };
 
   const hasPreviewPages = product.previewPages && product.previewPages.length > 0;
 
@@ -61,8 +159,14 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
     setShowReviewForm(false);
   };
 
+  // Coupon savings display
+  const couponSavingsINR = appliedCoupon
+    ? product.price - discountedINRPrice
+    : 0;
+  const couponSavingsInfo = appliedCoupon ? resolvePrice(couponSavingsINR) : null;
+
   return (
-    <div 
+    <div
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
         background: '#f8fafc', zIndex: 2000, overflowY: 'auto',
@@ -105,10 +209,10 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
       {/* Main Content */}
       <div style={{ paddingBottom: '2rem' }}>
         {/* Thumbnail */}
-        <div 
+        <div
           style={{
-            background: product.thumbnail 
-              ? `url(${product.thumbnail})` 
+            background: product.thumbnail
+              ? `url(${product.thumbnail})`
               : 'linear-gradient(135deg, #6366f1, #ec4899)',
             backgroundSize: 'cover', backgroundPosition: 'center',
             height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -117,7 +221,7 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
           }}
         >
           {!product.thumbnail && (product.image || '📚')}
-          
+
           <div style={{
             position: 'absolute', top: '1rem', left: '1rem',
             background: 'rgba(16,185,129,0.95)', backdropFilter: 'blur(10px)',
@@ -130,7 +234,6 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
             PREMIUM
           </div>
 
-          {/* ✅ Foreign currency badge on image */}
           {!isIndia && geoData && (
             <div style={{
               position: 'absolute', top: '1rem', right: '1rem',
@@ -173,7 +276,7 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
                 Preview Pages
               </h3>
 
-              <div 
+              <div
                 style={{ position: 'relative', borderRadius: '12px', overflow: 'hidden', background: '#f8fafc', boxShadow: 'inset 0 2px 8px rgba(0,0,0,0.05)' }}
                 onTouchStart={handleTouchStart}
                 onTouchMove={handleTouchMove}
@@ -300,7 +403,113 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
             </div>
           </div>
 
-          {/* ✅ Price Card — geo-aware */}
+          {/* ── COUPON INPUT SECTION ── */}
+          {!isFreeProduct && (
+            <div style={{
+              background: '#fff', borderRadius: '20px', padding: '1.25rem',
+              marginBottom: '1.5rem', boxShadow: '0 10px 40px rgba(0,0,0,0.1)',
+              border: appliedCoupon ? '2px solid rgba(16,185,129,0.4)' : '1px solid #e2e8f0'
+            }}>
+              <h3 style={{
+                fontSize: '0.95rem', fontWeight: '800', color: '#1e293b',
+                marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem'
+              }}>
+                <Tag size={18} color="#6366f1" />
+                Have a Coupon Code?
+              </h3>
+
+              {appliedCoupon ? (
+                /* Applied coupon pill */
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  background: 'rgba(16,185,129,0.08)', border: '1.5px solid rgba(16,185,129,0.35)',
+                  borderRadius: '14px', padding: '0.85rem 1.1rem', flexWrap: 'wrap', gap: '0.75rem'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                      background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      color: '#fff', padding: '0.3rem 0.85rem', borderRadius: '8px',
+                      fontWeight: '900', fontSize: '0.95rem', letterSpacing: '0.08em'
+                    }}>
+                      {appliedCoupon.code}
+                    </div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#10b981' }}>
+                      {appliedCoupon.discountType === 'percent'
+                        ? `${appliedCoupon.discountValue}% off`
+                        : `₹${appliedCoupon.discountValue} off`} applied!
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleRemoveCoupon}
+                    style={{
+                      background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)',
+                      color: '#ef4444', padding: '0.4rem 0.85rem', borderRadius: '8px',
+                      cursor: 'pointer', fontSize: '0.8rem', fontWeight: '700'
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                /* Coupon input row */
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Enter coupon code"
+                    value={couponCode}
+                    onChange={(e) => {
+                      setCouponCode(e.target.value.toUpperCase());
+                      setCouponError('');
+                    }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleApplyCoupon(); }}
+                    style={{
+                      flex: 1, padding: '0.875rem 1rem',
+                      border: couponError ? '2px solid #ef4444' : '2px solid #e2e8f0',
+                      borderRadius: '12px', fontSize: '0.95rem', outline: 'none',
+                      fontFamily: 'inherit', fontWeight: '700',
+                      letterSpacing: couponCode ? '0.08em' : '0',
+                      transition: 'border-color 0.2s ease', textTransform: 'uppercase'
+                    }}
+                    onFocus={(e) => { if (!couponError) e.target.style.borderColor = '#6366f1'; }}
+                    onBlur={(e) => { if (!couponError) e.target.style.borderColor = '#e2e8f0'; }}
+                  />
+                  <button
+                    onClick={handleApplyCoupon}
+                    disabled={couponLoading || !couponCode.trim()}
+                    style={{
+                      background: couponLoading || !couponCode.trim()
+                        ? 'rgba(99,102,241,0.4)'
+                        : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                      border: 'none', color: '#fff',
+                      padding: '0.875rem 1.25rem', borderRadius: '12px',
+                      cursor: couponLoading || !couponCode.trim() ? 'not-allowed' : 'pointer',
+                      fontWeight: '700', fontSize: '0.9rem',
+                      display: 'flex', alignItems: 'center', gap: '0.4rem',
+                      whiteSpace: 'nowrap', transition: 'all 0.2s ease',
+                      boxShadow: couponLoading || !couponCode.trim() ? 'none' : '0 4px 12px rgba(99,102,241,0.35)'
+                    }}
+                  >
+                    {couponLoading
+                      ? <><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} />Checking</>
+                      : 'Apply'
+                    }
+                  </button>
+                </div>
+              )}
+
+              {/* Error message */}
+              {couponError && (
+                <div style={{
+                  marginTop: '0.6rem', fontSize: '0.82rem', color: '#ef4444',
+                  fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.4rem'
+                }}>
+                  ⚠️ {couponError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Price Card — geo-aware + coupon-aware */}
           <div style={{
             background: 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.9))',
             backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '1.5rem',
@@ -315,10 +524,17 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
                 Total Price
               </div>
 
-              {/* Original/strikethrough */}
-              {origPriceInfo && (
+              {/* Original product price strikethrough (before product-level discount) */}
+              {origPriceInfo && !appliedCoupon && (
                 <div style={{ fontSize: '1.1rem', color: '#94a3b8', textDecoration: 'line-through', marginBottom: '0.25rem' }}>
                   {origPriceInfo.display}
+                </div>
+              )}
+
+              {/* Coupon strikethrough: show product.price before coupon */}
+              {couponStrikeInfo && (
+                <div style={{ fontSize: '1.1rem', color: '#94a3b8', textDecoration: 'line-through', marginBottom: '0.25rem' }}>
+                  {couponStrikeInfo.display}
                 </div>
               )}
 
@@ -329,11 +545,11 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                 lineHeight: 1, marginBottom: '0.5rem', letterSpacing: '-0.03em'
               }}>
-                {priceInfo.display}
+                {isFreeProduct ? 'FREE' : priceInfo.display}
               </div>
 
-              {/* Bundle savings */}
-              {savingsInfo && (
+              {/* Bundle savings badge */}
+              {savingsInfo && !appliedCoupon && (
                 <div style={{
                   background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff',
                   padding: '0.6rem 1.25rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '800',
@@ -341,6 +557,18 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
                   boxShadow: '0 4px 16px rgba(16,185,129,0.3)'
                 }}>
                   🎁 Save {savingsInfo.display}
+                </div>
+              )}
+
+              {/* Coupon savings badge */}
+              {appliedCoupon && couponSavingsInfo && (
+                <div style={{
+                  background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', color: '#fff',
+                  padding: '0.6rem 1.25rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '800',
+                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem',
+                  boxShadow: '0 4px 16px rgba(99,102,241,0.3)'
+                }}>
+                  🏷️ Coupon saves {couponSavingsInfo.display}
                 </div>
               )}
 
@@ -355,10 +583,16 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
             </div>
           </div>
 
-          {/* Action Buttons */}
+          {/* Action Buttons — pass coupon to onBuyNow */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
-            <button 
-              onClick={() => { onBuyNow(); onClose(); }}
+            <button
+              onClick={() => {
+                onBuyNow(appliedCoupon ? {
+                  coupon: appliedCoupon,
+                  finalPrice: discountedINRPrice
+                } : null);
+                onClose();
+              }}
               style={{
                 width: '100%',
                 background: 'linear-gradient(135deg, #10b981, #059669)',
@@ -374,10 +608,15 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
               onTouchEnd={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
             >
               <Zap size={24} />
-              {!isIndia && geoData ? `Pay ${priceInfo.display} via PayPal` : `Buy Now — ${priceInfo.display}`}
+              {!isIndia && geoData
+                ? `Pay ${priceInfo.display} via PayPal`
+                : isFreeProduct
+                  ? 'Download Free'
+                  : `Buy Now — ${priceInfo.display}`
+              }
             </button>
 
-            <button 
+            <button
               onClick={handleAddToCart}
               disabled={addingToCart}
               style={{
@@ -394,17 +633,20 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
               onTouchStart={(e) => { if (!addingToCart) e.currentTarget.style.transform = 'scale(0.97)'; }}
               onTouchEnd={(e) => { if (!addingToCart) e.currentTarget.style.transform = 'scale(1)'; }}
             >
-              {addingToCart ? <><CheckCircle size={22} /> Added!</> : <><ShoppingCart size={22} /> Add to Cart</>}
+              {addingToCart
+                ? <><CheckCircle size={22} /> Added!</>
+                : <><ShoppingCart size={22} /> Add to Cart</>
+              }
             </button>
           </div>
 
           {/* Trust Badges */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem', marginBottom: '2rem' }}>
             {[
-              { icon: Shield,       text: 'Secure',           color: '#10b981' },
-              { icon: Download,     text: 'Instant',          color: '#6366f1' },
-              { icon: Star,         text: `${product.rating}★`, color: '#fbbf24' },
-              { icon: CheckCircle,  text: `${product.pages}p`,  color: '#ec4899' }
+              { icon: Shield,      text: 'Secure',              color: '#10b981' },
+              { icon: Download,    text: 'Instant',             color: '#6366f1' },
+              { icon: Star,        text: `${product.rating}★`,  color: '#fbbf24' },
+              { icon: CheckCircle, text: `${product.pages}p`,   color: '#ec4899' }
             ].map((badge, i) => (
               <div key={i} style={{
                 background: `${badge.color}08`, border: `1px solid ${badge.color}20`,
@@ -424,7 +666,9 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
               onClick={() => setShowReviewForm(!showReviewForm)}
               style={{
                 width: '100%',
-                background: showReviewForm ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                background: showReviewForm
+                  ? 'linear-gradient(135deg, #ef4444, #dc2626)'
+                  : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                 border: 'none', color: '#fff', padding: '1.15rem', borderRadius: '20px',
                 cursor: 'pointer', fontWeight: '700', fontSize: '1.05rem',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem',
@@ -505,12 +749,11 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
             </form>
           )}
         </div>
-        {/* End padded content */}
       </div>
 
       {/* Reviews Section */}
       <div style={{ background: '#fff', padding: '1.5rem', borderTop: '1px solid #e2e8f0' }}>
-        <ReviewSection 
+        <ReviewSection
           product={product}
           reviews={product.reviews || []}
           onAddReview={onAddReview}
@@ -521,6 +764,7 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         * { -webkit-overflow-scrolling: touch; }
         button { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
         img { image-rendering: -webkit-optimize-contrast; }

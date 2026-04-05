@@ -5,15 +5,17 @@ import { CATEGORIES } from '../App';
 import { Search, X, ChevronDown, Grid } from 'lucide-react';
 
 // ✅ Convert INR product price to geo currency
-// Logic: INR base = 49 (basic tier), scale karo geo.basic se
 export function geoPrice(inrPrice, geoData) {
+  // ✅ FREE SUPPORT: agar price 0 ya null hai toh FREE return karo
+  if (!inrPrice || inrPrice === 0) {
+    return { symbol: '', display: 'FREE' };
+  }
   if (!geoData || geoData.country === 'IN') {
     return { symbol: '₹', display: `₹${inrPrice}` };
   }
-  const inrBase = 49; // CURRENCY_CONFIG.IN.basic
+  const inrBase = 49;
   const ratio   = inrPrice / inrBase;
   const raw     = geoData.basic * ratio;
-  // < 10 → show 2 decimals (e.g. $1.22), >= 10 → round to .99 (e.g. $11.99)
   const rounded = raw < 10
     ? Math.round(raw * 100) / 100
     : Math.floor(raw) + 0.99;
@@ -41,7 +43,6 @@ function ProductsPage({
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [localSearchQuery, setLocalSearchQuery] = useState('');
 
-  // Get all unique custom categories
   const customCategories = [...new Set(
     products
       .filter(p => p.customCategory && p.customCategory.trim() !== '')
@@ -55,7 +56,6 @@ function ProductsPage({
 
   const allCategories = [...CATEGORIES.filter(c => c.id !== 'all'), ...customCategories];
 
-  // Browser Back Button Support
   useEffect(() => {
     const handlePopState = () => {
       if (selectedProduct) setSelectedProduct(null);
@@ -80,7 +80,6 @@ function ProductsPage({
     }
   };
 
-  // Filter products
   const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'all' || 
                            product.category === selectedCategory ||
@@ -108,6 +107,9 @@ function ProductsPage({
     setSelectedCategory(categoryId);
     setShowCategoryModal(false);
   };
+
+  // ✅ FREE check helper
+  const isFree = (price) => !price || price === 0;
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768;
 
@@ -158,7 +160,6 @@ function ProductsPage({
         }}>
           High-quality notes for your success
         </p>
-        {/* ✅ Foreign currency pill */}
         {!isIndia && geoData && (
           <div style={{
             display: 'inline-flex',
@@ -186,7 +187,6 @@ function ProductsPage({
         flexWrap: 'wrap',
         alignItems: 'stretch'
       }}>
-        {/* Category Button */}
         <button
           onClick={() => setShowCategoryModal(true)}
           style={{
@@ -209,14 +209,6 @@ function ProductsPage({
             minWidth: isMobile ? '140px' : '180px',
             justifyContent: 'space-between'
           }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(-2px)';
-            e.currentTarget.style.boxShadow = '0 6px 20px rgba(99,102,241,0.4)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 4px 15px rgba(99,102,241,0.3)';
-          }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Grid size={18} />
@@ -227,7 +219,6 @@ function ProductsPage({
           <ChevronDown size={16} />
         </button>
 
-        {/* Search Input */}
         <div style={{ flex: '1 1 auto', minWidth: isMobile ? '200px' : '300px', position: 'relative' }}>
           <Search 
             size={20} 
@@ -254,14 +245,6 @@ function ProductsPage({
               fontSize: isMobile ? '0.9rem' : '1rem',
               outline: 'none',
               transition: 'all 0.3s ease'
-            }}
-            onFocus={(e) => {
-              e.target.style.borderColor = '#6366f1';
-              e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,0.15)';
-            }}
-            onBlur={(e) => {
-              e.target.style.borderColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-              e.target.style.boxShadow = 'none';
             }}
           />
           {localSearchQuery && (
@@ -356,6 +339,8 @@ function ProductsPage({
             const savingsInfo    = product.isBundle && product.bundleInfo?.savings
                                      ? geoPrice(product.bundleInfo.savings, geoData)
                                      : null;
+            // ✅ FREE check
+            const productIsFree = isFree(product.price);
 
             return (
               <div
@@ -395,7 +380,21 @@ function ProductsPage({
                 }}>
                   {!product.thumbnail && (product.image || '📚')}
                   
-                  {product.discountPercent && !isPurchased && (
+                  {/* ✅ FREE badge */}
+                  {productIsFree && !isPurchased && (
+                    <div style={{
+                      position: 'absolute', top: '1rem', left: '1rem',
+                      background: 'linear-gradient(135deg, #10b981, #059669)',
+                      color: '#fff', padding: '0.5rem 0.875rem', borderRadius: '12px',
+                      fontSize: '0.875rem', fontWeight: '900',
+                      boxShadow: '0 4px 15px rgba(16,185,129,0.5)'
+                    }}>
+                      FREE
+                    </div>
+                  )}
+
+                  {/* Discount badge (only for paid) */}
+                  {product.discountPercent && !isPurchased && !productIsFree && (
                     <div style={{
                       position: 'absolute', top: '1rem', left: '1rem',
                       background: 'linear-gradient(135deg, #ef4444, #dc2626)',
@@ -464,9 +463,9 @@ function ProductsPage({
                     paddingTop: '1rem',
                     borderTop: `2px solid ${isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)'}`
                   }}>
-                    {/* ✅ Geo-aware price block */}
+                    {/* ✅ Price block — FREE ya paid */}
                     <div>
-                      {origPriceInfo && (
+                      {!productIsFree && origPriceInfo && (
                         <div style={{
                           fontSize: '0.9rem',
                           color: isDark ? '#64748b' : '#94a3b8',
@@ -477,14 +476,18 @@ function ProductsPage({
                         </div>
                       )}
                       <div style={{
-                        fontSize: '1.75rem', fontWeight: '900',
-                        background: 'linear-gradient(135deg, #10b981, #059669)',
-                        WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+                        fontSize: productIsFree ? '1.4rem' : '1.75rem',
+                        fontWeight: '900',
+                        background: productIsFree
+                          ? 'linear-gradient(135deg, #10b981, #059669)'
+                          : 'linear-gradient(135deg, #10b981, #059669)',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
                         lineHeight: 1
                       }}>
                         {priceInfo.display}
                       </div>
-                      {savingsInfo && (
+                      {savingsInfo && !productIsFree && (
                         <div style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: '700', marginTop: '0.25rem' }}>
                           Save {savingsInfo.display}
                         </div>
@@ -551,7 +554,6 @@ function ProductsPage({
               </button>
             </div>
 
-            {/* All Notes */}
             <button
               onClick={() => handleCategorySelect('all')}
               style={{
@@ -577,7 +579,6 @@ function ProductsPage({
               </span>
             </button>
 
-            {/* Category Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)', gap: '1rem' }}>
               {allCategories.map(category => {
                 const categoryProducts = products.filter(p => 
