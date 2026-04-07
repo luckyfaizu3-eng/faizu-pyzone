@@ -32,7 +32,7 @@ const PythonLogo = memo(function PythonLogo({ size = 24, style = {} }) {
 });
 
 /* ─────────────────────────────────────────
-   HOOKS
+   SCROLL REVEAL HOOK — simple fade+slide up
 ───────────────────────────────────────── */
 function useScrollReveal(threshold = 0.08) {
   const ref = useRef(null);
@@ -48,112 +48,29 @@ function useScrollReveal(threshold = 0.08) {
 }
 
 /* ─────────────────────────────────────────
-   FLOATING PARTICLES — GPU-only transform,
-   no layout thrash, will-change: transform
-───────────────────────────────────────── */
-const FloatingParticles = memo(function FloatingParticles({ isDark }) {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d', { alpha: true });
-
-    const setSize = () => {
-      canvas.width  = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    setSize();
-
-    const makeParticles = () => Array.from({ length: 30 }, () => ({  // reduced from 38→30
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      r: Math.random() * 2 + 0.5,
-      dx: (Math.random() - 0.5) * 0.3,   // slower = smoother
-      dy: (Math.random() - 0.5) * 0.3,
-      o: Math.random() * 0.45 + 0.1,
-      color: ['#6366f1','#ec4899','#22c55e','#3b82f6','#f59e0b'][Math.floor(Math.random()*5)],
-    }));
-
-    let particles = makeParticles();
-    let raf;
-    let lastTime = 0;
-    const TARGET_FPS = 60; // Canvas runs at 60, UI at 120
-    const FRAME_MS   = 1000 / TARGET_FPS;
-
-    const draw = (now) => {
-      raf = requestAnimationFrame(draw);
-      if (now - lastTime < FRAME_MS) return; // throttle canvas to 60fps (saves GPU)
-      lastTime = now;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        ctx.globalAlpha = p.o;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fill();
-        p.x += p.dx; p.y += p.dy;
-        if (p.x < 0 || p.x > canvas.width)  p.dx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.dy *= -1;
-      }
-      ctx.globalAlpha = 1;
-    };
-    raf = requestAnimationFrame(draw);
-
-    let resizeTimer;
-    const resize = () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => { setSize(); particles = makeParticles(); }, 150);
-    };
-    window.addEventListener('resize', resize, { passive: true });
-    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', resize); clearTimeout(resizeTimer); };
-  }, []);  // removed isDark dep — no re-init needed for opacity-only change
-
-  return (
-    <canvas ref={canvasRef} style={{
-      position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
-      pointerEvents: 'none', zIndex: 0,
-      opacity: isDark ? 0.4 : 0.18,
-      willChange: 'opacity',   // hint browser
-      contain: 'strict',       // isolate paint
-    }} />
-  );
-});
-
-/* ─────────────────────────────────────────
-   SCROLL PROGRESS BAR — passive listener,
-   CSS transition only, no layout reads
+   SCROLL PROGRESS BAR — lightweight
 ───────────────────────────────────────── */
 const ScrollProgressBar = memo(function ScrollProgressBar() {
   const barRef = useRef(null);
-
   useEffect(() => {
-    const bar = barRef.current;
-    if (!bar) return;
-
+    const bar = barRef.current; if (!bar) return;
     const fn = () => {
       const d = document.documentElement;
       const total = d.scrollHeight - d.clientHeight;
-      const pct   = total > 0 ? (d.scrollTop / total) * 100 : 0;
-      // Use transform instead of width → no layout reflow, GPU-composited
+      const pct = total > 0 ? (d.scrollTop / total) * 100 : 0;
       bar.style.transform = `scaleX(${pct / 100})`;
     };
-
     window.addEventListener('scroll', fn, { passive: true });
     return () => window.removeEventListener('scroll', fn);
   }, []);
-
   return (
-    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: '3.5px', zIndex: 9999, pointerEvents: 'none' }}>
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: '3px', zIndex: 9999, pointerEvents: 'none' }}>
       <div ref={barRef} style={{
         height: '100%', width: '100%',
         background: 'linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)',
         transformOrigin: 'left center',
         transform: 'scaleX(0)',
-        willChange: 'transform',   // GPU layer
-        boxShadow: '0 0 8px rgba(99,102,241,0.6)',
+        transition: 'transform 0.1s linear',
       }} />
     </div>
   );
@@ -161,55 +78,22 @@ const ScrollProgressBar = memo(function ScrollProgressBar() {
 
 /* ─────────────────────────────────────────
    LIVE COUNTER
-   BUG FIX: fluctuation now LOCKED to baseEnd
-   — never goes above or below baseEnd ±0
-   (was going to 6 because baseEnd-5 could
-    still fluctuate UP beyond baseEnd for
-    low values like 3)
 ───────────────────────────────────────── */
 const LiveCounter = memo(function LiveCounter({ baseEnd, suffix = '', label, color, locked = false }) {
-  const [count, setCount]   = useState(0);
-  const [ref, visible]      = useScrollReveal(0.1);
-  const lockRef             = useRef(locked); // if true, no fluctuation at all
-  lockRef.current = locked;
+  const [count, setCount] = useState(0);
+  const [ref, visible] = useScrollReveal(0.1);
 
   useEffect(() => {
     if (!visible) return;
     if (baseEnd === 0) { setCount(0); return; }
-
-    const timeouts = [];
-    let started = false;
-
-    const startFluctuation = () => {
-      if (lockRef.current) return; // LOCKED values never fluctuate
-      const fluctuate = () => {
-        // ±1 only, never exceed baseEnd, never go below baseEnd-2
-        setCount(() => {
-          const delta = Math.random() < 0.5 ? 1 : -1;
-          const next  = baseEnd + delta;
-          return Math.max(baseEnd - 2, Math.min(baseEnd + 3, next));
-        });
-        const t = setTimeout(fluctuate, 4000 + Math.random() * 5000);
-        timeouts.push(t);
-      };
-      const t = setTimeout(fluctuate, 4000 + Math.random() * 5000);
-      timeouts.push(t);
-    };
-
-    let cur  = 0;
+    let cur = 0;
     const step = Math.max(1, Math.ceil(baseEnd / 55));
     const iv = setInterval(() => {
       cur += step;
-      if (cur >= baseEnd) {
-        setCount(baseEnd);
-        clearInterval(iv);
-        if (!started) { started = true; startFluctuation(); }
-      } else {
-        setCount(cur);
-      }
+      if (cur >= baseEnd) { setCount(baseEnd); clearInterval(iv); }
+      else { setCount(cur); }
     }, 18);
-
-    return () => { clearInterval(iv); timeouts.forEach(clearTimeout); };
+    return () => clearInterval(iv);
   }, [visible, baseEnd]);
 
   return (
@@ -223,44 +107,32 @@ const LiveCounter = memo(function LiveCounter({ baseEnd, suffix = '', label, col
 });
 
 /* ─────────────────────────────────────────
-   STATS BAR — Test Levels uses locked=true
+   STATS BAR
 ───────────────────────────────────────── */
 const StatsBar = memo(function StatsBar({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
   const [stats, setStats] = useState([
     { baseEnd: 0, suffix: '+', label: 'Students Tested', color: '#6366f1', locked: false },
-    { baseEnd: 0, suffix: '%', label: 'Pass Rate',        color: '#22c55e', locked: false },
-    { baseEnd: 3, suffix: '',  label: 'Test Levels',      color: '#f59e0b', locked: true  }, // LOCKED — never fluctuates
-    { baseEnd: 0, suffix: '+', label: 'Certificates 🏅',  color: '#ec4899', locked: false },
+    { baseEnd: 0, suffix: '%', label: 'Pass Rate', color: '#22c55e', locked: false },
+    { baseEnd: 3, suffix: '', label: 'Test Levels', color: '#f59e0b', locked: true },
+    { baseEnd: 0, suffix: '+', label: 'Certificates 🏅', color: '#ec4899', locked: false },
   ]);
-  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
       try {
         const snap = await getDocs(collection(db, 'leaderboard'));
-        const all  = snap.docs.map(d => d.data());
-        const total    = all.length;
-        const passed   = all.filter(e => (e.percentage || 0) >= 55).length;
+        const all = snap.docs.map(d => d.data());
+        const total = all.length;
+        const passed = all.filter(e => (e.percentage || 0) >= 55).length;
         const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
-
         setStats([
-          { baseEnd: total,    suffix: '+', label: 'Students Tested', color: '#6366f1', locked: false },
-          { baseEnd: passRate, suffix: '%', label: 'Pass Rate',        color: '#22c55e', locked: false },
-          { baseEnd: 3,        suffix: '',  label: 'Test Levels',      color: '#f59e0b', locked: true  }, // ALWAYS 3, locked
-          { baseEnd: passed,   suffix: '+', label: 'Certificates 🏅',  color: '#ec4899', locked: false },
+          { baseEnd: total, suffix: '+', label: 'Students Tested', color: '#6366f1', locked: false },
+          { baseEnd: passRate, suffix: '%', label: 'Pass Rate', color: '#22c55e', locked: false },
+          { baseEnd: 3, suffix: '', label: 'Test Levels', color: '#f59e0b', locked: true },
+          { baseEnd: passed, suffix: '+', label: 'Certificates 🏅', color: '#ec4899', locked: false },
         ]);
-      } catch (e) {
-        console.error('StatsBar fetch error:', e);
-        setStats([
-          { baseEnd: 0, suffix: '',  label: 'Students Tested', color: '#6366f1', locked: false },
-          { baseEnd: 0, suffix: '%', label: 'Pass Rate',        color: '#22c55e', locked: false },
-          { baseEnd: 3, suffix: '',  label: 'Test Levels',      color: '#f59e0b', locked: true  },
-          { baseEnd: 0, suffix: '',  label: 'Certificates 🏅',  color: '#ec4899', locked: false },
-        ]);
-      } finally {
-        setLoaded(true);
-      }
+      } catch (e) { console.error('StatsBar fetch error:', e); }
     })();
   }, []);
 
@@ -268,49 +140,29 @@ const StatsBar = memo(function StatsBar({ isDark, isMobile }) {
     <section ref={ref} style={{
       padding: isMobile ? '0 16px 28px' : '0 24px 40px',
       maxWidth: '960px', margin: '0 auto',
-      opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)',
-      transition: 'opacity 0.55s ease, transform 0.55s ease',
-      willChange: 'opacity, transform',
-      contain: 'layout',
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateY(0)' : 'translateY(20px)',
+      transition: 'opacity 0.5s ease, transform 0.5s ease',
     }}>
       <div style={{
-        display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
+        display: 'grid',
+        gridTemplateColumns: `repeat(${isMobile ? 2 : 4}, 1fr)`,
         gap: isMobile ? '10px' : '14px',
       }}>
         {stats.map((s, i) => (
           <div key={i} style={{
             background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)',
-            backdropFilter: 'blur(12px)',
+            backdropFilter: 'blur(8px)',
             border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.9)',
             borderRadius: '16px',
             padding: '6px 0',
             boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.2)' : '0 4px 20px rgba(99,102,241,0.06)',
-            animation: visible ? `statPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.08}s both` : 'none',
-            position: 'relative', overflow: 'hidden',
           }}>
-            {!loaded && (
-              <div style={{
-                position: 'absolute', inset: 0, borderRadius: '16px',
-                background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)',
-                animation: 'shimmerBar 1.4s ease-in-out infinite',
-              }} />
-            )}
-            {/* Pass locked=true for Test Levels so it never fluctuates */}
-            <LiveCounter
-              baseEnd={s.baseEnd}
-              suffix={s.suffix}
-              label={s.label}
-              color={s.color}
-              locked={s.locked}
-            />
+            <LiveCounter baseEnd={s.baseEnd} suffix={s.suffix} label={s.label} color={s.color} locked={s.locked} />
           </div>
         ))}
       </div>
-      <p style={{
-        textAlign: 'center', marginTop: '8px',
-        fontSize: '0.6rem', fontWeight: '600',
-        color: isDark ? '#334155' : '#cbd5e1',
-      }}>
+      <p style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.6rem', fontWeight: '600', color: isDark ? '#334155' : '#cbd5e1' }}>
         ✅ Live data from PySkill leaderboard
       </p>
     </section>
@@ -335,82 +187,41 @@ const SectionLabel = memo(function SectionLabel({ color, text }) {
       borderRadius: '50px', padding: '4px 14px', marginBottom: '10px',
       fontSize: '0.68rem', fontWeight: '800', color, letterSpacing: '0.12em', textTransform: 'uppercase',
     }}>
-      <span style={{
-        width: 6, height: 6, borderRadius: '50%', background: color,
-        display: 'inline-block', animation: 'pulse 1.4s infinite',
-      }} />
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
       {text}
     </div>
   );
 });
 
 /* ─────────────────────────────────────────
-   ACTION CARD — GPU-only hover transforms,
-   ripple uses CSS animation, no JS timers
+   ACTION CARD — simple hover, no ripples
 ───────────────────────────────────────── */
 const ActionCard = memo(function ActionCard({ card, isDark, isMobile, onClick }) {
-  const [hov, setHov]       = useState(false);
-  const [press, setPress]   = useState(false);
-  const [ripples, setRipples] = useState([]);
-
-  const handleClick = useCallback((e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const id   = Date.now();
-    setRipples(r => [...r.slice(-2), { id, x: e.clientX - rect.left, y: e.clientY - rect.top }]);
-    // cleanup after animation
-    setTimeout(() => setRipples(r => r.filter(rp => rp.id !== id)), 600);
-    onClick();
-  }, [onClick]);
+  const [hov, setHov] = useState(false);
 
   return (
     <button
-      onClick={handleClick}
+      onClick={onClick}
       onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => { setHov(false); setPress(false); }}
-      onMouseDown={() => setPress(true)} onMouseUp={() => setPress(false)}
-      onTouchStart={() => setPress(true)} onTouchEnd={() => setPress(false)}
+      onMouseLeave={() => setHov(false)}
       style={{
         background: isDark
           ? hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)'
           : hov ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        border: hov
-          ? `1.5px solid ${card.c}50`
-          : isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.8)',
+        backdropFilter: 'blur(12px)',
+        border: hov ? `1.5px solid ${card.c}50` : isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.8)',
         borderRadius: '18px',
         padding: isMobile ? '14px 6px 12px' : '20px 10px 16px',
         cursor: 'pointer', outline: 'none', width: '100%',
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-        // GPU-composited only — translate & scale, NO width/height/top/left
-        transform: press
-          ? 'scale(0.91)'
-          : hov ? 'translateY(-5px) scale(1.02)' : 'translateY(0) scale(1)',
-        willChange: 'transform',
-        boxShadow: press
-          ? `0 0 0 3px ${card.c}30`
-          : hov
-          ? `0 12px 32px ${card.glow}, 0 0 0 1.5px ${card.c}30`
+        transform: hov ? 'translateY(-3px)' : 'translateY(0)',
+        boxShadow: hov
+          ? `0 8px 24px ${card.glow}`
           : isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.06)',
-        transition: 'transform 0.18s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.18s, background 0.18s, border-color 0.18s',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease',
         minHeight: isMobile ? '80px' : '96px',
-        position: 'relative', overflow: 'hidden',
+        position: 'relative',
       }}>
-      {ripples.map(rp => (
-        <span key={rp.id} style={{
-          position: 'absolute', left: rp.x, top: rp.y,
-          width: '4px', height: '4px',
-          background: card.c, borderRadius: '50%', opacity: 0.6,
-          transform: 'translate(-50%,-50%)',
-          animation: 'rippleOut 0.6s ease-out forwards',
-          pointerEvents: 'none',
-        }} />
-      ))}
-      <div style={{
-        position: 'absolute', top: 0, left: '20%', right: '20%', height: '1px',
-        background: `linear-gradient(90deg,transparent,${card.c}60,transparent)`,
-        opacity: hov ? 1 : 0, transition: 'opacity 0.2s',
-      }} />
       <div style={{
         width: isMobile ? '40px' : '46px', height: isMobile ? '40px' : '46px',
         borderRadius: '14px',
@@ -418,10 +229,6 @@ const ActionCard = memo(function ActionCard({ card, isDark, isMobile, onClick })
         border: `1px solid ${card.c}30`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: isMobile ? '1.3rem' : '1.5rem',
-        transform: hov ? 'scale(1.1) rotate(-6deg)' : 'scale(1)',
-        willChange: 'transform',
-        transition: 'transform 0.22s cubic-bezier(0.34,1.56,0.64,1)',
-        boxShadow: hov ? `0 4px 16px ${card.glow}` : 'none',
         flexShrink: 0,
       }}>{card.icon}</div>
       <span style={{
@@ -471,17 +278,17 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
     <section ref={ref} style={{
       padding: isMobile ? '0 16px 36px' : '0 24px 52px',
       maxWidth: '960px', margin: '0 auto',
-      opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(22px)',
-      transition: 'opacity 0.55s ease, transform 0.55s ease',
-      willChange: 'opacity, transform',
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateY(0)' : 'translateY(20px)',
+      transition: 'opacity 0.5s ease, transform 0.5s ease',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '14px' : '20px' }}>
         <span style={{ fontSize: '1rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#111827', display: 'flex', alignItems: 'center', gap: '7px' }}>
           <PythonLogo size={22} /> Mock Tests
         </span>
-        <span onClick={() => setCurrentPage('mocktests')} style={{ fontSize: '0.72rem', fontWeight: '700', color: '#22c55e', cursor: 'pointer', transition: 'opacity 0.2s' }}
-          onMouseEnter={e => e.currentTarget.style.opacity='0.7'}
-          onMouseLeave={e => e.currentTarget.style.opacity='1'}>
+        <span onClick={() => setCurrentPage('mocktests')} style={{ fontSize: '0.72rem', fontWeight: '700', color: '#22c55e', cursor: 'pointer', opacity: 1, transition: 'opacity 0.2s' }}
+          onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
+          onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
           View All →
         </span>
       </div>
@@ -501,25 +308,19 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
               borderRadius: '20px', overflow: 'hidden', cursor: 'pointer',
               background: `linear-gradient(150deg,${lvl.bg1},${lvl.bg2})`,
               border: `1.5px solid ${hovIdx === i ? lvl.nameColor + '80' : lvl.border}`,
-              transition: 'transform 0.25s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.25s, border-color 0.25s',
-              willChange: 'transform',
+              transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.2s ease',
               boxShadow: hovIdx === i
-                ? `0 16px 40px ${lvl.nameColor}30, 0 0 0 1px ${lvl.nameColor}20`
+                ? `0 12px 32px ${lvl.nameColor}30`
                 : isDark ? '0 2px 12px rgba(0,0,0,0.3)' : 'none',
-              transform: hovIdx === i ? 'translateY(-8px) scale(1.02)' : 'translateY(0) scale(1)',
-              animation: visible ? `cardSlideUp 0.5s cubic-bezier(0.34,1.56,0.64,1) ${i * 0.1}s both` : 'none',
+              transform: hovIdx === i ? 'translateY(-6px)' : 'translateY(0)',
             }}>
             <div style={{ padding: '18px 14px 12px', position: 'relative' }}>
               <div style={{
                 position: 'absolute', top: '11px', right: '11px',
                 fontSize: '0.52rem', fontWeight: '800', padding: '3px 8px',
                 borderRadius: '50px', background: lvl.pillBg, color: lvl.pillTc,
-                animation: lvl.isFree ? 'freePulse 2s ease-in-out infinite' : 'none',
               }}>{lvl.pill}</div>
-              <span style={{
-                fontSize: '2rem', marginBottom: '8px', display: 'block',
-                animation: `wig 2.5s ease-in-out ${i * 0.8}s infinite`,
-              }}>{lvl.emoji}</span>
+              <span style={{ fontSize: '2rem', marginBottom: '8px', display: 'block' }}>{lvl.emoji}</span>
               <div style={{ fontSize: '0.95rem', fontWeight: '900', marginBottom: '3px', color: lvl.nameColor }}>{lvl.level}</div>
               <div style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1.5, color: lvl.descColor }}>
                 {lvl.q} · {lvl.t} · {i === 0 ? 'Beginner' : i === 1 ? 'Expert' : 'Master'}
@@ -531,7 +332,7 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
               background: lvl.barBg, color: lvl.nameColor,
             }}>
               <span>{lvl.isFree ? '🆓 Free!' : 'Start Now!'}</span>
-              <span style={{ transform: hovIdx === i ? 'translateX(3px)' : 'translateX(0)', transition: 'transform 0.2s', display: 'inline-block' }}>→</span>
+              <span>→</span>
             </div>
           </div>
         ))}
@@ -545,9 +346,8 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
             border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
             borderRadius: '50px', padding: '5px 11px',
             fontSize: '0.64rem', fontWeight: '700', color: isDark ? '#94a3b8' : '#6b7280',
-            animation: `chipSlide 0.4s ease ${i * 0.07}s both`,
           }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, display: 'inline-block', animation: 'ldPulse 1.5s ease-in-out infinite' }} />
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, display: 'inline-block' }} />
             {c.label}
           </div>
         ))}
@@ -559,63 +359,32 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
 /* ─────────────────────────────────────────
    TOP CARD
 ───────────────────────────────────────── */
-const TopCard = memo(function TopCard({ isDark, isMobile, medal, data, isFirst, delay, onClick }) {
-  const [hov, setHov]     = useState(false);
-  const [press, setPress] = useState(false);
+const TopCard = memo(function TopCard({ isDark, isMobile, medal, data, isFirst, onClick }) {
+  const [hov, setHov] = useState(false);
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => { setHov(false); setPress(false); }}
-      onMouseDown={() => setPress(true)} onMouseUp={() => setPress(false)}
-      onTouchStart={() => setPress(true)} onTouchEnd={() => setPress(false)}
+      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
         borderRadius: '20px', overflow: 'hidden', cursor: 'pointer',
         background: isDark ? 'rgba(15,23,42,0.95)' : '#fff',
-        border: (hov || press)
-          ? `1.5px solid ${medal.color}60`
-          : isDark ? `1px solid ${medal.color}25` : `1px solid ${medal.color}30`,
-        boxShadow: press
-          ? `0 0 0 3px ${medal.glow}, 0 8px 30px ${medal.glow}`
-          : hov
-          ? `0 16px 48px ${medal.glow}, 0 0 0 1.5px ${medal.color}40`
+        border: hov ? `1.5px solid ${medal.color}60` : isDark ? `1px solid ${medal.color}25` : `1px solid ${medal.color}30`,
+        boxShadow: hov
+          ? `0 12px 36px ${medal.glow}`
           : isFirst
-          ? `0 8px 32px ${medal.glow}, 0 0 0 1px ${medal.color}30`
+          ? `0 6px 24px ${medal.glow}`
           : isDark ? '0 4px 16px rgba(0,0,0,0.35)' : '0 4px 16px rgba(0,0,0,0.07)',
-        transform: press ? 'scale(0.96)' : hov ? 'translateY(-6px) scale(1.02)' : isFirst ? 'scale(1.03)' : 'scale(1)',
-        willChange: 'transform',
-        transition: 'transform 0.22s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.22s, border-color 0.22s',
-        animation: `cardEnter 0.5s cubic-bezier(0.34,1.56,0.64,1) ${delay}s both`,
-        position: 'relative',
+        transform: hov ? 'translateY(-4px)' : isFirst ? 'scale(1.02)' : 'scale(1)',
+        transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
       }}>
       <div style={{ height: '3px', background: `linear-gradient(90deg,${medal.color},${medal.color}60,transparent)` }} />
-      <div style={{
-        position: 'absolute', top: '-20px', right: '-20px',
-        width: '80px', height: '80px', borderRadius: '50%',
-        background: `radial-gradient(circle,${medal.glow},transparent 70%)`,
-        pointerEvents: 'none', opacity: hov ? 0.8 : 0.4, transition: 'opacity 0.2s',
-      }} />
-      <div style={{ padding: isMobile ? '14px 12px' : '18px 16px', textAlign: 'center', position: 'relative' }}>
-        <div style={{
-          fontSize: isMobile ? '2rem' : '2.6rem', lineHeight: 1, marginBottom: '6px',
-          animation: isFirst ? 'medalFloat 2.5s ease-in-out infinite' : 'none',
-          filter: `drop-shadow(0 4px 12px ${medal.glow})`,
-        }}>{medal.emoji}</div>
-        <div style={{
-          display: 'inline-flex', alignItems: 'center', gap: '4px',
-          background: `${medal.color}18`, border: `1px solid ${medal.color}35`,
-          borderRadius: '50px', padding: '2px 10px', marginBottom: '8px',
-        }}>
+      <div style={{ padding: isMobile ? '14px 12px' : '18px 16px', textAlign: 'center' }}>
+        <div style={{ fontSize: isMobile ? '2rem' : '2.6rem', lineHeight: 1, marginBottom: '6px' }}>{medal.emoji}</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `${medal.color}18`, border: `1px solid ${medal.color}35`, borderRadius: '50px', padding: '2px 10px', marginBottom: '8px' }}>
           <span style={{ fontSize: '0.55rem', fontWeight: '900', color: medal.color, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{medal.label}</span>
         </div>
-        <div style={{
-          fontSize: isMobile ? '1.8rem' : '2.2rem', fontWeight: '900',
-          color: medal.color, lineHeight: 1, marginBottom: '6px',
-          textShadow: hov ? `0 0 20px ${medal.glow}` : 'none', transition: 'text-shadow 0.2s',
-          animation: 'scoreIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both',
-        }}>{data.score}%</div>
-        <div style={{ fontSize: isMobile ? '0.78rem' : '0.88rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#111827', marginBottom: '3px', animation: 'fadeSlide 0.4s ease both' }}>
-          {data.name}
-        </div>
+        <div style={{ fontSize: isMobile ? '1.8rem' : '2.2rem', fontWeight: '900', color: medal.color, lineHeight: 1, marginBottom: '6px' }}>{data.score}%</div>
+        <div style={{ fontSize: isMobile ? '0.78rem' : '0.88rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#111827', marginBottom: '3px' }}>{data.name}</div>
         <div style={{ fontSize: isMobile ? '0.6rem' : '0.66rem', color: isDark ? '#6b7280' : '#9ca3af', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
           <PythonLogo size={12} /> {data.test}
         </div>
@@ -647,16 +416,12 @@ const SkeletonRankerCard = memo(function SkeletonRankerCard({ isDark, medal }) {
         </div>
         {[70, 50, 40].map((w, i) => (
           <div key={i} style={{
-            height: i === 0 ? '28px' : '12px',
-            width: `${w}%`, margin: '0 auto 8px',
+            height: i === 0 ? '28px' : '12px', width: `${w}%`, margin: '0 auto 8px',
             borderRadius: '8px',
             background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
-            animation: `shimmerBar 1.5s ease-in-out ${i * 0.2}s infinite`,
           }} />
         ))}
-        <div style={{ marginTop: '4px', fontSize: '0.65rem', color: isDark ? '#334155' : '#cbd5e1', fontWeight: '600' }}>
-          No data yet
-        </div>
+        <div style={{ marginTop: '4px', fontSize: '0.65rem', color: isDark ? '#334155' : '#cbd5e1', fontWeight: '600' }}>No data yet</div>
       </div>
     </div>
   );
@@ -673,11 +438,11 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
   useEffect(() => {
     (async () => {
       try {
-        const q    = query(collection(db, 'leaderboard'), orderBy('percentage', 'desc'));
+        const q = query(collection(db, 'leaderboard'), orderBy('percentage', 'desc'));
         const snap = await getDocs(q);
-        const all  = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const seen = new Set();
-        const top  = all
+        const top = all
           .filter(e => (e.testLevel || '').toLowerCase().trim() !== 'neet')
           .filter(e => {
             const key = (e.name || '').toLowerCase().trim();
@@ -692,9 +457,9 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
   }, []);
 
   const medals = useMemo(() => [
-    { emoji: '🥇', color: '#f59e0b', glow: 'rgba(245,158,11,0.5)', label: 'Champion',  rank: 1 },
-    { emoji: '🥈', color: '#f97316', glow: 'rgba(249,115,22,0.5)',  label: 'Runner-up', rank: 2 },
-    { emoji: '🥉', color: '#a855f7', glow: 'rgba(168,85,247,0.5)',  label: '3rd Place', rank: 3 },
+    { emoji: '🥇', color: '#f59e0b', glow: 'rgba(245,158,11,0.4)', label: 'Champion', rank: 1 },
+    { emoji: '🥈', color: '#f97316', glow: 'rgba(249,115,22,0.4)', label: 'Runner-up', rank: 2 },
+    { emoji: '🥉', color: '#a855f7', glow: 'rgba(168,85,247,0.4)', label: '3rd Place', rank: 3 },
   ], []);
 
   const displayData = rankers.map(r => ({
@@ -708,9 +473,9 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
     <section ref={ref} style={{
       padding: isMobile ? '0 16px 48px' : '0 24px 64px',
       maxWidth: '960px', margin: '0 auto',
-      opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(22px)',
-      transition: 'opacity 0.55s ease, transform 0.55s ease',
-      willChange: 'opacity, transform',
+      opacity: visible ? 1 : 0,
+      transform: visible ? 'translateY(0)' : 'translateY(20px)',
+      transition: 'opacity 0.5s ease, transform 0.5s ease',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
         <div>
@@ -722,14 +487,14 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
         <div
           style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#16a34a', background: isDark ? 'rgba(34,197,94,0.1)' : '#f0fdf4', border: '1.5px solid #86efac', padding: '5px 12px', borderRadius: '50px', cursor: 'pointer' }}
           onClick={() => setCurrentPage('leaderboard')}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block', animation: 'ldPulse 1s ease-in-out infinite' }} />
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
           LIVE
         </div>
       </div>
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: isDark ? '#475569' : '#94a3b8' }}>
-          <div style={{ animation: 'spin 1s linear infinite', display: 'inline-block', fontSize: '1.5rem' }}>⏳</div>
+          <div style={{ fontSize: '1.5rem' }}>⏳</div>
           <div style={{ marginTop: '8px', fontSize: '0.82rem' }}>Loading top performers...</div>
         </div>
       ) : (
@@ -738,7 +503,7 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
             {[0, 1, 2].map(i => {
               const m = medals[i]; const d = displayData[i];
               return d
-                ? <TopCard key={i} isDark={isDark} isMobile={isMobile} medal={m} data={d} isFirst={i === 0} delay={i * 0.06} onClick={() => setCurrentPage('leaderboard')} />
+                ? <TopCard key={i} isDark={isDark} isMobile={isMobile} medal={m} data={d} isFirst={i === 0} onClick={() => setCurrentPage('leaderboard')} />
                 : <SkeletonRankerCard key={i} isDark={isDark} medal={m} />;
             })}
           </div>
@@ -809,7 +574,7 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
     { from: '#f59e0b', to: '#ef4444' }, { from: '#ec4899', to: '#a855f7' },
     { from: '#3b82f6', to: '#6366f1' }, { from: '#14b8a6', to: '#6366f1' },
   ];
-  const pal      = palettes[(review.name?.charCodeAt(0) || 0) % palettes.length];
+  const pal = palettes[(review.name?.charCodeAt(0) || 0) % palettes.length];
   const igHandle = review.instagram ? review.instagram.replace(/^@/, '') : null;
 
   return (
@@ -819,19 +584,12 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
       style={{
         position: 'relative', borderRadius: '20px', overflow: 'hidden',
         background: isDark ? '#0f172a' : '#ffffff',
-        border: hov
-          ? `1.5px solid ${pal.from}55`
-          : isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
-        boxShadow: hov
-          ? `0 24px 64px ${pal.from}22, 0 0 0 1px ${pal.from}22`
-          : isDark ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.06)',
-        transform: hov ? 'translateY(-5px)' : 'translateY(0)',
-        willChange: 'transform',
-        transition: 'transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s, border-color 0.3s',
-        contain: 'layout style',
+        border: hov ? `1.5px solid ${pal.from}55` : isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+        boxShadow: hov ? `0 16px 48px ${pal.from}18` : isDark ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.06)',
+        transform: hov ? 'translateY(-4px)' : 'translateY(0)',
+        transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
       }}>
       <div style={{ height: '3px', background: `linear-gradient(90deg, ${pal.from}, ${pal.to})` }} />
-      <div style={{ position: 'absolute', top: 0, right: 0, width: '180px', height: '180px', background: `radial-gradient(circle at top right, ${pal.from}0d, transparent 70%)`, pointerEvents: 'none' }} />
 
       <div style={{ padding: isMobile ? '16px 14px 12px' : '20px 20px 14px', position: 'relative' }}>
         {isAdmin && (
@@ -840,13 +598,13 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
 
         <div style={{ display: 'flex', gap: '13px', alignItems: 'flex-start', marginBottom: '14px' }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            <div style={{ width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px', borderRadius: '16px', background: `linear-gradient(135deg, ${pal.from}, ${pal.to})`, overflow: 'hidden', boxShadow: `0 6px 20px ${pal.from}40`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: isMobile ? '48px' : '56px', height: isMobile ? '48px' : '56px', borderRadius: '16px', background: `linear-gradient(135deg, ${pal.from}, ${pal.to})`, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {review.photo
                 ? <img src={review.photo} alt={review.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
-                : <span style={{ color: '#fff', fontWeight: '900', fontSize: isMobile ? '1.2rem' : '1.4rem', fontFamily: 'system-ui' }}>{(review.name || 'U')[0].toUpperCase()}</span>
+                : <span style={{ color: '#fff', fontWeight: '900', fontSize: isMobile ? '1.2rem' : '1.4rem' }}>{(review.name || 'U')[0].toUpperCase()}</span>
               }
             </div>
-            <div style={{ position: 'absolute', bottom: '-3px', right: '-3px', width: '18px', height: '18px', borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: '2px solid ' + (isDark ? '#0f172a' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(59,130,246,0.6)' }}>
+            <div style={{ position: 'absolute', bottom: '-3px', right: '-3px', width: '18px', height: '18px', borderRadius: '50%', background: 'linear-gradient(135deg,#3b82f6,#6366f1)', border: '2px solid ' + (isDark ? '#0f172a' : '#fff'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="8" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l2.5 2.5L9 1" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </div>
           </div>
@@ -876,15 +634,14 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
               <span style={{ fontSize: '0.65rem', color: isDark ? '#475569' : '#94a3b8', fontWeight: '500' }}>{timeAgo(review.createdAt)}</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-              {review.course  && <span style={{ fontSize: '0.6rem', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: isDark ? `${pal.from}20` : `${pal.from}12`, color: pal.from, border: `1px solid ${pal.from}30` }}>🎓 {review.course}</span>}
+              {review.course && <span style={{ fontSize: '0.6rem', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: isDark ? `${pal.from}20` : `${pal.from}12`, color: pal.from, border: `1px solid ${pal.from}30` }}>🎓 {review.course}</span>}
               {review.address && <span style={{ fontSize: '0.6rem', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: isDark ? 'rgba(16,185,129,0.12)' : 'rgba(16,185,129,0.07)', color: '#10b981', border: '1px solid rgba(16,185,129,0.2)' }}>📍 {review.address}</span>}
             </div>
           </div>
         </div>
 
         <div style={{ position: 'relative', background: isDark ? 'rgba(255,255,255,0.03)' : `${pal.from}08`, borderRadius: '12px', padding: '12px 14px 12px 16px', marginBottom: '12px', borderLeft: `3px solid ${pal.from}` }}>
-          <span style={{ position: 'absolute', top: '-6px', left: '10px', fontSize: '2.2rem', lineHeight: 1, color: pal.from, fontFamily: 'Georgia, serif', opacity: 0.35, pointerEvents: 'none' }}>"</span>
-          <p style={{ margin: 0, fontSize: isMobile ? '0.82rem' : '0.875rem', color: isDark ? '#cbd5e1' : '#374151', lineHeight: 1.72, fontWeight: '500', fontStyle: 'italic', paddingTop: '4px' }}>{review.text}</p>
+          <p style={{ margin: 0, fontSize: isMobile ? '0.82rem' : '0.875rem', color: isDark ? '#cbd5e1' : '#374151', lineHeight: 1.72, fontWeight: '500', fontStyle: 'italic' }}>{review.text}</p>
         </div>
 
         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', background: isDark ? 'rgba(16,185,129,0.1)' : 'rgba(16,185,129,0.07)', border: '1px solid rgba(16,185,129,0.22)', borderRadius: '8px', padding: '3px 9px' }}>
@@ -933,7 +690,7 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
             <button
               onClick={postComment}
               disabled={posting || !commentText.trim()}
-              style={{ padding: '7px 13px', borderRadius: '20px', background: commentText.trim() ? `linear-gradient(135deg,${pal.from},${pal.to})` : isDark ? 'rgba(255,255,255,0.05)' : '#f0f0f0', border: 'none', color: commentText.trim() ? '#fff' : isDark ? '#334155' : '#94a3b8', fontWeight: '800', fontSize: '0.7rem', cursor: commentText.trim() ? 'pointer' : 'default', transition: 'all 0.2s', boxShadow: commentText.trim() ? `0 3px 12px ${pal.from}40` : 'none' }}>
+              style={{ padding: '7px 13px', borderRadius: '20px', background: commentText.trim() ? `linear-gradient(135deg,${pal.from},${pal.to})` : isDark ? 'rgba(255,255,255,0.05)' : '#f0f0f0', border: 'none', color: commentText.trim() ? '#fff' : isDark ? '#334155' : '#94a3b8', fontWeight: '800', fontSize: '0.7rem', cursor: commentText.trim() ? 'pointer' : 'default', transition: 'all 0.2s' }}>
               {posting ? '...' : 'Post'}
             </button>
           </div>
@@ -949,12 +706,12 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
 const REVIEW_MAX_CHARS = 500;
 
 function AddReviewForm({ isDark, isMobile, user, onSave, onCancel, existingUserIds }) {
-  const [form, setForm]       = useState({ name: user?.displayName || '', address: '', course: '', text: '', stars: 5, instagram: '' });
-  const [photoFile, setPhotoFile]     = useState(null);
+  const [form, setForm] = useState({ name: user?.displayName || '', address: '', course: '', text: '', stars: 5, instagram: '' });
+  const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
-  const [saving, setSaving]   = useState(false);
+  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const h   = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+  const h = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
   const inp = { width: '100%', padding: '10px 14px', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', borderRadius: '12px', fontSize: '0.85rem', fontWeight: '600', background: isDark ? 'rgba(255,255,255,0.04)' : '#f8fafc', color: isDark ? '#e2e8f0' : '#1e293b', outline: 'none', boxSizing: 'border-box' };
 
   const handleSave = async () => {
@@ -1028,16 +785,16 @@ const REVIEWS_PER_PAGE = 10;
 const MAX_REVIEWS = 200;
 
 function StudentReviews({ isDark, isMobile, isAdmin, user }) {
-  const [reviews, setReviews]         = useState([]);
+  const [reviews, setReviews] = useState([]);
   const [commentsMap, setCommentsMap] = useState({});
-  const [loading, setLoading]         = useState(true);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore]         = useState(false);
-  const [lastDoc, setLastDoc]         = useState(null);
-  const [showForm, setShowForm]       = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [lastDoc, setLastDoc] = useState(null);
+  const [showForm, setShowForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [totalCount, setTotalCount]   = useState(0);
-  const [ref, visible]                = useScrollReveal();
+  const [totalCount, setTotalCount] = useState(0);
+  const [ref, visible] = useScrollReveal();
 
   const fetchReviews = useCallback(async (reset = true) => {
     try {
@@ -1050,7 +807,7 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
         q = query(collection(db, 'studentReviews'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(REVIEWS_PER_PAGE));
       }
 
-      const snap       = await getDocs(q);
+      const snap = await getDocs(q);
       const newReviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       setLastDoc(snap.docs[snap.docs.length - 1] || null);
       setHasMore(snap.docs.length === REVIEWS_PER_PAGE);
@@ -1080,14 +837,14 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
     fetchReviews(true);
   };
 
-  const existingUserIds   = useMemo(() => reviews.map(r => r.userId).filter(Boolean), [reviews]);
-  const canAddMore        = totalCount < MAX_REVIEWS;
+  const existingUserIds = useMemo(() => reviews.map(r => r.userId).filter(Boolean), [reviews]);
+  const canAddMore = totalCount < MAX_REVIEWS;
   const userAlreadyReviewed = user?.uid && existingUserIds.includes(user.uid);
 
   if (!loading && reviews.length === 0 && !user) return null;
 
   return (
-    <section id="student-reviews" ref={ref} style={{ padding: isMobile ? '0 16px 48px' : '0 24px 64px', maxWidth: '960px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(22px)', transition: 'opacity 0.55s ease, transform 0.55s ease', willChange: 'opacity, transform' }}>
+    <section id="student-reviews" ref={ref} style={{ padding: isMobile ? '0 16px 48px' : '0 24px 64px', maxWidth: '960px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: 'opacity 0.5s ease, transform 0.5s ease' }}>
       {deleteTarget && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ ...baseCard(isDark, { padding: '2rem', maxWidth: '380px', width: '100%', textAlign: 'center' }) }}>
@@ -1115,11 +872,9 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
         ? <div style={{ textAlign: 'center', padding: '40px', color: isDark ? '#475569' : '#94a3b8' }}>Loading...</div>
         : reviews.length === 0
           ? user && <div style={{ textAlign: 'center', padding: '36px', background: isDark ? 'rgba(255,255,255,0.02)' : '#f8fafc', borderRadius: '16px', border: isDark ? '1px dashed rgba(255,255,255,0.1)' : '1px dashed #e2e8f0', color: isDark ? '#475569' : '#94a3b8', fontSize: '0.88rem' }}>No reviews yet. Be the first! 👇</div>
-          : <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '14px' : '20px', contain: 'layout' }}>
-              {reviews.map((rev, i) => (
-                <div key={rev.id} style={{ animation: visible ? `cardSlideUp 0.5s ease ${(i % REVIEWS_PER_PAGE) * 0.06}s both` : 'none' }}>
-                  <ReviewCard review={rev} isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} onDeleteClick={() => setDeleteTarget(rev)} preloadedComments={commentsMap[rev.id] || []} />
-                </div>
+          : <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '14px' : '20px' }}>
+              {reviews.map(rev => (
+                <ReviewCard key={rev.id} review={rev} isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} onDeleteClick={() => setDeleteTarget(rev)} preloadedComments={commentsMap[rev.id] || []} />
               ))}
             </div>
       }
@@ -1134,7 +889,7 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
 
       {user && canAddMore && !userAlreadyReviewed && (
         <div style={{ textAlign: 'center', marginTop: '24px' }}>
-          <button onClick={() => setShowForm(!showForm)} style={{ background: showForm ? 'transparent' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm ? isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid #e2e8f0' : 'none', color: showForm ? isDark ? '#94a3b8' : '#64748b' : '#fff', padding: '10px 28px', borderRadius: '50px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer', boxShadow: showForm ? 'none' : '0 4px 16px rgba(99,102,241,0.3)', transition: 'all 0.2s' }}>
+          <button onClick={() => setShowForm(!showForm)} style={{ background: showForm ? 'transparent' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm ? isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid #e2e8f0' : 'none', color: showForm ? isDark ? '#94a3b8' : '#64748b' : '#fff', padding: '10px 28px', borderRadius: '50px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer', transition: 'all 0.2s' }}>
             {showForm ? '✕ Cancel' : '✍️ Write a Review'}
           </button>
         </div>
@@ -1142,11 +897,6 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
       {user && userAlreadyReviewed && (
         <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.78rem', color: '#10b981', fontWeight: '700' }}>
           ✅ You have already submitted a review. Thank you!
-        </div>
-      )}
-      {isAdmin && !canAddMore && (
-        <div style={{ textAlign: 'center', marginTop: '20px', padding: '14px 20px', background: isDark ? 'rgba(34,197,94,0.08)' : 'rgba(34,197,94,0.06)', border: isDark ? '1px solid rgba(34,197,94,0.2)' : '1px solid rgba(34,197,94,0.25)', borderRadius: '14px', display: 'inline-block', margin: '20px auto 0' }}>
-          <p style={{ margin: 0, fontSize: '0.82rem', color: isDark ? '#86efac' : '#16a34a', fontWeight: '700' }}>✅ All 200 review spots are filled — Thank you everyone! 🎉</p>
         </div>
       )}
       {!user && reviews.length > 0 && <p style={{ textAlign: 'center', marginTop: '12px', fontSize: '0.76rem', color: isDark ? '#475569' : '#94a3b8', fontWeight: '600' }}>🔐 Login to write your own review</p>}
@@ -1169,21 +919,21 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
 const Timeline = memo(function Timeline({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
   const events = [
-    { date: '1 Jan 2026',  title: 'The Idea',       desc: 'PySkill was born — a vision to give students quality Python study material at affordable prices.', icon: '💡', tag: 'ORIGIN', color: '#a78bfa' },
-    { date: '10 Jan 2026', title: 'Work Begins',     desc: 'Development kicked off. Notes curated, questions filtered, platform designed from scratch.',       icon: '⚡', tag: 'BUILD',  color: '#6366f1' },
-    { date: '15 Feb 2026', title: 'Website Live 🚀', desc: 'PySkill officially launched! First students enrolled, first certificates issued.',                 icon: '🚀', tag: 'LAUNCH', color: '#ec4899' },
+    { date: '1 Jan 2026', title: 'The Idea', desc: 'PySkill was born — a vision to give students quality Python study material at affordable prices.', icon: '💡', tag: 'ORIGIN', color: '#a78bfa' },
+    { date: '10 Jan 2026', title: 'Work Begins', desc: 'Development kicked off. Notes curated, questions filtered, platform designed from scratch.', icon: '⚡', tag: 'BUILD', color: '#6366f1' },
+    { date: '15 Feb 2026', title: 'Website Live 🚀', desc: 'PySkill officially launched! First students enrolled, first certificates issued.', icon: '🚀', tag: 'LAUNCH', color: '#ec4899' },
   ];
   return (
     <section ref={ref} style={{ padding: isMobile ? '0 16px 56px' : '0 24px 72px', maxWidth: '680px', margin: '0 auto' }}>
-      <div style={{ textAlign: 'center', marginBottom: isMobile ? '32px' : '48px', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.5s ease, transform 0.5s ease', willChange: 'opacity, transform' }}>
+      <div style={{ textAlign: 'center', marginBottom: isMobile ? '32px' : '48px', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.5s ease, transform 0.5s ease' }}>
         <SectionLabel color="#6366f1" text="Our Story · 2026" />
         <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', background: 'linear-gradient(135deg,#1e40af,#6366f1,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '4px 0 4px', letterSpacing: '-0.02em' }}>From Idea to Reality</h2>
         <p style={{ color: isDark ? '#64748b' : '#94a3b8', fontSize: '0.82rem', margin: 0 }}>Every milestone that brought PySkill to life</p>
       </div>
       <div style={{ position: 'relative', paddingLeft: isMobile ? '54px' : '68px' }}>
-        <div style={{ position: 'absolute', left: isMobile ? '22px' : '28px', top: '14px', bottom: '14px', width: '2px', background: isDark ? 'linear-gradient(180deg,#a78bfa70,#6366f170,#ec489870)' : 'linear-gradient(180deg,#a78bfa40,#6366f140,#ec489840)', opacity: visible ? 1 : 0, transition: 'opacity 0.8s ease 0.4s', borderRadius: '2px' }} />
+        <div style={{ position: 'absolute', left: isMobile ? '22px' : '28px', top: '14px', bottom: '14px', width: '2px', background: isDark ? 'linear-gradient(180deg,#a78bfa70,#6366f170,#ec489870)' : 'linear-gradient(180deg,#a78bfa40,#6366f140,#ec489840)', opacity: visible ? 1 : 0, transition: 'opacity 0.6s ease 0.3s', borderRadius: '2px' }} />
         {events.map((evt, i) => (
-          <div key={i} style={{ position: 'relative', marginBottom: i < events.length - 1 ? (isMobile ? '28px' : '32px') : 0, opacity: visible ? 1 : 0, transform: visible ? 'translateX(0)' : 'translateX(-18px)', willChange: 'opacity, transform', transition: `opacity 0.45s ease ${0.25 + i * 0.15}s, transform 0.45s ease ${0.25 + i * 0.15}s` }}>
+          <div key={i} style={{ position: 'relative', marginBottom: i < events.length - 1 ? (isMobile ? '28px' : '32px') : 0, opacity: visible ? 1 : 0, transform: visible ? 'translateX(0)' : 'translateX(-16px)', transition: `opacity 0.4s ease ${0.2 + i * 0.12}s, transform 0.4s ease ${0.2 + i * 0.12}s` }}>
             <div style={{ position: 'absolute', left: isMobile ? '-40px' : '-52px', top: '12px', width: isMobile ? '36px' : '44px', height: isMobile ? '36px' : '44px', borderRadius: '50%', background: `linear-gradient(135deg,${evt.color},${i === 2 ? '#f472b6' : '#a78bfa'})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? '1rem' : '1.2rem', boxShadow: `0 0 0 4px ${isDark ? '#0f172a' : '#f4f5ff'}, 0 0 0 6px ${evt.color}35`, zIndex: 2 }}>{evt.icon}</div>
             <div style={{ ...baseCard(isDark, { padding: isMobile ? '16px' : '20px 24px', overflow: 'hidden', boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(99,102,241,0.07)' }) }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: `linear-gradient(90deg,${evt.color},transparent)` }} />
@@ -1207,17 +957,17 @@ const Timeline = memo(function Timeline({ isDark, isMobile }) {
 const FeaturesSection = memo(function FeaturesSection({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
   const features = [
-    { icon: '📚', title: 'Quality Content',  desc: 'Expert-curated notes & filtered important questions for every topic.', color: '#6366f1' },
-    { icon: '🔒', title: 'Secure & Safe',    desc: 'Razorpay-protected payments — UPI, Cards, Net Banking & more.',        color: '#10b981' },
-    { icon: '⚡', title: 'Instant Download', desc: 'Get your PDFs the second your payment is confirmed.',                   color: '#ec4899' },
+    { icon: '📚', title: 'Quality Content', desc: 'Expert-curated notes & filtered important questions for every topic.', color: '#6366f1' },
+    { icon: '🔒', title: 'Secure & Safe', desc: 'Razorpay-protected payments — UPI, Cards, Net Banking & more.', color: '#10b981' },
+    { icon: '⚡', title: 'Instant Download', desc: 'Get your PDFs the second your payment is confirmed.', color: '#ec4899' },
   ];
   return (
     <section ref={ref} style={{ padding: isMobile ? '0 16px 36px' : '0 24px 52px', maxWidth: '960px', margin: '0 auto' }}>
-      <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', textAlign: 'center', marginBottom: isMobile ? '20px' : '32px', color: isDark ? '#e2e8f0' : '#0f172a', letterSpacing: '-0.02em', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.45s ease, transform 0.45s ease', willChange: 'opacity, transform' }}>Why Students Love Us</h2>
+      <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', textAlign: 'center', marginBottom: isMobile ? '20px' : '32px', color: isDark ? '#e2e8f0' : '#0f172a', letterSpacing: '-0.02em', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.45s ease, transform 0.45s ease' }}>Why Students Love Us</h2>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? '12px' : '16px' }}>
         {features.map((f, i) => (
-          <div key={i} style={{ ...baseCard(isDark, { padding: isMobile ? '20px 18px' : '26px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', willChange: 'opacity, transform', transition: `opacity 0.4s ease ${i * 0.08}s, transform 0.4s ease ${i * 0.08}s` }) }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-5px)'; e.currentTarget.style.boxShadow = isDark ? '0 12px 32px rgba(0,0,0,0.3)' : `0 12px 32px ${f.color}18`; }}
+          <div key={i} style={{ ...baseCard(isDark, { padding: isMobile ? '20px 18px' : '26px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', transition: `opacity 0.4s ease ${i * 0.08}s, transform 0.4s ease ${i * 0.08}s` }) }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = isDark ? '0 12px 32px rgba(0,0,0,0.3)' : `0 12px 32px ${f.color}18`; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)'; }}>
             <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: `linear-gradient(180deg,${f.color},${f.color}40)`, borderRadius: '20px 0 0 20px' }} />
             <div style={{ paddingLeft: '14px' }}>
@@ -1238,18 +988,18 @@ const FeaturesSection = memo(function FeaturesSection({ isDark, isMobile }) {
 const WhySection = memo(function WhySection({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
   const items = [
-    { icon: '📜', title: 'Our Policy',         desc: 'Genuine, quality-checked materials. No refund after download, but satisfaction guaranteed with preview.', color: '#6366f1' },
-    { icon: '💳', title: 'Secure Payment',      desc: "Via Razorpay — India's most trusted gateway. UPI, Cards, Net Banking & Wallets. Fully encrypted.",       color: '#10b981' },
-    { icon: '🎯', title: 'Why Choose Us',        desc: 'Instant access, lifetime downloads, mobile-friendly PDFs, expert content & 24/7 WhatsApp support.',       color: '#f59e0b' },
-    { icon: '⭐', title: 'What Makes Us Better', desc: 'No outdated content. Every note filtered for importance. Real reviews, no hidden charges.',                color: '#8b5cf6' },
+    { icon: '📜', title: 'Our Policy', desc: 'Genuine, quality-checked materials. No refund after download, but satisfaction guaranteed with preview.', color: '#6366f1' },
+    { icon: '💳', title: 'Secure Payment', desc: "Via Razorpay — India's most trusted gateway. UPI, Cards, Net Banking & Wallets. Fully encrypted.", color: '#10b981' },
+    { icon: '🎯', title: 'Why Choose Us', desc: 'Instant access, lifetime downloads, mobile-friendly PDFs, expert content & 24/7 WhatsApp support.', color: '#f59e0b' },
+    { icon: '⭐', title: 'What Makes Us Better', desc: 'No outdated content. Every note filtered for importance. Real reviews, no hidden charges.', color: '#8b5cf6' },
   ];
   return (
     <section ref={ref} style={{ padding: isMobile ? '0 16px 36px' : '0 24px 52px', maxWidth: '960px', margin: '0 auto' }}>
-      <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', textAlign: 'center', marginBottom: isMobile ? '20px' : '32px', background: 'linear-gradient(135deg,#6366f1,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', willChange: 'opacity, transform', transition: 'opacity 0.45s ease, transform 0.45s ease' }}>Why PySkill?</h2>
+      <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', textAlign: 'center', marginBottom: isMobile ? '20px' : '32px', background: 'linear-gradient(135deg,#6366f1,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.45s ease, transform 0.45s ease' }}>Why PySkill?</h2>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: isMobile ? '12px' : '16px' }}>
         {items.map((c, i) => (
-          <div key={i} style={{ ...baseCard(isDark, { padding: isMobile ? '18px 16px' : '22px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', willChange: 'opacity, transform', transition: `opacity 0.4s ease ${i * 0.07}s, transform 0.4s ease ${i * 0.07}s` }) }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
+          <div key={i} style={{ ...baseCard(isDark, { padding: isMobile ? '18px 16px' : '22px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', transition: `opacity 0.4s ease ${i * 0.07}s, transform 0.4s ease ${i * 0.07}s` }) }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; }}
             onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: `linear-gradient(90deg,${c.color},${c.color}30,transparent)` }} />
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
@@ -1271,21 +1021,20 @@ const WhySection = memo(function WhySection({ isDark, isMobile }) {
 ───────────────────────────────────────── */
 const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
-  const [imgHov, setImgHov] = useState(false);
 
   const skills = useMemo(() => [
     { label: 'React.js', color: '#61dafb' }, { label: 'Python', color: '#f59e0b' },
     { label: 'Firebase', color: '#f97316' }, { label: 'Node.js', color: '#22c55e' },
-    { label: 'UI/UX',    color: '#a855f7' }, { label: 'MongoDB', color: '#10b981' },
+    { label: 'UI/UX', color: '#a855f7' }, { label: 'MongoDB', color: '#10b981' },
   ], []);
 
   const founderStats = useMemo(() => [
-    { val: '6mo',  label: 'Into Coding' }, { val: '10K+', label: 'Students Reached' },
-    { val: '3',    label: 'Exam Levels Built' }, { val: '∞', label: 'Coffee Cups ☕' },
+    { val: '6mo', label: 'Into Coding' }, { val: '10K+', label: 'Students Reached' },
+    { val: '3', label: 'Exam Levels Built' }, { val: '∞', label: 'Coffee Cups ☕' },
   ], []);
 
   return (
-    <section ref={ref} style={{ padding: isMobile ? '0 16px 80px' : '0 24px 100px', maxWidth: '900px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(30px)', willChange: 'opacity, transform', transition: 'opacity 0.7s ease, transform 0.7s ease' }}>
+    <section ref={ref} style={{ padding: isMobile ? '0 16px 80px' : '0 24px 100px', maxWidth: '900px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(24px)', transition: 'opacity 0.6s ease, transform 0.6s ease' }}>
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
         <SectionLabel color="#6366f1" text="The Man Behind PySkill" />
         <h2 style={{ fontSize: isMobile ? '1.5rem' : '2.1rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '6px 0 0', letterSpacing: '-0.02em' }}>
@@ -1293,24 +1042,17 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
         </h2>
       </div>
 
-      <div style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', background: isDark ? 'linear-gradient(145deg,rgba(10,10,35,0.97),rgba(5,30,15,0.95))' : 'linear-gradient(145deg,#f8f7ff,#f0fdf4)', border: isDark ? '1.5px solid rgba(99,102,241,0.2)' : '1.5px solid rgba(99,102,241,0.15)', boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)', transition: 'box-shadow 0.3s ease', willChange: 'box-shadow' }}
+      <div style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', background: isDark ? 'linear-gradient(145deg,rgba(10,10,35,0.97),rgba(5,30,15,0.95))' : 'linear-gradient(145deg,#f8f7ff,#f0fdf4)', border: isDark ? '1.5px solid rgba(99,102,241,0.2)' : '1.5px solid rgba(99,102,241,0.15)', boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)', transition: 'box-shadow 0.3s ease' }}
         onMouseEnter={e => e.currentTarget.style.boxShadow = isDark ? '0 32px 80px rgba(0,0,0,0.65)' : '0 32px 80px rgba(99,102,241,0.18)'}
-        onMouseLeave={e => e.currentTarget.style.boxShadow = isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)'}
-      >
-        <div style={{ height: '4px', background: 'linear-gradient(90deg,#6366f1,#22c55e,#f59e0b,#ec4899,#6366f1)', backgroundSize: '300%', animation: 'shimmer 4s linear infinite' }} />
-        <div style={{ position: 'absolute', top: '-60px', right: '-60px', width: '220px', height: '220px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.12),transparent 70%)', pointerEvents: 'none' }} />
-        <div style={{ position: 'absolute', bottom: '-40px', left: '-40px', width: '180px', height: '180px', borderRadius: '50%', background: 'radial-gradient(circle,rgba(34,197,94,0.1),transparent 70%)', pointerEvents: 'none' }} />
+        onMouseLeave={e => e.currentTarget.style.boxShadow = isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)'}>
+        <div style={{ height: '4px', background: 'linear-gradient(90deg,#6366f1,#22c55e,#f59e0b,#ec4899)' }} />
 
         <div style={{ padding: isMobile ? '28px 20px' : '40px 44px' }}>
           <div style={{ display: 'flex', gap: isMobile ? '20px' : '36px', alignItems: 'flex-start', marginBottom: '32px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-            <div style={{ flexShrink: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              onMouseEnter={() => setImgHov(true)} onMouseLeave={() => setImgHov(false)}>
-              <div style={{ position: 'absolute', width: isMobile ? '100px' : '124px', height: isMobile ? '100px' : '124px', borderRadius: '50%', border: '2.5px dashed transparent', borderTopColor: '#6366f1', borderRightColor: '#22c55e', borderBottomColor: '#f59e0b', borderLeftColor: '#ec4899', animation: 'spinRing 3s linear infinite', willChange: 'transform' }} />
-              <div style={{ position: 'absolute', width: isMobile ? '90px' : '112px', height: isMobile ? '90px' : '112px', borderRadius: '50%', boxShadow: imgHov ? '0 0 0 4px rgba(99,102,241,0.5), 0 0 30px rgba(99,102,241,0.4)' : '0 0 0 3px rgba(99,102,241,0.25), 0 0 18px rgba(34,197,94,0.2)', transition: 'box-shadow 0.4s ease', animation: 'ringPulse 2.5s ease-in-out infinite' }} />
-              <div style={{ width: isMobile ? '82px' : '100px', height: isMobile ? '82px' : '100px', borderRadius: '50%', overflow: 'hidden', border: '3px solid rgba(99,102,241,0.4)', transform: imgHov ? 'scale(1.06)' : 'scale(1)', willChange: 'transform', transition: 'transform 0.35s cubic-bezier(0.34,1.56,0.64,1)', position: 'relative', zIndex: 2 }}>
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ width: isMobile ? '82px' : '100px', height: isMobile ? '82px' : '100px', borderRadius: '50%', overflow: 'hidden', border: '3px solid rgba(99,102,241,0.4)' }}>
                 <img src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg" alt="Faizan Tariq — Founder PySkill" loading="lazy" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
               </div>
-              <div style={{ position: 'absolute', bottom: isMobile ? '4px' : '6px', right: isMobile ? '4px' : '6px', width: '16px', height: '16px', borderRadius: '50%', background: '#22c55e', border: '2.5px solid ' + (isDark ? '#0a0a23' : '#f8f7ff'), zIndex: 3, animation: 'ldPulse 1.5s ease-in-out infinite' }} />
             </div>
 
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -1329,9 +1071,9 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
                 Just 6 months into coding, I am a first-year Software Engineering student from <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>Anantnag, Kashmir</strong>, studying at <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>ILS Srinagar</strong>. Still a beginner — but driven enough to build PySkill entirely from scratch. Late nights, countless bugs, and a real passion for helping students learn Python. This is just the beginning. 🚀
               </p>
               <a href="https://instagram.com/code_with_06" target="_blank" rel="noopener noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', borderRadius: '12px', color: '#fff', fontSize: '0.78rem', fontWeight: '800', padding: '10px 20px', textDecoration: 'none', transition: 'transform 0.25s, box-shadow 0.25s', willChange: 'transform', boxShadow: '0 4px 18px rgba(240,100,60,0.35)', letterSpacing: '0.01em' }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px) scale(1.03)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(240,100,60,0.55)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(240,100,60,0.35)'; }}>
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', borderRadius: '12px', color: '#fff', fontSize: '0.78rem', fontWeight: '800', padding: '10px 20px', textDecoration: 'none', transition: 'transform 0.2s, box-shadow 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(240,100,60,0.4)'; }}
+                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="12" r="5" stroke="#fff" strokeWidth="2"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff"/></svg>
                 @code_with_06
               </a>
@@ -1342,7 +1084,7 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 2 : 4},1fr)`, gap: '12px', marginBottom: '28px' }}>
             {founderStats.map((s, i) => (
-              <div key={i} style={{ textAlign: 'center', padding: '14px 8px', background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)', border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(99,102,241,0.1)', borderRadius: '14px', animation: visible ? `statPop 0.5s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.08}s both` : 'none' }}>
+              <div key={i} style={{ textAlign: 'center', padding: '14px 8px', background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)', border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(99,102,241,0.1)', borderRadius: '14px' }}>
                 <div style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1 }}>{s.val}</div>
                 <div style={{ fontSize: '0.6rem', fontWeight: '700', color: isDark ? '#64748b' : '#94a3b8', marginTop: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{s.label}</div>
               </div>
@@ -1353,10 +1095,10 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
             <div style={{ fontSize: '0.68rem', fontWeight: '800', color: isDark ? '#475569' : '#94a3b8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '10px' }}>Tech Stack</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {skills.map((sk, i) => (
-                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: isDark ? `${sk.color}12` : `${sk.color}0e`, border: `1px solid ${sk.color}35`, fontSize: '0.72rem', fontWeight: '800', color: sk.color, animation: visible ? `chipSlide 0.4s ease ${0.4 + i * 0.06}s both` : 'none', willChange: 'transform', transition: 'transform 0.18s, box-shadow 0.18s', cursor: 'default' }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = `0 6px 16px ${sk.color}30`; }}
+                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: isDark ? `${sk.color}12` : `${sk.color}0e`, border: `1px solid ${sk.color}35`, fontSize: '0.72rem', fontWeight: '800', color: sk.color, transition: 'transform 0.18s, box-shadow 0.18s', cursor: 'default' }}
+                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 12px ${sk.color}25`; }}
                   onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sk.color, display: 'inline-block', animation: 'ldPulse 2s ease-in-out infinite' }} />
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sk.color, display: 'inline-block' }} />
                   {sk.label}
                 </span>
               ))}
@@ -1375,7 +1117,7 @@ function SEOHead() {
   useEffect(() => {
     const SITE = 'https://pyskill.in';
     const TITLE = 'PySkill — Free Python Mock Tests, Notes & Certification 2026';
-    const DESC  = 'PySkill offers free & premium Python mock tests (Basic, Advanced, Pro), instant PDF notes, anti-cheat certification exams, and a live leaderboard. Join 10,000+ students in India.';
+    const DESC = 'PySkill offers free & premium Python mock tests (Basic, Advanced, Pro), instant PDF notes, anti-cheat certification exams, and a live leaderboard. Join 10,000+ students in India.';
     const IMAGE = 'https://pyskill.in/og-image.png';
     const KEYWORDS = 'python mock test 2026, python certification india, python notes pdf, python basic test free, python advanced test, pyskill, python exam online, python questions answers, python leaderboard, python study material';
 
@@ -1385,40 +1127,20 @@ function SEOHead() {
       if (!el) { el = document.createElement('meta'); document.head.appendChild(el); }
       el.setAttribute(attr, val);
     };
-    setMeta('meta[name="description"]',        'name',    'description');        setMeta('meta[name="description"]',        'content', DESC);
-    setMeta('meta[name="keywords"]',           'name',    'keywords');           setMeta('meta[name="keywords"]',           'content', KEYWORDS);
-    setMeta('meta[name="author"]',             'name',    'author');             setMeta('meta[name="author"]',             'content', 'Faizan Tariq');
-    setMeta('meta[name="robots"]',             'name',    'robots');             setMeta('meta[name="robots"]',             'content', 'index, follow, max-image-preview:large');
-    setMeta('meta[name="theme-color"]',        'name',    'theme-color');        setMeta('meta[name="theme-color"]',        'content', '#6366f1');
-    setMeta('meta[name="geo.region"]',         'name',    'geo.region');         setMeta('meta[name="geo.region"]',         'content', 'IN-JK');
-    setMeta('meta[name="geo.placename"]',      'name',    'geo.placename');      setMeta('meta[name="geo.placename"]',      'content', 'Srinagar, Jammu & Kashmir, India');
-    setMeta('meta[property="og:type"]',        'property','og:type');            setMeta('meta[property="og:type"]',        'content',  'website');
-    setMeta('meta[property="og:url"]',         'property','og:url');             setMeta('meta[property="og:url"]',         'content',  SITE);
-    setMeta('meta[property="og:title"]',       'property','og:title');           setMeta('meta[property="og:title"]',       'content',  TITLE);
-    setMeta('meta[property="og:description"]', 'property','og:description');     setMeta('meta[property="og:description"]', 'content',  DESC);
-    setMeta('meta[property="og:image"]',       'property','og:image');           setMeta('meta[property="og:image"]',       'content',  IMAGE);
-    setMeta('meta[property="og:site_name"]',   'property','og:site_name');       setMeta('meta[property="og:site_name"]',   'content',  'PySkill');
-    setMeta('meta[property="og:locale"]',      'property','og:locale');          setMeta('meta[property="og:locale"]',      'content',  'en_IN');
-    setMeta('meta[name="twitter:card"]',       'name',    'twitter:card');       setMeta('meta[name="twitter:card"]',       'content', 'summary_large_image');
-    setMeta('meta[name="twitter:title"]',      'name',    'twitter:title');      setMeta('meta[name="twitter:title"]',      'content', TITLE);
-    setMeta('meta[name="twitter:description"]','name',    'twitter:description');setMeta('meta[name="twitter:description"]','content', DESC);
-    setMeta('meta[name="twitter:image"]',      'name',    'twitter:image');      setMeta('meta[name="twitter:image"]',      'content', IMAGE);
-    setMeta('meta[name="twitter:site"]',       'name',    'twitter:site');       setMeta('meta[name="twitter:site"]',       'content', '@pyskill_in');
-    setMeta('meta[name="twitter:creator"]',    'name',    'twitter:creator');    setMeta('meta[name="twitter:creator"]',    'content', '@code_with_06');
+    setMeta('meta[name="description"]', 'name', 'description'); setMeta('meta[name="description"]', 'content', DESC);
+    setMeta('meta[name="keywords"]', 'name', 'keywords'); setMeta('meta[name="keywords"]', 'content', KEYWORDS);
+    setMeta('meta[name="author"]', 'name', 'author'); setMeta('meta[name="author"]', 'content', 'Faizan Tariq');
+    setMeta('meta[name="robots"]', 'name', 'robots'); setMeta('meta[name="robots"]', 'content', 'index, follow, max-image-preview:large');
+    setMeta('meta[name="theme-color"]', 'name', 'theme-color'); setMeta('meta[name="theme-color"]', 'content', '#6366f1');
+    setMeta('meta[property="og:type"]', 'property', 'og:type'); setMeta('meta[property="og:type"]', 'content', 'website');
+    setMeta('meta[property="og:url"]', 'property', 'og:url'); setMeta('meta[property="og:url"]', 'content', SITE);
+    setMeta('meta[property="og:title"]', 'property', 'og:title'); setMeta('meta[property="og:title"]', 'content', TITLE);
+    setMeta('meta[property="og:description"]', 'property', 'og:description'); setMeta('meta[property="og:description"]', 'content', DESC);
+    setMeta('meta[property="og:image"]', 'property', 'og:image'); setMeta('meta[property="og:image"]', 'content', IMAGE);
 
     let canonical = document.querySelector('link[rel="canonical"]');
     if (!canonical) { canonical = document.createElement('link'); document.head.appendChild(canonical); }
     canonical.setAttribute('rel', 'canonical'); canonical.setAttribute('href', SITE);
-
-    const injectLD = (id, data) => {
-      let el = document.getElementById(id);
-      if (!el) { el = document.createElement('script'); el.id = id; el.type = 'application/ld+json'; document.head.appendChild(el); }
-      el.textContent = JSON.stringify(data);
-    };
-    injectLD('ld-website',    { '@context': 'https://schema.org', '@type': 'WebSite', 'name': 'PySkill', 'url': SITE, 'description': DESC, 'inLanguage': 'en-IN' });
-    injectLD('ld-org',        { '@context': 'https://schema.org', '@type': 'EducationalOrganization', 'name': 'PySkill', 'url': SITE, 'founder': { '@type': 'Person', 'name': 'Faizan Tariq' }, 'foundingDate': '2026', 'address': { '@type': 'PostalAddress', 'addressLocality': 'Srinagar', 'addressRegion': 'Jammu & Kashmir', 'addressCountry': 'IN' } });
-    injectLD('ld-faq',        { '@context': 'https://schema.org', '@type': 'FAQPage', 'mainEntity': [{ '@type': 'Question', 'name': 'Is the Python Basic Mock Test free?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Yes! The Python Basic Mock Test on PySkill is completely free. It has 60 questions and a 60-minute time limit.' } }, { '@type': 'Question', 'name': 'How do I get a Python certificate from PySkill?', 'acceptedAnswer': { '@type': 'Answer', 'text': 'Score 55% or above in any PySkill mock test to earn a downloadable Python certification.' } }]});
-    injectLD('ld-breadcrumb', { '@context': 'https://schema.org', '@type': 'BreadcrumbList', 'itemListElement': [{ '@type': 'ListItem', 'position': 1, 'name': 'Home', 'item': SITE }, { '@type': 'ListItem', 'position': 2, 'name': 'Mock Tests', 'item': SITE + '/mocktests' }, { '@type': 'ListItem', 'position': 3, 'name': 'Notes', 'item': SITE + '/products' }, { '@type': 'ListItem', 'position': 4, 'name': 'Leaderboard', 'item': SITE + '/leaderboard' }]});
   }, []);
   return null;
 }
@@ -1427,19 +1149,18 @@ function SEOHead() {
    MAIN HOME PAGE
 ───────────────────────────────────────── */
 export default function HomePage({ setCurrentPage }) {
-  const [txt, setTxt]         = useState('');
-  const [idx, setIdx]         = useState(0);
-  const [del, setDel]         = useState(false);
-  const [pi, setPi]           = useState(0);
+  const [txt, setTxt] = useState('');
+  const [idx, setIdx] = useState(0);
+  const [del, setDel] = useState(false);
+  const [pi, setPi] = useState(0);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const [mounted, setMounted] = useState(false);
-  const { isDark }            = useTheme();
-  const { user, logout }      = useAuth();
-  const isAdmin               = user?.email === 'luckyfaizu3@gmail.com';
+  const { isDark } = useTheme();
+  const { user, logout } = useAuth();
+  const isAdmin = user?.email === 'luckyfaizu3@gmail.com';
 
   useEffect(() => { setTimeout(() => setMounted(true), 60); }, []);
 
-  // Hash scroll
   useEffect(() => {
     if (window.location.hash === '#student-reviews') {
       setTimeout(() => {
@@ -1448,7 +1169,6 @@ export default function HomePage({ setCurrentPage }) {
     }
   }, []);
 
-  // Debounced resize
   useEffect(() => {
     let t;
     const h = () => { clearTimeout(t); t = setTimeout(() => setIsMobile(window.innerWidth <= 768), 150); };
@@ -1461,32 +1181,30 @@ export default function HomePage({ setCurrentPage }) {
     '60 Questions Mock Tests', 'Anti-Cheat Exam System', 'Earn Your Certificate', 'Basic • Advanced • Pro'
   ]).current;
 
-  // Typewriter — stable, no extra deps
   useEffect(() => {
-    const cp    = phrases[pi];
+    const cp = phrases[pi];
     const speed = del ? 22 : 65;
     const t = setTimeout(() => {
-      if (!del && idx < cp.length)       { setTxt(cp.substring(0, idx + 1)); setIdx(idx + 1); }
-      else if (del && idx > 0)           { setTxt(cp.substring(0, idx - 1)); setIdx(idx - 1); }
-      else if (!del && idx === cp.length){ setTimeout(() => setDel(true), 1800); }
-      else if (del && idx === 0)         { setDel(false); setPi((pi + 1) % phrases.length); }
+      if (!del && idx < cp.length) { setTxt(cp.substring(0, idx + 1)); setIdx(idx + 1); }
+      else if (del && idx > 0) { setTxt(cp.substring(0, idx - 1)); setIdx(idx - 1); }
+      else if (!del && idx === cp.length) { setTimeout(() => setDel(true), 1800); }
+      else if (del && idx === 0) { setDel(false); setPi((pi + 1) % phrases.length); }
     }, speed);
     return () => clearTimeout(t);
   }, [idx, del, pi, phrases]);
 
-  // Action cards — memoized so object refs are stable
   const actionCards = useMemo(() => {
     const base = [
-      { icon: '📚', label: 'Browse Notes',  page: 'products',    glow: 'rgba(99,102,241,0.35)',  c: '#6366f1' },
-      { icon: <PythonLogo size={22} />, label: 'Mock Tests', page: 'mocktests', glow: 'rgba(16,185,129,0.35)', c: '#10b981' },
-      { icon: '💻', label: 'Compiler',      page: 'compiler',    glow: 'rgba(0,102,184,0.35)',   c: '#0066b8' },
-      { icon: '🔥', label: '30-Day Streak', page: 'streak',      glow: 'rgba(255,107,0,0.35)',   c: '#ff6b00' },
-      { icon: '📦', label: 'My Orders',     page: 'orders',      glow: 'rgba(245,158,11,0.35)',  c: '#f59e0b' },
-      { icon: '🏆', label: 'Leaderboard',   page: 'leaderboard', glow: 'rgba(139,92,246,0.35)',  c: '#8b5cf6' },
+      { icon: '📚', label: 'Browse Notes', page: 'products', glow: 'rgba(99,102,241,0.25)', c: '#6366f1' },
+      { icon: <PythonLogo size={22} />, label: 'Mock Tests', page: 'mocktests', glow: 'rgba(16,185,129,0.25)', c: '#10b981' },
+      { icon: '💻', label: 'Compiler', page: 'compiler', glow: 'rgba(0,102,184,0.25)', c: '#0066b8' },
+      { icon: '🔥', label: '30-Day Streak', page: 'streak', glow: 'rgba(255,107,0,0.25)', c: '#ff6b00' },
+      { icon: '📦', label: 'My Orders', page: 'orders', glow: 'rgba(245,158,11,0.25)', c: '#f59e0b' },
+      { icon: '🏆', label: 'Leaderboard', page: 'leaderboard', glow: 'rgba(139,92,246,0.25)', c: '#8b5cf6' },
     ];
     const auth = user
-      ? { icon: '👤', label: 'Logout', page: null, glow: 'rgba(239,68,68,0.35)', c: '#ef4444', action: logout }
-      : { icon: '🔐', label: 'Login',  page: 'login', glow: 'rgba(236,72,153,0.35)', c: '#ec4899' };
+      ? { icon: '👤', label: 'Logout', page: null, glow: 'rgba(239,68,68,0.25)', c: '#ef4444', action: logout }
+      : { icon: '🔐', label: 'Login', page: 'login', glow: 'rgba(236,72,153,0.25)', c: '#ec4899' };
     return [...base, auth];
   }, [user, logout]);
 
@@ -1499,7 +1217,6 @@ export default function HomePage({ setCurrentPage }) {
 
       <SEOHead />
       <ScrollProgressBar />
-      <FloatingParticles isDark={isDark} />
 
       {/* ══ HERO ══ */}
       <section style={{
@@ -1514,16 +1231,15 @@ export default function HomePage({ setCurrentPage }) {
           background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.06)',
           border: '1px solid rgba(99,102,241,0.22)', borderRadius: '50px',
           padding: '6px 16px 6px 8px', marginBottom: isMobile ? '20px' : '28px',
-          opacity: mounted ? 1 : 0, transform: mounted ? 'translateY(0)' : 'translateY(-12px)',
-          willChange: 'opacity, transform',
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(-12px)',
           transition: 'opacity 0.5s ease, transform 0.5s ease',
-          animation: mounted ? 'badgeFloat 3s ease-in-out infinite' : 'none',
         }}>
           <div style={{ width: '28px', height: '28px', background: 'linear-gradient(135deg,#6366f1,#ec4899)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>🎓</div>
           <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#6366f1' }}>PySkill</span>
           <div style={{ width: '1px', height: '12px', background: 'rgba(99,102,241,0.2)' }} />
           <span style={{ fontSize: '0.72rem', fontWeight: '700', color: isDark ? '#a78bfa' : '#7c3aed' }}>EST. 2026</span>
-          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', animation: 'pulse 1.4s infinite' }} />
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
         </div>
 
         <h1 style={{
@@ -1536,45 +1252,43 @@ export default function HomePage({ setCurrentPage }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           padding: '0 8px', letterSpacing: '-0.03em',
           opacity: mounted ? 1 : 0,
-          willChange: 'opacity, transform',
           transform: mounted ? 'translateY(0)' : 'translateY(20px)',
           transition: 'opacity 0.5s ease 0.15s, transform 0.5s ease 0.15s',
         }}>
           {txt}
-          <span style={{ borderRight: '3px solid #6366f1', animation: 'blink 0.7s infinite', marginLeft: '3px', height: isMobile ? '26px' : '56px', display: 'inline-block', verticalAlign: 'middle' }} />
+          <span style={{ borderRight: '3px solid #6366f1', marginLeft: '3px', height: isMobile ? '26px' : '56px', display: 'inline-block', verticalAlign: 'middle', animation: 'blink 0.7s infinite' }} />
         </h1>
 
         <p style={{
           fontSize: isMobile ? '0.9rem' : '1.1rem', color: isDark ? '#94a3b8' : '#64748b',
           maxWidth: '500px', margin: '0 auto 24px', lineHeight: 1.7, fontWeight: '500',
-          opacity: mounted ? 1 : 0, willChange: 'opacity', transition: 'opacity 0.5s ease 0.28s',
+          opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.28s',
         }}>
           Quality study materials for Python & Job Prep — delivered instantly after payment.
         </p>
 
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '28px', opacity: mounted ? 1 : 0, willChange: 'opacity', transition: 'opacity 0.5s ease 0.38s' }}>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '28px', opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.38s' }}>
           {[{ icon: Shield, color: '#10b981', text: 'Secure Payment' }, { icon: Zap, color: '#6366f1', text: 'Instant Access' }, { icon: BookOpen, color: '#ec4899', text: '100% Original' }].map((b, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isDark ? `${b.color}12` : `${b.color}0d`, padding: '6px 14px', borderRadius: '50px', border: `1px solid ${b.color}${isDark ? '38' : '28'}`, animation: mounted ? `chipSlide 0.4s ease ${0.5 + i * 0.08}s both` : 'none' }}>
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isDark ? `${b.color}12` : `${b.color}0d`, padding: '6px 14px', borderRadius: '50px', border: `1px solid ${b.color}${isDark ? '38' : '28'}` }}>
               <b.icon size={13} color={b.color} />
               <span style={{ fontSize: isMobile ? '0.7rem' : '0.76rem', fontWeight: '700', color: b.color }}>{b.text}</span>
             </div>
           ))}
         </div>
 
-        <div style={{ opacity: mounted ? 1 : 0, willChange: 'opacity', transition: 'opacity 0.5s ease 0.48s', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+        <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.48s', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => setCurrentPage('mocktests')}
-            style={{ background: 'linear-gradient(135deg,#10b981,#22c55e)', border: 'none', color: '#fff', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 6px 28px rgba(16,185,129,0.42)', willChange: 'transform', transition: 'transform 0.2s ease, box-shadow 0.2s ease', animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.55s both' : 'none', position: 'relative', overflow: 'hidden' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.boxShadow = '0 12px 32px rgba(16,185,129,0.6)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(16,185,129,0.42)'; }}>
+            style={{ background: 'linear-gradient(135deg,#10b981,#22c55e)', border: 'none', color: '#fff', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 6px 28px rgba(16,185,129,0.35)', transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(16,185,129,0.5)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(16,185,129,0.35)'; }}>
             <PythonLogo size={isMobile ? 17 : 19} />
             Take Test Free
-            <span style={{ position: 'absolute', top: 0, left: '-100%', width: '60%', height: '100%', background: 'linear-gradient(90deg,transparent,rgba(255,255,255,0.25),transparent)', animation: 'btnShine 2.5s ease-in-out infinite', pointerEvents: 'none' }} />
           </button>
 
           <button onClick={() => setCurrentPage('products')}
-            style={{ background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)', border: `1.5px solid rgba(99,102,241,${isDark ? '0.4' : '0.25'})`, color: '#6366f1', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', willChange: 'transform', transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease', animation: mounted ? 'heroBtnPop 0.6s cubic-bezier(0.34,1.56,0.64,1) 0.65s both' : 'none' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px) scale(1.03)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(99,102,241,0.25)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0) scale(1)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)'; e.currentTarget.style.boxShadow = 'none'; }}>
+            style={{ background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)', border: `1.5px solid rgba(99,102,241,${isDark ? '0.4' : '0.25'})`, color: '#6366f1', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease' }}
+            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)'; }}
+            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)'; }}>
             <Download size={isMobile ? 17 : 19} />
             Browse Notes
           </button>
@@ -1587,25 +1301,19 @@ export default function HomePage({ setCurrentPage }) {
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '9px' }}>
               {mobileRow1.map((c, i) => (
-                <div key={i} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.05}s both` }}>
-                  <ActionCard card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
-                </div>
+                <ActionCard key={i} card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
               ))}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '9px', marginTop: '9px' }}>
               {mobileRow2.map((c, i) => (
-                <div key={i} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.3 + i * 0.05}s both` }}>
-                  <ActionCard card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
-                </div>
+                <ActionCard key={i} card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
               ))}
             </div>
           </>
         ) : (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: '12px' }}>
             {actionCards.map((c, i) => (
-              <div key={i} style={{ animation: `cardSlideUp 0.45s cubic-bezier(0.34,1.56,0.64,1) ${0.1 + i * 0.05}s both` }}>
-                <ActionCard card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
-              </div>
+              <ActionCard key={i} card={c} isDark={isDark} isMobile={isMobile} onClick={() => { if (c.action) c.action(); else setCurrentPage(c.page); }} />
             ))}
           </div>
         )}
@@ -1628,27 +1336,7 @@ export default function HomePage({ setCurrentPage }) {
       </nav>
 
       <style>{`
-        @keyframes blink        { 0%,50%{opacity:1}51%,100%{opacity:0} }
-        @keyframes pulse        { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(1.6)} }
-        @keyframes shimmer      { 0%,100%{background-position:0%}50%{background-position:100%} }
-        @keyframes shimmerBar   { 0%,100%{opacity:0.4}50%{opacity:1} }
-        @keyframes wig          { 0%,100%{transform:rotate(0)}30%{transform:rotate(-8deg)}60%{transform:rotate(8deg)} }
-        @keyframes ldPulse      { 0%,100%{transform:scale(1);opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.5)}50%{transform:scale(1.5);opacity:.3;box-shadow:0 0 0 6px rgba(34,197,94,0)} }
-        @keyframes fadeSlide    { from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)} }
-        @keyframes scoreIn      { from{opacity:0;transform:scale(0.6) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)} }
-        @keyframes cardEnter    { from{opacity:0;transform:translateY(20px) scale(0.92)}to{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes medalFloat   { 0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-6px) rotate(3deg)} }
-        @keyframes cardSlideUp  { from{opacity:0;transform:translateY(28px) scale(0.94)}to{opacity:1;transform:translateY(0) scale(1)} }
-        @keyframes chipSlide    { from{opacity:0;transform:translateX(-12px)}to{opacity:1;transform:translateX(0)} }
-        @keyframes statPop      { from{opacity:0;transform:scale(0.85) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)} }
-        @keyframes rippleOut    { 0%{transform:translate(-50%,-50%) scale(1);opacity:0.6}100%{transform:translate(-50%,-50%) scale(22);opacity:0} }
-        @keyframes badgeFloat   { 0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)} }
-        @keyframes heroBtnPop   { from{opacity:0;transform:scale(0.7)}to{opacity:1;transform:scale(1)} }
-        @keyframes freePulse    { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0.5)}50%{box-shadow:0 0 0 6px rgba(34,197,94,0)} }
-        @keyframes btnShine     { 0%{left:-100%}40%,100%{left:150%} }
-        @keyframes spin         { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
-        @keyframes spinRing     { from{transform:rotate(0deg)}to{transform:rotate(360deg)} }
-        @keyframes ringPulse    { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.6;transform:scale(1.05)} }
+        @keyframes blink { 0%,50%{opacity:1}51%,100%{opacity:0} }
       `}</style>
     </main>
   );
