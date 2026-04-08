@@ -2,28 +2,32 @@
 // FILE LOCATION: src/components/utils.js
 // Shared configs, utilities, and manager classes for MockTestInterface
 // ============================================================
-// SECURITY UPGRADES IN THIS FILE:
-// ✅ SEC-1:  window.open blocked — popup exfil prevented
-// ✅ SEC-2:  Object.freeze on APP_CONFIG — runtime tamper proof
-// ✅ SEC-3:  Anti-debugger timing fingerprint (2nd DevTools detection method)
-// ✅ SEC-4:  Console methods neutered on enable
-// ✅ SEC-5:  navigator.clipboard fully poisoned (read + write + readText + writeText)
-// ✅ SEC-6:  localStorage + sessionStorage wiped on exam start
-// ✅ SEC-7:  maxViolations 5 → 3
-// ✅ SEC-8:  ALL F1–F12 keys blocked (not just F12)
-// ✅ SEC-9:  Ctrl+Scroll (browser zoom) blocked
-// ✅ SEC-10: Mobile touchend long-press blocked (button taps ALLOWED)
-// ✅ SEC-11: getUserMedia screen-share variant blocked
+// SECURITY RULES (Updated):
+// ✅ Tab switch         → SEEDHA DISQUALIFY (1st switch pe)
+// ✅ Windows key        → 3 baar press = DISQUALIFY
+// ✅ DevTools open      → SEEDHA DISQUALIFY (no warning, no countdown)
+// ✅ Fullscreen         → tab switch pe bhi mat hatao (fullscreen stays)
+// ✅ Pinch zoom mobile  → ALLOWED (multi-touch enable)
+// ✅ Blur/mouse/inactivity → sirf WARNING, disqualify nahi
+// ✅ Copy/paste etc     → sirf WARNING, disqualify nahi
+// ✅ SEC-1:  window.open blocked
+// ✅ SEC-2:  Object.freeze on APP_CONFIG
+// ✅ SEC-4:  Console methods neutered
+// ✅ SEC-5:  navigator.clipboard fully poisoned
+// ✅ SEC-6:  localStorage + sessionStorage wiped
+// ✅ SEC-8:  ALL F1–F12 keys blocked
+// ✅ SEC-9:  Ctrl+Scroll zoom blocked
+// ✅ SEC-11: getUserMedia screen-share blocked
 // ✅ SEC-12: document.title scrambled on visibility change
-// ✅ SEC-13: Ctrl+W / Ctrl+Q (close tab) blocked
-// ✅ SEC-14: NetworkGuard — fetch + XHR patched to block AI/cheat domains
-// ✅ SEC-15: CleanupManager — NetworkGuard + VisibilityManager also cleaned
-// ✅ FIX-1:  touchend fix — only long-press blocked, button taps work on mobile
-// ✅ FIX-2:  DesktopModeEnforcer — enable only, never disable (desktop mode permanent)
+// ✅ SEC-13: Ctrl+W / Ctrl+Q blocked
+// ✅ SEC-14: NetworkGuard — AI/cheat domains blocked
+// ✅ SEC-15: CleanupManager
+// ✅ FIX-1:  touchend — button taps work on mobile
+// ✅ FIX-2:  DesktopModeEnforcer — permanent, never resets
 // ============================================================
 
 // ==========================================
-// GLOBAL CSS — sirf ek baar inject hota hai
+// GLOBAL CSS
 // ==========================================
 export function injectGlobalCSS() {
   if (typeof document === 'undefined') return;
@@ -121,18 +125,16 @@ export class LeaderboardStorage {
 
 // ==========================================
 // CONFIGURATION
-// ✅ SEC-2: Object.freeze — no runtime tampering possible
 // ==========================================
 export const APP_CONFIG = Object.freeze({
   ADMIN_EMAIL:             'luckyfaizu3@gmail.com',
-  MAX_TAB_SWITCHES:        3,
-  MAX_BLUR_COUNT:          5,
+  MAX_TAB_SWITCHES:        1,    // 1st tab switch = seedha disqualify
+  MAX_BLUR_COUNT:          999,  // blur pe sirf warning, kabhi disqualify nahi
+  MAX_WINDOWS_KEY_PRESSES: 3,    // Windows key 3 baar = disqualify
   WARNING_TIMEOUT:         3000,
   AUTO_SUBMIT_DELAY:       2000,
   CRITICAL_TIME_MINUTES:   5,
   INACTIVITY_PERCENT:      0.10,
-  DEVTOOLS_WARNING_SEC:    5,
-  DEVTOOLS_SUBMIT_SEC:     10,
   DEVTOOLS_SIZE_THRESHOLD: 160,
 });
 
@@ -171,7 +173,6 @@ export function shuffleQuestions(questions) {
 
 // ==========================================
 // SCREEN RECORD BLOCKER
-// ✅ SEC-11: getUserMedia screen-share variant also blocked
 // ==========================================
 export class ScreenRecordBlocker {
   static _originalDisplay = null;
@@ -209,8 +210,7 @@ export class ScreenRecordBlocker {
 
 // ==========================================
 // DESKTOP MODE ENFORCER
-// ✅ FIX-2: enable() sets viewport for desktop mode permanently.
-//           disable() is a NO-OP — desktop mode never removed during exam.
+// ✅ FIX-2: disable() = NO-OP, desktop mode permanent
 // ==========================================
 export class DesktopModeEnforcer {
   static _original = null;
@@ -230,13 +230,8 @@ export class DesktopModeEnforcer {
     }
   }
 
-  // ✅ FIX-2: Intentional NO-OP — desktop mode stays on for entire exam session.
-  // CleanupManager calls this but we deliberately ignore it so the viewport
-  // is never reset back to mobile after the exam starts.
-  static disable() {
-    // DO NOTHING — desktop mode must remain active permanently.
-    // Removing the viewport tag would allow mobile zoom and layout to reset.
-  }
+  // NO-OP intentionally — desktop mode hamesha on rahe
+  static disable() {}
 }
 
 // ==========================================
@@ -356,7 +351,8 @@ export class FullscreenManager {
 
 // ==========================================
 // DEVTOOLS DETECTOR
-// ✅ SEC-3: Dual method — window size diff + debugger timing fingerprint
+// ✅ UPDATED: Seedha disqualify — koi warning nahi, koi countdown nahi
+// Window size diff ya debugger timing se detect hote hi instant submit
 // ==========================================
 export class DevToolsDetector {
   constructor(onWarning, onAutoSubmit) {
@@ -364,22 +360,19 @@ export class DevToolsDetector {
     this.onAutoSubmit     = onAutoSubmit;
     this.interval         = null;
     this.detected         = false;
-    this.warningShown     = false;
     this.consecutiveCount = 0;
   }
 
   _isOpenBySize() {
-    const veryLargeDiff =
-      window.outerWidth  - window.innerWidth  > 300 ||
-      window.outerHeight - window.innerHeight > 300;
-    if (veryLargeDiff) return { isOpen: true, isVeryLarge: true };
-    const moderateDiff =
-      window.outerWidth  - window.innerWidth  > APP_CONFIG.DEVTOOLS_SIZE_THRESHOLD ||
-      window.outerHeight - window.innerHeight > APP_CONFIG.DEVTOOLS_SIZE_THRESHOLD;
-    return { isOpen: moderateDiff, isVeryLarge: false };
+    const widthDiff  = window.outerWidth  - window.innerWidth;
+    const heightDiff = window.outerHeight - window.innerHeight;
+    if (widthDiff > 300 || heightDiff > 300)
+      return { isOpen: true, isCertain: true };
+    if (widthDiff > APP_CONFIG.DEVTOOLS_SIZE_THRESHOLD || heightDiff > APP_CONFIG.DEVTOOLS_SIZE_THRESHOLD)
+      return { isOpen: true, isCertain: false };
+    return { isOpen: false, isCertain: false };
   }
 
-  // ✅ SEC-3: If devtools is paused on debugger statement, timing spikes >80ms
   _isOpenByTiming() {
     try {
       const t0 = performance.now();
@@ -393,48 +386,36 @@ export class DevToolsDetector {
     const bySize   = this._isOpenBySize();
     const byTiming = this._isOpenByTiming();
     return {
-      isOpen:      bySize.isOpen || byTiming,
-      isVeryLarge: bySize.isVeryLarge || byTiming,
+      isOpen:    bySize.isOpen || byTiming,
+      isCertain: bySize.isCertain || byTiming,
     };
   }
 
   start() {
     this.interval = setInterval(() => {
       if (this.detected) return;
-      const { isOpen, isVeryLarge } = this._isOpen();
+      const { isOpen, isCertain } = this._isOpen();
+
       if (isOpen) {
         this.consecutiveCount++;
-        const effectiveCount = isVeryLarge
-          ? Math.max(this.consecutiveCount, APP_CONFIG.DEVTOOLS_WARNING_SEC)
-          : this.consecutiveCount;
-        const submitCount = isVeryLarge
-          ? Math.max(this.consecutiveCount, APP_CONFIG.DEVTOOLS_SUBMIT_SEC)
-          : this.consecutiveCount;
-        if (effectiveCount >= APP_CONFIG.DEVTOOLS_WARNING_SEC && !this.warningShown) {
-          this.warningShown = true;
-          this.onWarning(
-            `⚠️ DEVELOPER TOOLS DETECTED\n\nClose DevTools immediately!\n\nAuto-submit in ${APP_CONFIG.DEVTOOLS_SUBMIT_SEC - APP_CONFIG.DEVTOOLS_WARNING_SEC} seconds if not closed.`,
-            'devtools-warning'
-          );
-        }
-        if (submitCount >= APP_CONFIG.DEVTOOLS_SUBMIT_SEC) {
+        // Certain (timing/large diff) → 1 second hi kaafi, moderate → 3 seconds
+        const threshold = isCertain ? 1 : 3;
+
+        if (this.consecutiveCount >= threshold) {
           this.detected = true;
-          this.onWarning(`DISQUALIFIED — Developer Tools\n\nYou kept DevTools open. Test submitted as FAIL.`, 'final', true);
           this.stop();
+          // Seedha disqualify — koi warning nahi, koi countdown nahi
+          this.onWarning(
+            'DISQUALIFIED — Developer Tools Detected\n\nDeveloper Tools khola tha. Test FAIL submit ho raha hai.',
+            'final',
+            true
+          );
           setTimeout(() => this.onAutoSubmit(true, 'devtools-disqualified'), 500);
         }
       } else {
-        if (this.consecutiveCount > 0) this.consecutiveCount = Math.max(0, this.consecutiveCount - 1);
-        if (this.consecutiveCount < APP_CONFIG.DEVTOOLS_WARNING_SEC) this.warningShown = false;
-        if (this.consecutiveCount === 0) this._reset();
+        this.consecutiveCount = Math.max(0, this.consecutiveCount - 1);
       }
     }, 1000);
-  }
-
-  _reset() {
-    this.detected         = false;
-    this.warningShown     = false;
-    this.consecutiveCount = 0;
   }
 
   stop() {
@@ -444,29 +425,30 @@ export class DevToolsDetector {
 
 // ==========================================
 // SECURITY MANAGER
-// ✅ SEC-1:  window.open blocked
-// ✅ SEC-4:  Console neutered
-// ✅ SEC-5:  Clipboard API fully poisoned
-// ✅ SEC-6:  localStorage + sessionStorage wiped
-// ✅ SEC-7:  maxViolations 5 → 3
-// ✅ SEC-8:  ALL F1–F12 blocked
-// ✅ SEC-9:  Ctrl+Scroll zoom blocked
-// ✅ SEC-10: touchend long-press blocked — button/input taps ALLOWED
-// ✅ SEC-13: Ctrl+W / Ctrl+Q blocked
+// ✅ UPDATED rules:
+//   - Copy/paste/right-click → sirf warning, disqualify nahi
+//   - Windows key → 3 baar = disqualify
+//   - Pinch zoom (multi-touch) → ALLOWED on mobile
+//   - touchend → only long-press blocked, taps allowed
 // ==========================================
 export class SecurityManager {
   constructor(onWarning, handleSubmitRef) {
-    this.onWarning           = onWarning;
-    this.handleSubmitRef     = handleSubmitRef;
-    this.violationCount      = 0;
-    this.maxViolations       = 3;   // ✅ SEC-7
+    this.onWarning       = onWarning;
+    this.handleSubmitRef = handleSubmitRef;
+    this.violationCount  = 0;
+    // Violations = sirf warning, kabhi disqualify nahi
+    this.maxViolations   = 999;
+
     this._origClipboardRead  = null;
     this._origClipboardWrite = null;
 
-    // ✅ FIX-1: Long-press detection for touchend
-    // We track touchstart time per touch to detect long-press vs normal tap.
-    this._touchStartTime = 0;
-    this._longPressThreshold = 500; // ms — anything >= 500ms is a long-press
+    // Windows key tracker
+    this._windowsKeyCount   = 0;
+    this._windowsKeyTimer   = null;
+
+    // Long-press detection
+    this._touchStartTime     = 0;
+    this._longPressThreshold = 500;
 
     this.handlers = {
       copy:        (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Copying is disabled during the test.'); },
@@ -474,13 +456,42 @@ export class SecurityManager {
       paste:       (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Pasting is disabled during the test.'); },
       contextMenu: (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Right-click is disabled during the test.'); },
 
-      // ✅ SEC-8 + SEC-9 + SEC-13
       keydown: (e) => {
         const ctrl    = e.ctrlKey || e.metaKey;
         const key     = e.key.toLowerCase();
         const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
+        const isFKey  = /^f([1-9]|1[0-2])$/i.test(e.key);
 
-        const isFKey = /^f([1-9]|1[0-2])$/i.test(e.key); // F1–F12
+        // ✅ Windows key → 3 baar = disqualify
+        const isWindowsKey = e.key === 'Meta' || e.key === 'OS';
+        if (isWindowsKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          this._windowsKeyCount++;
+
+          if (this._windowsKeyTimer) clearTimeout(this._windowsKeyTimer);
+          this._windowsKeyTimer = setTimeout(() => { this._windowsKeyCount = 0; }, 5000);
+
+          if (this._windowsKeyCount >= APP_CONFIG.MAX_WINDOWS_KEY_PRESSES) {
+            this._windowsKeyCount = 0;
+            this.onWarning(
+              `DISQUALIFIED — Windows Key ${APP_CONFIG.MAX_WINDOWS_KEY_PRESSES} Baar Pressed!\n\nTest FAIL submit ho raha hai.`,
+              'final',
+              true
+            );
+            setTimeout(() => {
+              if (this.handleSubmitRef.current) this.handleSubmitRef.current(true, 'windows-key-disqualified');
+            }, APP_CONFIG.AUTO_SUBMIT_DELAY);
+          } else {
+            const remaining = APP_CONFIG.MAX_WINDOWS_KEY_PRESSES - this._windowsKeyCount;
+            this.onWarning(
+              `⚠️ Windows Key Blocked! (${this._windowsKeyCount}/${APP_CONFIG.MAX_WINDOWS_KEY_PRESSES})\n\nAur ${remaining} baar press kiya toh DISQUALIFY ho jaoge!`,
+              'critical',
+              true
+            );
+          }
+          return;
+        }
 
         const blocked =
           isFKey ||
@@ -489,12 +500,12 @@ export class SecurityManager {
           (ctrl && ['c','x','v','s','p','u'].includes(key)) ||
           (ctrl && e.shiftKey && ['i','j','c','k'].includes(key)) ||
           (ctrl && key === 'r') ||
-          (ctrl && key === 'w') ||   // ✅ SEC-13: close tab
-          (ctrl && key === 'q') ||   // ✅ SEC-13: quit browser
-          (ctrl && key === '+') ||   // ✅ SEC-9: zoom in
-          (ctrl && key === '-') ||   // ✅ SEC-9: zoom out
-          (ctrl && key === '=') ||   // ✅ SEC-9: zoom in alt
-          (ctrl && key === '0') ||   // ✅ SEC-9: zoom reset
+          (ctrl && key === 'w') ||
+          (ctrl && key === 'q') ||
+          (ctrl && key === '+') ||
+          (ctrl && key === '-') ||
+          (ctrl && key === '=') ||
+          (ctrl && key === '0') ||
           e.key === 'PrintScreen' ||
           (e.metaKey && e.shiftKey && ['3','4','5','s'].includes(key));
 
@@ -505,7 +516,7 @@ export class SecurityManager {
         }
       },
 
-      // ✅ SEC-9: Ctrl+Scroll zoom
+      // Ctrl+Scroll zoom blocked
       wheel: (e) => {
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
@@ -519,46 +530,38 @@ export class SecurityManager {
       selectstart: (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); },
       beforeprint: (e) => { e.preventDefault(); this.recordViolation('Printing is disabled during the test.'); },
 
-      // ✅ SEC-10 touchstart: track start time + block multi-touch
+      // ✅ touchstart: sirf start time record karo
+      // Multi-touch pinch zoom ALLOWED — koi block nahi
       touchstart: (e) => {
-        // Record start time for long-press detection
         this._touchStartTime = Date.now();
-        // Block multi-touch gestures (pinch zoom, etc.)
-        if (e.touches.length >= 2) {
-          e.preventDefault();
-          this.recordViolation('Multi-touch gesture blocked.');
-        }
+        // Multi-touch (pinch zoom) = allowed on mobile, no block
       },
 
-      // ✅ FIX-1 touchend: block ONLY long-press context menu, NOT normal taps
-      // Normal tap (< 500ms) on any element = allowed (buttons, options work!)
-      // Long-press (>= 500ms) on non-interactive elements = blocked
+      // ✅ touchend: sirf long-press block, normal taps + pinch zoom free
       touchend: (e) => {
         const touchDuration = Date.now() - this._touchStartTime;
         const tag = e.target.tagName;
         const isInteractive = (
-          tag === 'BUTTON' ||
-          tag === 'INPUT'  ||
-          tag === 'SELECT' ||
+          tag === 'BUTTON'   ||
+          tag === 'INPUT'    ||
+          tag === 'SELECT'   ||
           tag === 'TEXTAREA' ||
-          tag === 'A' ||
-          e.target.isContentEditable ||
-          e.target.closest('button') ||
-          e.target.closest('a') ||
+          tag === 'A'        ||
+          e.target.isContentEditable      ||
+          e.target.closest('button')      ||
+          e.target.closest('a')           ||
           e.target.closest('[role="button"]')
         );
 
-        // Only prevent default for long-press on non-interactive elements
-        // This blocks the mobile context menu without breaking button taps
+        // Sirf long-press on non-interactive = block (context menu prevent)
         if (touchDuration >= this._longPressThreshold && !isInteractive) {
           e.preventDefault();
         }
-        // All normal taps (including on buttons/options) pass through freely
+        // Normal taps, button taps, pinch zoom — sab free
       },
     };
   }
 
-  // ✅ SEC-5: Poison navigator.clipboard fully
   _poisonClipboard() {
     try {
       if (navigator.clipboard) {
@@ -581,22 +584,16 @@ export class SecurityManager {
     } catch (e) {}
   }
 
-  // ✅ SEC-6: Wipe storage — no answer can be cached/exfiltrated
   _wipeStorage() {
     try { localStorage.clear();   } catch (e) {}
     try { sessionStorage.clear(); } catch (e) {}
   }
 
+  // ✅ Violations = sirf warning, kabhi disqualify nahi
   recordViolation(message) {
-    if (this.violationCount >= this.maxViolations) return;
     this.violationCount++;
     this.onWarning(message, 'violation');
-    if (this.violationCount >= this.maxViolations) {
-      this.onWarning('Too many violations. Test will be submitted automatically.', 'final', true);
-      setTimeout(() => {
-        if (this.handleSubmitRef.current) this.handleSubmitRef.current(true, 'too-many-violations');
-      }, 2000);
-    }
+    // No auto-submit, no disqualify — sirf warning
   }
 
   enable() {
@@ -610,10 +607,10 @@ export class SecurityManager {
     this._poisonClipboard();
     this._wipeStorage();
 
-    // ✅ SEC-1: Block window.open (popup exfil)
+    // Block window.open
     try { window.__origOpen = window.open; window.open = () => null; } catch (e) {}
 
-    // ✅ SEC-4: Neuter console so student can't inspect via console
+    // Neuter console
     try {
       const noop = () => {};
       ['log','warn','error','info','table','dir','dirxml','group','groupEnd',
@@ -632,15 +629,14 @@ export class SecurityManager {
     document.body.style.msUserSelect     = '';
     ScreenRecordBlocker.disable();
     this._restoreClipboard();
-
-    // Restore window.open
+    if (this._windowsKeyTimer) clearTimeout(this._windowsKeyTimer);
     try { if (window.__origOpen) { window.open = window.__origOpen; delete window.__origOpen; } } catch (e) {}
   }
 }
 
 // ==========================================
-// ✅ SEC-12: VISIBILITY MANAGER
-// Scrambles document.title on tab blur — student can't read question from taskbar
+// VISIBILITY MANAGER
+// ✅ SEC-12: Title scramble on tab blur
 // ==========================================
 export class VisibilityManager {
   static _origTitle   = '';
@@ -663,8 +659,8 @@ export class VisibilityManager {
 }
 
 // ==========================================
-// ✅ SEC-14: NETWORK GUARD
-// Patches fetch + XHR to block known AI / answer-sharing domains
+// NETWORK GUARD
+// ✅ SEC-14: AI/cheat domains blocked
 // ==========================================
 const BLOCKED_DOMAINS = [
   'openai.com', 'chatgpt.com', 'claude.ai', 'gemini.google.com', 'bard.google.com',
@@ -717,14 +713,12 @@ export class NetworkGuard {
 
 // ==========================================
 // CLEANUP MANAGER
-// ✅ SEC-15: Also cleans NetworkGuard + VisibilityManager
-// Note: DesktopModeEnforcer.disable() is a NO-OP intentionally —
-//       desktop mode stays permanently active even after exam ends.
+// Note: DesktopModeEnforcer.disable() = NO-OP, desktop mode permanent
 // ==========================================
 export class CleanupManager {
   static performFullCleanup() {
     FullscreenManager.exit();
-    DesktopModeEnforcer.disable(); // NO-OP by design — desktop mode stays on
+    DesktopModeEnforcer.disable(); // NO-OP — desktop mode permanent
     ScreenRecordBlocker.disable();
     NetworkGuard.disable();
     VisibilityManager.disable();

@@ -55,13 +55,14 @@ export function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestio
     { text: `Test duration is ${timeLimit} minutes. Timer starts immediately.` },
     { text: `Each question has its own ${tpqFormatted} timer. Unanswered questions auto-advance to next. Once a question's time runs out, you cannot go back to it.`, highlight: true },
     { text: `Once you move forward from a question, you cannot go back to it.`, highlight: true },
-    { text: `Do NOT switch tabs — ${APP_CONFIG.MAX_TAB_SWITCHES} switches = auto-submit with FAIL.` },
+    { text: `Tab switch karna BANNED hai — 1 baar switch kiya toh SEEDHA DISQUALIFY.`, danger: true },
+    { text: `Windows key ${APP_CONFIG.MAX_WINDOWS_KEY_PRESSES} baar press karna = DISQUALIFY.`, danger: true },
+    { text: `Developer Tools (F12) kholna = SEEDHA DISQUALIFY.`, danger: true },
     { text: 'Copy, paste, right-click, printing, saving and Ctrl+U are completely blocked.' },
     { text: 'Browser screen recording (getDisplayMedia) is blocked automatically.' },
     { text: 'Test runs in fullscreen — exiting triggers a warning and auto-returns.' },
     { text: 'Your name and email are watermarked on every screen permanently.' },
     { text: `Inactivity for ${inactivityMin} minute${inactivityMin > 1 ? 's' : ''} will trigger a warning.` },
-    { text: `Opening Developer Tools (F12 / DevTools) will trigger a ${APP_CONFIG.DEVTOOLS_SUBMIT_SEC}s auto-submit countdown.`, danger: true },
     { text: 'Questions and answer options are shuffled — every student gets a different order.', highlight: true },
     { text: `Score ${passPercent}% or above to PASS and receive a Certificate of Achievement.` },
     { text: 'Cheating = FAIL + permanent record + zero refund + no certificate.', danger: true },
@@ -154,6 +155,9 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const inactivityRef   = useRef(null);
   const handleSubmitRef = useRef(null);
 
+  // ✅ Track tab switch happening so fullscreen handler can ignore it
+  const tabSwitchHappeningRef = useRef(false);
+
   const isAdmin       = TestUtils.isAdmin(userEmail);
   const answeredCount = Object.keys(answers).length;
   const studentName   = studentInfo?.fullName || 'Student';
@@ -176,9 +180,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     const needsOk = mustAck || type === 'critical' || type === 'final' || type === 'devtools-warning';
 
     let initCountdown = 20;
-    if (type === 'devtools-warning') initCountdown = APP_CONFIG.DEVTOOLS_SUBMIT_SEC;
-    else if (type === 'final' || type === 'critical') initCountdown = 20;
-
     setWarningInitialCountdown(initCountdown);
     setWarningMsg(message);
     setWarningType(type);
@@ -336,7 +337,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     return () => window.removeEventListener('resize', r);
   }, []);
 
-  // Inactivity detection
+  // Inactivity detection — sirf warning, disqualify nahi
   useEffect(() => {
     if (isAdmin) return;
     const events = ['mousemove','mousedown','keydown','touchstart','touchmove','scroll','click'];
@@ -346,6 +347,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       const idle = Date.now() - lastActivityRef.current;
       if (idle >= inactivityLimitMs) {
         const m = Math.floor(idle / 60000), s = Math.floor((idle % 60000) / 1000);
+        // Sirf warning — disqualify nahi
         showWarningMessage(
           `INACTIVITY DETECTED\n\nYou have been idle for ${m > 0 ? m+'m ' : ''}${s}s.\n\nStay active during the exam!`,
           'critical', true
@@ -360,10 +362,15 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, inactivityLimitMs, resetActivity, showWarningMessage]);
 
-  // Fullscreen
+  // ✅ UPDATED: Fullscreen handler
+  // Tab switch hone par fullscreen EXIT mat karo — fullscreen stays
+  // Sirf manual exit (ESC press etc) pe re-enter karo
   useEffect(() => {
     if (isAdmin) return;
     const handler = () => {
+      // Agar tab switch ho raha hai toh fullscreen change ignore karo
+      // (Tab switch khud handle hoga visibilitychange mein)
+      if (tabSwitchHappeningRef.current) return;
       if (!FullscreenManager.isActive() && !hasSubmittedRef.current && !isDisqualifiedRef.current) {
         showWarningMessage('You exited fullscreen mode. Returning you to fullscreen...', 'normal');
         setTimeout(() => FullscreenManager.enter(), 1500);
@@ -373,42 +380,48 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage]);
 
-  // Tab switch
+  // ✅ UPDATED: Tab switch → SEEDHA DISQUALIFY on 1st switch
   useEffect(() => {
     if (isAdmin) return;
     const handler = () => {
       if (!document.hidden || hasSubmittedRef.current || isDisqualifiedRef.current) return;
+
+      // Mark tab switch happening so fullscreen handler ignores it
+      tabSwitchHappeningRef.current = true;
+      setTimeout(() => { tabSwitchHappeningRef.current = false; }, 3000);
+
       const n = tabSwitchRef.current + 1;
-      tabSwitchRef.current = n; setTabSwitches(n);
-      if (n === 1) {
-        showWarningMessage(`WARNING — Tab Switch Detected (1 of ${APP_CONFIG.MAX_TAB_SWITCHES})\n\nReturn immediately and stay focused.`, 'critical', true);
-      } else if (n === 2) {
-        showWarningMessage(`SECOND WARNING — Tab Switch (2 of ${APP_CONFIG.MAX_TAB_SWITCHES}) — LAST CHANCE\n\nOne more = immediate FAIL + no certificate.`, 'critical', true);
-      } else if (n >= APP_CONFIG.MAX_TAB_SWITCHES) {
-        setIsDisqualifiedSynced(true);
-        showWarningMessage(`YOU HAVE BEEN DISQUALIFIED\n\nSubmitted as FAIL.\nNo certificate. No refund. No appeal.`, 'final', true);
-        setTimeout(() => {
-          if (handleSubmitRef.current) handleSubmitRef.current(true, 'tab-switching-disqualified');
-        }, APP_CONFIG.AUTO_SUBMIT_DELAY);
-      }
+      tabSwitchRef.current = n;
+      setTabSwitches(n);
+
+      // ✅ 1st switch pe seedha disqualify — koi warning nahi, koi chance nahi
+      setIsDisqualifiedSynced(true);
+      showWarningMessage(
+        `DISQUALIFIED — Tab Switch Detected!\n\nAap ne exam window chhor di.\nTest FAIL submit ho raha hai.\nKoi certificate nahi milega.`,
+        'final',
+        true
+      );
+      setTimeout(() => {
+        if (handleSubmitRef.current) handleSubmitRef.current(true, 'tab-switching-disqualified');
+      }, APP_CONFIG.AUTO_SUBMIT_DELAY);
     };
     document.addEventListener('visibilitychange', handler);
     return () => document.removeEventListener('visibilitychange', handler);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage, setIsDisqualifiedSynced]);
 
-  // Window blur
+  // Window blur — sirf warning, disqualify nahi
   useEffect(() => {
     if (isAdmin) return;
     const handleBlur = () => {
       if (hasSubmittedRef.current || isDisqualifiedRef.current) return;
       setIsContentBlurred(true);
       const n = blurCountRef.current + 1; blurCountRef.current = n; setBlurCount(n);
-      if (n >= APP_CONFIG.MAX_BLUR_COUNT) {
-        showWarningMessage(`REPEATED FOCUS LOSS — ${n} times\n\nStay focused on the exam.`, 'critical', true);
-      } else {
-        showWarningMessage(`You left the exam window! Return immediately. (${n} time${n>1?'s':''})`, 'violation');
-      }
+      // Sirf warning — disqualify nahi
+      showWarningMessage(
+        `You left the exam window! Return immediately. (${n} time${n>1?'s':''})`,
+        'violation'
+      );
     };
     const handleFocus = () => { setIsContentBlurred(false); resetActivity(); };
     window.addEventListener('blur', handleBlur);
@@ -417,7 +430,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage, resetActivity]);
 
-  // Mouse leave
+  // Mouse leave — sirf warning, disqualify nahi
   useEffect(() => {
     if (isAdmin) return;
     const handler = (e) => {
@@ -482,7 +495,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
                 <span style={{ background:allAnswered?'#dcfce7':'#fef3c7', color:allAnswered?'#065f46':'#92400e', padding:'0.15rem 0.5rem', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'800' }}>
                   {allAnswered ? 'All Done' : `${answeredCount}/${questions.length}`}
                 </span>
-                {tabSwitches > 0 && !isAdmin && <span style={{ background:'#fee2e2', color:'#dc2626', padding:'0.15rem 0.5rem', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'800' }}>Tab: {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}</span>}
+                {tabSwitches > 0 && !isAdmin && <span style={{ background:'#fee2e2', color:'#dc2626', padding:'0.15rem 0.5rem', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'800' }}>Tab Switch: {tabSwitches}</span>}
                 {blurCount > 0 && !isAdmin && <span style={{ background:'#fef3c7', color:'#92400e', padding:'0.15rem 0.5rem', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'800' }}>Focus lost: {blurCount}</span>}
                 {isDisqualified && <span style={{ background:'#dc2626', color:'#fff', padding:'0.15rem 0.5rem', borderRadius:'6px', fontSize:'0.7rem', fontWeight:'800' }}>DISQUALIFIED</span>}
               </div>
@@ -547,7 +560,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
           })}
         </div>
 
-        {/* Navigation — only Next/Submit, no Prev button */}
+        {/* Navigation */}
         <div style={{ display:'flex', justifyContent:'flex-end', gap:'1rem', marginBottom:'2.5rem' }}>
           {currentQuestion === questions.length - 1 ? (
             <button onClick={() => handleSubmit(false, '')} disabled={(!allAnswered && !isAdmin) || isDisqualified}
