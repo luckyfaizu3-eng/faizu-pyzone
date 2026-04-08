@@ -12,12 +12,14 @@
 // ✅ SEC-7:  maxViolations 5 → 3
 // ✅ SEC-8:  ALL F1–F12 keys blocked (not just F12)
 // ✅ SEC-9:  Ctrl+Scroll (browser zoom) blocked
-// ✅ SEC-10: Mobile touchend long-press blocked
+// ✅ SEC-10: Mobile touchend long-press blocked (button taps ALLOWED)
 // ✅ SEC-11: getUserMedia screen-share variant blocked
 // ✅ SEC-12: document.title scrambled on visibility change
 // ✅ SEC-13: Ctrl+W / Ctrl+Q (close tab) blocked
 // ✅ SEC-14: NetworkGuard — fetch + XHR patched to block AI/cheat domains
 // ✅ SEC-15: CleanupManager — NetworkGuard + VisibilityManager also cleaned
+// ✅ FIX-1:  touchend fix — only long-press blocked, button taps work on mobile
+// ✅ FIX-2:  DesktopModeEnforcer — enable only, never disable (desktop mode permanent)
 // ============================================================
 
 // ==========================================
@@ -207,10 +209,13 @@ export class ScreenRecordBlocker {
 
 // ==========================================
 // DESKTOP MODE ENFORCER
+// ✅ FIX-2: enable() sets viewport for desktop mode permanently.
+//           disable() is a NO-OP — desktop mode never removed during exam.
 // ==========================================
 export class DesktopModeEnforcer {
   static _original = null;
   static _created  = null;
+
   static enable() {
     const existing = document.querySelector('meta[name="viewport"]');
     if (existing) {
@@ -224,15 +229,13 @@ export class DesktopModeEnforcer {
       this._created = meta;
     }
   }
+
+  // ✅ FIX-2: Intentional NO-OP — desktop mode stays on for entire exam session.
+  // CleanupManager calls this but we deliberately ignore it so the viewport
+  // is never reset back to mobile after the exam starts.
   static disable() {
-    const meta = document.querySelector('meta[name="viewport"]');
-    if (meta) {
-      if (this._original)     meta.setAttribute('content', this._original);
-      else if (this._created) this._created.remove();
-      else                    meta.setAttribute('content', 'width=device-width, initial-scale=1');
-    }
-    this._original = null;
-    this._created  = null;
+    // DO NOTHING — desktop mode must remain active permanently.
+    // Removing the viewport tag would allow mobile zoom and layout to reset.
   }
 }
 
@@ -448,7 +451,7 @@ export class DevToolsDetector {
 // ✅ SEC-7:  maxViolations 5 → 3
 // ✅ SEC-8:  ALL F1–F12 blocked
 // ✅ SEC-9:  Ctrl+Scroll zoom blocked
-// ✅ SEC-10: touchend long-press blocked
+// ✅ SEC-10: touchend long-press blocked — button/input taps ALLOWED
 // ✅ SEC-13: Ctrl+W / Ctrl+Q blocked
 // ==========================================
 export class SecurityManager {
@@ -459,6 +462,11 @@ export class SecurityManager {
     this.maxViolations       = 3;   // ✅ SEC-7
     this._origClipboardRead  = null;
     this._origClipboardWrite = null;
+
+    // ✅ FIX-1: Long-press detection for touchend
+    // We track touchstart time per touch to detect long-press vs normal tap.
+    this._touchStartTime = 0;
+    this._longPressThreshold = 500; // ms — anything >= 500ms is a long-press
 
     this.handlers = {
       copy:        (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Copying is disabled during the test.'); },
@@ -511,11 +519,42 @@ export class SecurityManager {
       selectstart: (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); },
       beforeprint: (e) => { e.preventDefault(); this.recordViolation('Printing is disabled during the test.'); },
 
+      // ✅ SEC-10 touchstart: track start time + block multi-touch
       touchstart: (e) => {
-        if (e.touches.length >= 2) { e.preventDefault(); this.recordViolation('Multi-touch gesture blocked.'); }
+        // Record start time for long-press detection
+        this._touchStartTime = Date.now();
+        // Block multi-touch gestures (pinch zoom, etc.)
+        if (e.touches.length >= 2) {
+          e.preventDefault();
+          this.recordViolation('Multi-touch gesture blocked.');
+        }
       },
-      // ✅ SEC-10: block long-press context menu on mobile
-      touchend: (e) => { e.preventDefault(); },
+
+      // ✅ FIX-1 touchend: block ONLY long-press context menu, NOT normal taps
+      // Normal tap (< 500ms) on any element = allowed (buttons, options work!)
+      // Long-press (>= 500ms) on non-interactive elements = blocked
+      touchend: (e) => {
+        const touchDuration = Date.now() - this._touchStartTime;
+        const tag = e.target.tagName;
+        const isInteractive = (
+          tag === 'BUTTON' ||
+          tag === 'INPUT'  ||
+          tag === 'SELECT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'A' ||
+          e.target.isContentEditable ||
+          e.target.closest('button') ||
+          e.target.closest('a') ||
+          e.target.closest('[role="button"]')
+        );
+
+        // Only prevent default for long-press on non-interactive elements
+        // This blocks the mobile context menu without breaking button taps
+        if (touchDuration >= this._longPressThreshold && !isInteractive) {
+          e.preventDefault();
+        }
+        // All normal taps (including on buttons/options) pass through freely
+      },
     };
   }
 
@@ -679,11 +718,13 @@ export class NetworkGuard {
 // ==========================================
 // CLEANUP MANAGER
 // ✅ SEC-15: Also cleans NetworkGuard + VisibilityManager
+// Note: DesktopModeEnforcer.disable() is a NO-OP intentionally —
+//       desktop mode stays permanently active even after exam ends.
 // ==========================================
 export class CleanupManager {
   static performFullCleanup() {
     FullscreenManager.exit();
-    DesktopModeEnforcer.disable();
+    DesktopModeEnforcer.disable(); // NO-OP by design — desktop mode stays on
     ScreenRecordBlocker.disable();
     NetworkGuard.disable();
     VisibilityManager.disable();
