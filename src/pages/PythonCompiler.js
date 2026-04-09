@@ -1,909 +1,1146 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+/* eslint-disable no-useless-escape, no-eval */
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
-// ═══════════════════════════════════════
-//  VS CODE LIGHT THEME
-// ═══════════════════════════════════════
-const VS = {
-  bg:'#ffffff', bg2:'#f3f3f3', bg3:'#ebebeb', bg4:'#e0e0e0',
-  border:'#e4e4e4', text:'#1f1f1f', textDim:'#6e7681', textMute:'#c0c0c0',
-  accent:'#0066b8', accentBg:'#dbeafe', green:'#1a7f37', greenBg:'#dcfce7',
-  yellow:'#795e26', orange:'#a31515', red:'#cd3131', redBg:'#fef2f2',
-  purple:'#6f42c1', blue:'#0451a5', comment:'#008000', string:'#a31515',
-  number:'#098658', keyword:'#0000ff', builtin:'#795e26',
-  mono:'"JetBrains Mono","Fira Code","Consolas",monospace',
-};
+/* ═══════════════════════════════════════════════════
+   SKULPT PRELOAD
+═══════════════════════════════════════════════════ */
+(function () {
+  if (window._skulptLoaded) return;
+  window._skulptLoaded = "loading";
+  const s1 = document.createElement("script");
+  s1.src = "https://skulpt.org/js/skulpt.min.js";
+  s1.async = true;
+  s1.onload = () => {
+    const s2 = document.createElement("script");
+    s2.src = "https://skulpt.org/js/skulpt-stdlib.js";
+    s2.async = true;
+    s2.onload = () => { window._skulptLoaded = true; };
+    s2.onerror = () => { window._skulptLoaded = "error"; };
+    document.head.appendChild(s2);
+  };
+  s1.onerror = () => { window._skulptLoaded = "error"; };
+  document.head.appendChild(s1);
+})();
 
-// ═══════════════════════════════════════
-//  ✅ LAZY PYODIDE — load only on first Run
-//     UI opens instantly, no blocking
-// ═══════════════════════════════════════
-let _pyodide = null;
-let _pyodideLoading = null;
-let _pyodideReady = false;
+/* ═══════════════════════════════════════════════════
+   PYODIDE SINGLETON
+═══════════════════════════════════════════════════ */
+let _py = null, _pyLoading = null, _pyReady = false;
 
-const loadPyodideLazy = (onStatus) => {
-  // Already ready — instant
-  if (_pyodideReady && _pyodide) {
-    onStatus('ready');
-    return Promise.resolve(_pyodide);
-  }
-  // Already loading — attach to existing promise
-  if (_pyodideLoading) {
-    return _pyodideLoading;
-  }
-  // Start loading
-  _pyodideLoading = (async () => {
-    onStatus('downloading');
-    // Load script only if not already present
-    if (!window.loadPyodide) {
-      await new Promise((res, rej) => {
-        const s = document.createElement('script');
-        s.src = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
-        s.onload = res;
-        s.onerror = rej;
-        document.head.appendChild(s);
-      });
-    }
-    onStatus('starting');
-    _pyodide = await window.loadPyodide({
-      indexURL: 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/',
-    });
-    onStatus('packages');
-    // Load only essential packages (micropip only, skip heavy ones upfront)
+async function loadPy(onProg) {
+  if (_pyReady) return _py;
+  if (_pyLoading) return _pyLoading;
+  _pyLoading = (async () => {
     try {
-      await _pyodide.loadPackage(['micropip']);
-    } catch (_) {}
-    _pyodideReady = true;
-    onStatus('ready');
-    return _pyodide;
+      onProg?.(10, "Downloading Python runtime...");
+      if (!window.loadPyodide) {
+        await new Promise((res, rej) => {
+          const s = document.createElement("script");
+          s.src = "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js";
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      onProg?.(50, "Starting Python 3.11...");
+      _py = await window.loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/" });
+      onProg?.(85, "Loading standard packages...");
+      try { await _py.loadPackage(["micropip"]); } catch (_) {}
+      onProg?.(100, "Ready");
+      _pyReady = true;
+      return _py;
+    } catch (e) {
+      _pyLoading = null;
+      throw e;
+    }
   })();
-  return _pyodideLoading;
-};
+  return _pyLoading;
+}
 
-// ═══════════════════════════════════════
-//  LANGUAGES
-// ═══════════════════════════════════════
+/* ═══════════════════════════════════════════════════
+   AI
+═══════════════════════════════════════════════════ */
+const AI_URL = "https://white-limit-e2fe.luckyfaizu3.workers.dev/chat";
+
+async function callAI(messages, onChunk) {
+  const res = await fetch(AI_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, max_tokens: 800, temperature: 0.1 }),
+  });
+  if (!res.ok) throw new Error("AI offline (" + res.status + ")");
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let leftover = "", full = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    const chunk = leftover + dec.decode(value, { stream: true });
+    const lines = chunk.split("\n");
+    leftover = lines.pop() || "";
+    for (const l of lines) {
+      const t = l.trim();
+      if (!t.startsWith("data: ")) continue;
+      const d = t.slice(6).trim();
+      if (d === "[DONE]" || !d) continue;
+      try {
+        const p = JSON.parse(d);
+        const delta = p.choices?.[0]?.delta?.content;
+        if (delta) { full += delta; onChunk?.(full); }
+      } catch (_) {}
+    }
+  }
+  return full.trim();
+}
+
+/* ═══════════════════════════════════════════════════
+   LANGUAGES CONFIG
+═══════════════════════════════════════════════════ */
 const LANGS = {
-  python:    { label:'Python',     icon:'🐍', ext:'py',   file:'main.py',    runner:'python' },
-  javascript:{ label:'JavaScript', icon:'🟨', ext:'js',   file:'main.js',    runner:'js' },
-  html:      { label:'HTML/CSS',   icon:'🌐', ext:'html', file:'index.html', runner:'html' },
-  csharp:    { label:'C#',         icon:'💜', ext:'cs',   file:'Program.cs', runner:'ai' },
-  java:      { label:'Java',       icon:'☕', ext:'java', file:'Main.java',  runner:'ai' },
-  cpp:       { label:'C++',        icon:'⚡', ext:'cpp',  file:'main.cpp',   runner:'ai' },
-  sql:       { label:'SQL',        icon:'🗄️', ext:'sql',  file:'query.sql',  runner:'ai' },
+  python:     { label: "Python",     ext: "py",   badge: "PY", color: "#3b82f6", runner: "pyodide" },
+  javascript: { label: "JavaScript", ext: "js",   badge: "JS", color: "#f59e0b", runner: "eval"   },
+  typescript: { label: "TypeScript", ext: "ts",   badge: "TS", color: "#0ea5e9", runner: "ai"     },
+  html:       { label: "HTML/CSS",   ext: "html", badge: "HT", color: "#f97316", runner: "html"   },
+  cpp:        { label: "C++",        ext: "cpp",  badge: "C+", color: "#8b5cf6", runner: "ai"     },
+  csharp:     { label: "C#",         ext: "cs",   badge: "C#", color: "#ec4899", runner: "ai"     },
+  java:       { label: "Java",       ext: "java", badge: "JV", color: "#ef4444", runner: "ai"     },
 };
 
-const detectLang = (code) => {
-  if (!code || !code.trim()) return null;
-  const c = code.trim();
-  if (/^\s*<!DOCTYPE|^\s*<html/i.test(c))                   return 'html';
-  if (/^\s*<(div|p|h[1-6]|span|body)/i.test(c))             return 'html';
-  if (/using System|Console\.Write|namespace\s+\w/m.test(c)) return 'csharp';
-  if (/public\s+class\s+\w+|System\.out\.print/m.test(c))   return 'java';
-  if (/#include\s*<|cout\s*<<|int\s+main\s*\(/m.test(c))    return 'cpp';
-  if (/SELECT\s+|CREATE\s+TABLE|INSERT\s+INTO/im.test(c))   return 'sql';
-  if (/console\.log|const\s+\w+\s*=|let\s+\w+|=>/m.test(c))return 'javascript';
-  return null;
-};
+/* ═══════════════════════════════════════════════════
+   STARTER TEMPLATES
+═══════════════════════════════════════════════════ */
+const TEMPLATES = {
+  python: `# Python 3.11
+def greet(name):
+    return f"Hello, {name}!"
 
-// ═══════════════════════════════════════
-//  CODE SAMPLES
-// ═══════════════════════════════════════
-const SAMPLES = {
-python:`# 🐍 Python Compiler — runs in browser!
-print("Hello, PySkill! 🎉")
-
-numbers = [1, 2, 3, 4, 5]
-total = sum(numbers)
-print(f"Sum: {total}")
-print(f"Average: {total / len(numbers)}")
-
-for i, n in enumerate(numbers, 1):
-    print(f"  {i}. {n} squared = {n**2}")
-
-print("\\n✅ Done!")
+for i in range(1, 6):
+    print(f"{i}: {greet('World')}")
 `,
-javascript:`// 🟨 JavaScript
-const greet = name => \`Hello, \${name}! 👋\`;
-['Ali','Sara','Ahmed'].forEach((s,i)=>{
-  console.log(\`\${i+1}. \${greet(s)}\`);
-});
-const squares = [1,2,3,4,5].map(x=>x**2);
-console.log('Squares:', squares);
+  javascript: `// JavaScript
+function fibonacci(n) {
+  if (n <= 1) return n;
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+for (let i = 0; i < 8; i++) {
+  console.log(\`fib(\${i}) = \${fibonacci(i)}\`);
+}
 `,
-html:`<!DOCTYPE html>
+  typescript: `// TypeScript
+interface User {
+  name: string;
+  age: number;
+}
+
+function greet(user: User): string {
+  return \`Hello, \${user.name}! Age: \${user.age}\`;
+}
+
+const user: User = { name: "Alice", age: 30 };
+console.log(greet(user));
+`,
+  html: `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
-  <title>PySkill</title>
   <style>
-    body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#667eea,#764ba2);min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0}
-    .card{background:white;border-radius:20px;padding:40px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
-    h1{color:#667eea;margin:0 0 10px}
-    button{background:#667eea;color:white;border:none;padding:12px 28px;border-radius:10px;cursor:pointer;font-size:16px;font-weight:bold}
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+    .card {
+      background: white;
+      padding: 40px 60px;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      text-align: center;
+    }
+    h1 { color: #1a1a2e; margin: 0 0 10px; }
+    p  { color: #666; margin: 0; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>🎉 Hello World!</h1>
-    <p>Built with PySkill Compiler</p>
-    <button onclick="this.textContent='Clicked! 🚀'">Click Me!</button>
+    <h1>Hello, World!</h1>
+    <p>HTML + CSS running live.</p>
   </div>
 </body>
 </html>`,
-csharp:`// 💜 C# — AI simulates output
-using System;
-class Program {
-    static void Main() {
-        Console.WriteLine("Hello, World!");
-        for(int i=1;i<=5;i++) Console.WriteLine($"  {i}. value={i*i}");
-    }
-}`,
-java:`// ☕ Java — AI simulates output
-public class Main {
-    public static void main(String[] args) {
-        System.out.println("Hello, World!");
-        for(int i=1;i<=5;i++) System.out.println("  "+i+". value="+(i*i));
-    }
-}`,
-cpp:`// ⚡ C++ — AI simulates output
-#include<iostream>
+  cpp: `#include <iostream>
+#include <vector>
 using namespace std;
-int main(){
-    cout<<"Hello, World!"<<endl;
-    for(int i=1;i<=5;i++) cout<<"  "<<i<<". value="<<i*i<<endl;
+
+int main() {
+    vector<int> nums = {1, 2, 3, 4, 5};
+    int sum = 0;
+    for (int n : nums) {
+        sum += n;
+        cout << "num: " << n << endl;
+    }
+    cout << "Sum = " << sum << endl;
     return 0;
 }`,
-sql:`-- 🗄️ SQL — AI simulates output
-CREATE TABLE students(id INTEGER PRIMARY KEY,name TEXT,marks INTEGER);
-INSERT INTO students VALUES(1,'Ali',95),(2,'Sara',88),(3,'Ahmed',92);
-SELECT name,marks FROM students WHERE marks>90 ORDER BY marks DESC;`,
+  csharp: `using System;
+using System.Collections.Generic;
+
+class Program {
+    static void Main() {
+        var fruits = new List<string> { "Apple", "Banana", "Cherry" };
+        foreach (var f in fruits) {
+            Console.WriteLine($"Fruit: {f}");
+        }
+        Console.WriteLine($"Total: {fruits.Count}");
+    }
+}`,
+  java: `import java.util.Arrays;
+import java.util.List;
+
+public class Main {
+    public static void main(String[] args) {
+        List<String> langs = Arrays.asList("Java", "Python", "C++");
+        for (String lang : langs) {
+            System.out.println("Language: " + lang);
+        }
+        System.out.println("Done!");
+    }
+}`,
 };
 
-// ═══════════════════════════════════════
-//  HELPERS
-// ═══════════════════════════════════════
-const normalizeIndent = (code) => {
-  if (!code) return code;
-  return code.split('\n').map(line => {
-    let sp = 0;
-    for (const ch of line) { if (ch===' ') sp++; else if (ch==='\t') sp+=4; else break; }
-    return '    '.repeat(Math.round(sp/4)) + line.trimStart();
-  }).join('\n');
-};
+const TURTLE_CODE = `import turtle
 
-const detectInputCalls = (code) => {
-  const prompts = [];
-  const re = /\binput\s*\(\s*(?:f?(?:"([^"\\]*(?:\\.[^"\\]*)*)"|'([^'\\]*(?:\\.[^'\\]*)*)'))?[^)]*\)/g;
+t = turtle.Turtle()
+t.speed(6)
+colors = ["#e74c3c","#e67e22","#f1c40f","#2ecc71","#3498db","#9b59b6"]
+for i in range(60):
+    t.color(colors[i % 6])
+    t.forward(i * 3)
+    t.right(91)
+turtle.done()`;
+
+/* ═══════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════ */
+const hasTurtle = c => /\bimport\s+turtle\b|from\s+turtle\s+import/.test(c);
+const hasInput  = c => /\binput\s*\(/.test(c);
+
+const getPrompts = c => {
+  const r = [];
+  const re = /\binput\s*\(\s*(f?(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'))?\s*\)/g;
   let m;
-  while ((m = re.exec(code)) !== null) prompts.push((m[1]??m[2]??'').replace(/\\n/g,'\n'));
-  return prompts;
+  while ((m = re.exec(c)) !== null) {
+    if (m[1]) {
+      const raw = m[1].replace(/^f?["']|["']$/g, "");
+      r.push(raw);
+    } else {
+      r.push("");
+    }
+  }
+  return r;
 };
 
-// ═══════════════════════════════════════
-//  TOKENIZERS
-// ═══════════════════════════════════════
-const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const PY_KW = new Set(['def','class','import','from','return','if','elif','else','for','while','in','not','and','or','True','False','None','try','except','finally','with','as','pass','break','continue','lambda','yield','async','await','raise','del','global','nonlocal','assert','is']);
-const PY_BT = new Set(['print','len','range','type','int','str','float','list','dict','set','tuple','input','open','enumerate','zip','map','filter','sorted','reversed','max','min','sum','abs','round','isinstance','hasattr','getattr','setattr','super','object','bool','bytes','repr','format','vars','dir','id','hex','oct','bin','eval','exec','any','all','next','iter']);
+/* ═══════════════════════════════════════════════════
+   SYNTAX HIGHLIGHTERS
+═══════════════════════════════════════════════════ */
+const PY_KW   = new Set(["def","class","import","from","return","if","elif","else","for","while","in","not","and","or","True","False","None","try","except","finally","with","as","pass","break","continue","lambda","yield","async","await","raise","del","global","nonlocal","assert","is"]);
+const PY_BT   = new Set(["print","len","range","type","int","str","float","list","dict","set","tuple","input","enumerate","zip","map","filter","sorted","max","min","sum","abs","round","isinstance","super","bool","repr","format","any","all","open","next","iter"]);
+const JS_KW   = new Set(["const","let","var","function","return","if","else","for","while","class","import","export","new","true","false","null","undefined","async","await","typeof","instanceof","of","in","do","switch","case","break","continue","throw","try","catch","finally","from","default","extends","static","this","super"]);
+const CS_KW   = new Set(["using","namespace","class","public","private","protected","static","void","int","string","bool","float","double","var","new","return","if","else","for","foreach","while","switch","case","break","continue","try","catch","finally","async","await","throw","interface","enum","abstract","override","null","true","false"]);
+const JAVA_KW = new Set(["public","private","protected","static","void","int","String","boolean","float","double","class","new","return","if","else","for","while","switch","case","break","continue","try","catch","finally","import","package","extends","implements","interface","enum","abstract","final","null","true","false","this","super"]);
+const CPP_KW  = new Set(["int","float","double","char","bool","void","string","auto","const","static","return","if","else","for","while","do","switch","case","break","continue","class","struct","namespace","using","new","delete","nullptr","true","false","public","private","protected","virtual","override","template","typename","sizeof","enum","cout","cin","endl"]);
 
-function tokenizePy(code) {
-  let h='';
-  code.split('\n').forEach((line,li,arr)=>{
-    const ci=line.indexOf('#'),cp=ci>=0?line.slice(0,ci):line,cm=ci>=0?line.slice(ci):'';
-    const re=/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b\d+\.?\d*\b|\b\w+\b|[^\w\s]|\s+)/g;
-    let mt;
-    while((mt=re.exec(cp))!==null){
-      const w=mt[0],e=esc(w);
-      if(/^\s+$/.test(w))              {h+=e;continue;}
-      if(w[0]==='"'||w[0]==="'")       {h+=`<span style="color:${VS.string}">${e}</span>`;continue;}
-      if(/^\d/.test(w))                {h+=`<span style="color:${VS.number}">${e}</span>`;continue;}
-      if(PY_KW.has(w))                 {h+=`<span style="color:${VS.keyword};font-weight:600">${e}</span>`;continue;}
-      if(PY_BT.has(w))                 {h+=`<span style="color:${VS.builtin}">${e}</span>`;continue;}
-      h+=e;
-    }
-    if(cm) h+=`<span style="color:${VS.comment}">${esc(cm)}</span>`;
-    if(li<arr.length-1) h+='\n';
-  });
-  return h;
+function findCommentIndex(line) {
+  let inSingle = false, inDouble = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    const prev = line[i - 1];
+    if (ch === "'" && !inDouble && prev !== "\\") inSingle = !inSingle;
+    if (ch === '"' && !inSingle && prev !== "\\") inDouble = !inDouble;
+    if (ch === "#" && !inSingle && !inDouble) return i;
+  }
+  return -1;
 }
 
-const JS_KW = new Set(['const','let','var','function','return','if','else','for','while','do','switch','case','break','continue','new','class','extends','import','export','default','async','await','try','catch','finally','throw','typeof','instanceof','in','of','null','undefined','true','false','this','super','yield','delete','void','static']);
-const CS_KW = new Set(['using','namespace','class','public','private','protected','static','void','int','string','bool','double','float','var','new','return','if','else','for','foreach','while','do','switch','case','break','continue','try','catch','finally','throw','true','false','null','this','base','override','virtual','abstract','sealed','readonly','const']);
-const CPP_KW = new Set(['int','float','double','char','bool','void','string','auto','const','static','return','if','else','for','while','do','switch','case','break','continue','class','struct','public','private','protected','new','delete','namespace','using','include','template','try','catch','throw','true','false','nullptr','this','virtual','override']);
+function hlCode(lang, code) {
+  if (!code) return `<span style="color:#aaa">// Start typing...</span>`;
+  const numColor = "#c18401", strColor = "#008000", cmtColor = "#888", kwColor2 = "#7c00d3";
 
-function tokenizeGen(code, kwSet) {
-  let h='';
-  code.split('\n').forEach((line,li,arr)=>{
-    const ci=line.indexOf('//'),cp=ci>=0?line.slice(0,ci):line,cm=ci>=0?line.slice(ci):'';
-    const re=/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+\.?\d*\b|\b\w+\b|[^\w\s]|\s+)/g;
-    let mt;
-    while((mt=re.exec(cp))!==null){
-      const w=mt[0],e=esc(w);
-      if(/^\s+$/.test(w))                    {h+=e;continue;}
-      if(w[0]==='"'||w[0]==="'"||w[0]==='`') {h+=`<span style="color:${VS.string}">${e}</span>`;continue;}
-      if(/^\d/.test(w))                       {h+=`<span style="color:${VS.number}">${e}</span>`;continue;}
-      if(kwSet.has(w))                        {h+=`<span style="color:${VS.keyword};font-weight:600">${e}</span>`;continue;}
-      h+=e;
-    }
-    if(cm) h+=`<span style="color:${VS.comment}">${esc(cm)}</span>`;
-    if(li<arr.length-1) h+='\n';
-  });
-  return h;
-}
-
-const getHL = (lang) => {
-  if (lang==='python')      return c => tokenizePy(c);
-  if (lang==='javascript')  return c => tokenizeGen(c, JS_KW);
-  if (lang==='csharp'||lang==='java') return c => tokenizeGen(c, CS_KW);
-  if (lang==='cpp')         return c => tokenizeGen(c, CPP_KW);
-  return c => esc(c);
-};
-
-// ═══════════════════════════════════════
-//  AI FIX
-// ═══════════════════════════════════════
-const AI_URL = 'https://white-limit-e2fe.luckyfaizu3.workers.dev/chat';
-
-const aiAutoFix = async (code, lang) => {
-  try {
-    const resp = await fetch(AI_URL, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ messages:[
-        {role:'system',content:`You are a ${lang} code fixer. Return ONLY the fixed raw code. No explanation, no markdown, no backticks.`},
-        {role:'user',content:`Fix:\n\n${code}`}
-      ], max_tokens:1500, temperature:0.1 })
+  if (lang === "python") {
+    let h = "";
+    code.split("\n").forEach((line, li, arr) => {
+      const ci = findCommentIndex(line);
+      const cp = ci >= 0 ? line.slice(0, ci) : line;
+      const cm = ci >= 0 ? line.slice(ci) : "";
+      const re = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\b\d+\.?\d*\b|\b\w+\b|[^\w\s]|\s+)/g;
+      let m;
+      while ((m = re.exec(cp)) !== null) {
+        const w = m[0], e = esc(w);
+        if (/^\s+$/.test(w))        { h += e; continue; }
+        if (w[0]==='"'||w[0]==="'") { h += `<span style="color:${strColor}">${e}</span>`; continue; }
+        if (/^\d/.test(w))          { h += `<span style="color:${numColor}">${e}</span>`; continue; }
+        if (PY_KW.has(w))           { h += `<span style="color:${kwColor2};font-weight:700">${e}</span>`; continue; }
+        if (PY_BT.has(w))           { h += `<span style="color:#0070c1;font-weight:600">${e}</span>`; continue; }
+        h += `<span style="color:#1e1e1e">${e}</span>`;
+      }
+      if (cm) h += `<span style="color:${cmtColor};font-style:italic">${esc(cm)}</span>`;
+      if (li < arr.length - 1) h += "\n";
     });
-    if (!resp.ok) throw new Error();
-    const reader=resp.body.getReader(), decoder=new TextDecoder();
-    let result='',leftover='';
-    while(true){
-      const{done,value}=await reader.read(); if(done) break;
-      const chunk=leftover+decoder.decode(value,{stream:true});
-      const lines=chunk.split('\n'); leftover=lines.pop()||'';
-      for(const l of lines){
-        const t=l.trim(); if(!t.startsWith('data: ')) continue;
-        const d=t.slice(6).trim(); if(d==='[DONE]'||!d) continue;
-        try{const p=JSON.parse(d);const delta=p.choices?.[0]?.delta?.content;if(delta)result+=delta;}catch{}
-      }
+    return h;
+  }
+
+  let kwSet, commentStr, kwColor;
+  switch (lang) {
+    case "javascript": case "typescript": kwSet = JS_KW;   commentStr = "//"; kwColor = "#7c00d3"; break;
+    case "csharp":                        kwSet = CS_KW;   commentStr = "//"; kwColor = "#7c00d3"; break;
+    case "java":                          kwSet = JAVA_KW; commentStr = "//"; kwColor = "#7c00d3"; break;
+    case "cpp":                           kwSet = CPP_KW;  commentStr = "//"; kwColor = "#7c00d3"; break;
+    default: return esc(code);
+  }
+
+  let h = "";
+  code.split("\n").forEach((line, li, arr) => {
+    const ci = line.indexOf(commentStr);
+    const cp = ci >= 0 ? line.slice(0, ci) : line;
+    const cm = ci >= 0 ? line.slice(ci) : "";
+    const re = /("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+\.?\d*\b|\b\w+\b|[^\w\s]|\s+)/g;
+    let m;
+    while ((m = re.exec(cp)) !== null) {
+      const w = m[0], e = esc(w);
+      if (/^\s+$/.test(w))                    { h += e; continue; }
+      if (w[0]==='"'||w[0]==="'"||w[0]==='`') { h += `<span style="color:${strColor}">${e}</span>`; continue; }
+      if (/^\d/.test(w))                       { h += `<span style="color:${numColor}">${e}</span>`; continue; }
+      if (kwSet.has(w))                        { h += `<span style="color:${kwColor};font-weight:700">${e}</span>`; continue; }
+      h += `<span style="color:#1e1e1e">${e}</span>`;
     }
-    result=result.trim().replace(/^```[\w]*\n?/,'').replace(/\n?```$/,'').trim();
-    return result||null;
-  } catch { return null; }
-};
+    if (cm) h += `<span style="color:${cmtColor};font-style:italic">${esc(cm)}</span>`;
+    if (li < arr.length - 1) h += "\n";
+  });
+  return h;
+}
 
-// ═══════════════════════════════════════
-//  CODE EDITOR
-// ═══════════════════════════════════════
-const CodeEditor = ({ value, onChange, lang, fontSize, isMobile=false }) => {
-  const taRef=useRef(null), hiRef=useRef(null), lnRef=useRef(null);
-  const valRef=useRef(value);
-  useEffect(()=>{ valRef.current=value; },[value]);
-  const tokenize = useMemo(()=>getHL(lang),[lang]);
-  const LH = Math.round(fontSize*1.75);
+/* ═══════════════════════════════════════════════════
+   TURTLE HTML WRAPPER
+═══════════════════════════════════════════════════ */
+function makeTurtleHTML(code) {
+  const escaped = code.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
+  return `<!DOCTYPE html><html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#1e2127;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:12px;font-family:'Segoe UI',sans-serif}
+  canvas{border-radius:12px;box-shadow:0 4px 24px rgba(0,0,0,0.4);max-width:95vw;max-height:80vh}
+  #st{color:#98c379;font-size:13px;font-weight:600;padding:5px 16px;background:rgba(152,195,121,0.1);border-radius:20px;border:1px solid rgba(152,195,121,0.3)}
+  #er{color:#e06c75;font-size:12px;max-width:90vw;word-break:break-word;text-align:center;padding:8px 16px;background:rgba(224,108,117,0.1);border-radius:8px;border:1px solid rgba(224,108,117,0.3);display:none}
+  .loader{width:14px;height:14px;border:2px solid rgba(97,175,239,0.2);border-top-color:#61afef;border-radius:50%;animation:spin 0.8s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head><body>
+<div id="st"><span class="loader" id="ld"></span>Loading Turtle...</div>
+<canvas id="c" width="400" height="400"></canvas>
+<div id="er"></div>
+<script>
+(function(){
+  function loadScript(src,cb,errCb){
+    var s=document.createElement('script');s.src=src;
+    s.onload=cb;
+    s.onerror=errCb||function(){
+      document.getElementById('er').textContent='Failed to load: '+src;
+      document.getElementById('er').style.display='block';
+      document.getElementById('st').textContent='Error';
+      document.getElementById('ld').style.display='none';
+    };
+    document.head.appendChild(s);
+  }
+  loadScript('https://skulpt.org/js/skulpt.min.js',function(){
+    loadScript('https://skulpt.org/js/skulpt-stdlib.js',function(){
+      document.getElementById('ld').style.display='none';
+      document.getElementById('st').textContent='Running...';
+      Sk.configure({
+        output:function(){},
+        read:function(f){if(!Sk.builtinFiles||!Sk.builtinFiles.files[f])throw'File not found: '+f;return Sk.builtinFiles.files[f];}
+      });
+      Sk.TurtleGraphics={target:'c',width:400,height:400};
+      Sk.misceval.asyncToPromise(function(){return Sk.importMainWithBody('<stdin>',false,\`${escaped}\`,true);})
+        .then(function(){document.getElementById('st').textContent='✓ Done';})
+        .catch(function(e){
+          document.getElementById('st').textContent='Error';
+          var el=document.getElementById('er');el.textContent=e.toString();el.style.display='block';
+        });
+    });
+  });
+})();
+<\/script></body></html>`;
+}
 
-  const syncScroll = useCallback(()=>{
-    const ta=taRef.current; if(!ta) return;
-    if(hiRef.current){ hiRef.current.scrollTop=ta.scrollTop; hiRef.current.scrollLeft=ta.scrollLeft; }
-    if(lnRef.current) lnRef.current.scrollTop=ta.scrollTop;
-  },[]);
+/* ═══════════════════════════════════════════════════
+   CODE EDITOR
+═══════════════════════════════════════════════════ */
+function CodeEditor({ code, onChange, lang }) {
+  const taRef = useRef(null);
+  const hiRef = useRef(null);
+  const lines = (code || "").split("\n");
+  const lineCount = lines.length;
+  const FS = 14, LH = 22;
+  const digits = String(lineCount).length;
+  const LNW = Math.max(18, digits * 6 + 6);
 
-  const onKeyDown = useCallback((e)=>{
-    const ta=taRef.current; if(!ta) return;
-    const s=ta.selectionStart, end=ta.selectionEnd, v=valRef.current;
-    if(e.key==='Tab'){
-      e.preventDefault();
-      onChange(v.slice(0,s)+'    '+v.slice(end));
-      requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s+4; });
-    } else if(e.key==='Enter'){
-      e.preventDefault();
-      const ls=v.lastIndexOf('\n',s-1)+1, lt=v.slice(ls,s);
-      const lead=lt.match(/^(\s*)/)[1].length;
-      const extra=(lt.trimEnd().endsWith(':')||lt.trimEnd().endsWith('{')||lt.trimEnd().endsWith('('))?4:0;
-      const ind=' '.repeat(lead+extra);
-      onChange(v.slice(0,s)+'\n'+ind+v.slice(end));
-      requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s+1+ind.length; });
-    } else if(e.key==='Backspace'&&s===end){
-      const ls=v.lastIndexOf('\n',s-1)+1, bc=v.slice(ls,s);
-      if(/^ +$/.test(bc)&&bc.length%4===0&&bc.length>0){
+  const lnRef = useRef(null);
+
+  const syncScroll = () => {
+    if (!taRef.current) return;
+    const top = taRef.current.scrollTop;
+    const left = taRef.current.scrollLeft;
+    if (hiRef.current) { hiRef.current.scrollTop = top; hiRef.current.scrollLeft = left; }
+    if (lnRef.current)  { lnRef.current.scrollTop = top; }
+  };
+
+  const onKeyDown = (e) => {
+    const ta = taRef.current; if (!ta) return;
+    // Allow Ctrl+A / Cmd+A select all to pass through natively
+    if ((e.ctrlKey || e.metaKey) && e.key === "a") return;
+    // Allow Ctrl+C / Cmd+C copy to pass through
+    if ((e.ctrlKey || e.metaKey) && e.key === "c") return;
+    const s = ta.selectionStart, end = ta.selectionEnd, v = code;
+    if (e.key === "Backspace" && s === end) {
+      const ls = v.lastIndexOf("\n", s - 1) + 1;
+      const seg = v.slice(ls, s);
+      if (/^ +$/.test(seg) && seg.length % 4 === 0 && seg.length > 0) {
         e.preventDefault();
-        onChange(v.slice(0,s-4)+v.slice(s));
-        requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s-4; });
+        onChange(v.slice(0, s - 4) + v.slice(s));
+        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s - 4; });
+        return;
       }
     }
-    const pairs={'(':')','{':'}','[':']'};
-    if(pairs[e.key]&&s===end){
+    if (e.key === "Tab") {
       e.preventDefault();
-      onChange(v.slice(0,s)+e.key+pairs[e.key]+v.slice(end));
-      requestAnimationFrame(()=>{ ta.selectionStart=ta.selectionEnd=s+1; });
+      onChange(v.slice(0, s) + "    " + v.slice(end));
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s + 4; });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const ls = v.lastIndexOf("\n", s - 1) + 1;
+      const lead = v.slice(ls, s).match(/^(\s*)/)[1].length;
+      const needsIndent = /[:{\(]$/.test(v.slice(ls, s).trimEnd());
+      const ind = " ".repeat(lead + (needsIndent ? 4 : 0));
+      onChange(v.slice(0, s) + "\n" + ind + v.slice(end));
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = s + 1 + ind.length; });
     }
-  },[onChange]);
+  };
 
-  const lineCount=(value||'').split('\n').length;
-  const shared={
-    position:'absolute',top:0,left:0,right:0,bottom:0,
-    paddingTop:'12px',paddingBottom:'60px',
-    paddingLeft:isMobile?'10px':'50px',paddingRight:'10px',
-    fontFamily:VS.mono,fontSize:fontSize+'px',lineHeight:LH+'px',
-    whiteSpace:'pre-wrap',wordBreak:'break-all',
-    overflowX:'hidden',overflowY:'auto',tabSize:4,
+  const guides = useMemo(() => {
+    const result = [];
+    lines.forEach((line, li) => {
+      if (line.trim() === "") return;
+      const spaces = line.match(/^(\s*)/)[1].length;
+      const levels = Math.floor(spaces / 4);
+      for (let gi = 0; gi < levels; gi++) {
+        result.push(
+          <div key={`g${li}-${gi}`} style={{
+            position: "absolute",
+            left: LNW + 12 + gi * 4 * (FS * 0.605),
+            top: 12 + li * LH,
+            width: 1, height: LH,
+            background: "rgba(0,0,0,0.08)",
+            pointerEvents: "none", zIndex: 1,
+          }} />
+        );
+      }
+    });
+    return result;
+  }, [code, LNW]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const shared = {
+    position: "absolute", inset: 0,
+    padding: `12px 12px 12px ${LNW + 8}px`,
+    fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace",
+    fontSize: FS, lineHeight: LH + "px",
+    whiteSpace: "pre", overflow: "hidden", tabSize: 4,
   };
 
   return (
-    <div style={{position:'relative',flex:1,overflow:'hidden',minHeight:0,background:VS.bg}}>
-      {/* Line numbers */}
+    <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#ffffff" }}>
+
+      {/* Line numbers — scrolls in sync with textarea */}
       <div ref={lnRef} style={{
-        position:'absolute',top:0,left:0,bottom:0,width:'44px',
-        display:isMobile?'none':'block',
-        background:'#f8f8f8',borderRight:`1px solid ${VS.border}`,
-        overflow:'hidden',pointerEvents:'none',zIndex:4,paddingTop:'12px',
+        position: "absolute", left: 0, top: 0, bottom: 0, width: LNW,
+        background: "#f8f8f8", borderRight: "1px solid #ebebeb",
+        fontFamily: "'JetBrains Mono',monospace", fontSize: 9, lineHeight: LH + "px",
+        overflowY: "hidden", overflowX: "hidden",
+        pointerEvents: "none", zIndex: 3, userSelect: "none",
+        paddingTop: 12, paddingBottom: 12,
       }}>
-        {Array.from({length:lineCount}).map((_,i)=>(
-          <div key={i} style={{height:LH+'px',lineHeight:LH+'px',textAlign:'right',paddingRight:'10px',fontSize:Math.max(fontSize-2,9)+'px',color:VS.textMute,fontFamily:VS.mono,userSelect:'none'}}>{i+1}</div>
+        {Array.from({ length: lineCount }).map((_, i) => (
+          <div key={i} style={{ textAlign: "right", paddingRight: 4, color: "#ccc", height: LH }}>{i + 1}</div>
         ))}
       </div>
-      {/* Highlight */}
-      <div ref={hiRef} style={{...shared,pointerEvents:'none',zIndex:2,color:VS.text}}>
-        <pre style={{margin:0,padding:0,fontFamily:VS.mono,fontSize:fontSize+'px',lineHeight:LH+'px',background:'transparent',whiteSpace:'pre-wrap',wordBreak:'break-all'}}
-          dangerouslySetInnerHTML={{__html:value?tokenize(value):`<span style="color:${VS.textMute}">// Write your code here...</span>`}}/>
+
+      {/* Indent guides */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1, overflow: "hidden" }}>
+        {guides}
       </div>
-      {/* Textarea */}
-      <textarea ref={taRef} value={value} onChange={e=>onChange(e.target.value)}
-        onScroll={syncScroll} onKeyDown={onKeyDown}
+
+      {/* Syntax highlight layer */}
+      <div ref={hiRef} style={{
+        ...shared,
+        pointerEvents: "none", zIndex: 2, color: "#1e1e1e", wordBreak: "normal",
+        overflow: "hidden",
+      }}>
+        <pre style={{
+          margin: 0, padding: 0,
+          fontFamily: "'JetBrains Mono','Fira Code','Courier New',monospace",
+          fontSize: FS, lineHeight: LH + "px",
+          background: "transparent", whiteSpace: "pre", wordBreak: "normal",
+        }} dangerouslySetInnerHTML={{ __html: hlCode(lang, code) }} />
+      </div>
+
+      {/* Actual textarea — scroll master */}
+      <textarea
+        ref={taRef} value={code}
+        onChange={e => onChange(e.target.value)}
+        onScroll={syncScroll}
+        onKeyDown={onKeyDown}
         spellCheck={false} autoComplete="off" autoCorrect="off" autoCapitalize="off"
-        style={{...shared,background:'transparent',color:'transparent',caretColor:VS.text,border:'none',outline:'none',resize:'none',zIndex:3}}/>
+        style={{
+          ...shared,
+          background: "transparent", color: "transparent",
+          caretColor: "#000000", border: "none", outline: "none", resize: "none",
+          zIndex: 4, WebkitTextFillColor: "transparent", wordBreak: "normal",
+          overflowY: "scroll",
+          overflowX: "auto",
+        }}
+      />
     </div>
   );
-};
+}
 
-// ═══════════════════════════════════════
-//  TERMINAL
-// ═══════════════════════════════════════
-const Terminal = ({ lines, isWaiting, currentPrompt, onSubmit }) => {
-  const [val, setVal] = useState('');
-  const bottomRef=useRef(null), inputRef=useRef(null);
-  useEffect(()=>{ bottomRef.current?.scrollIntoView({behavior:'smooth'}); },[lines,isWaiting]);
-  useEffect(()=>{ if(isWaiting) setTimeout(()=>inputRef.current?.focus(),80); },[isWaiting,currentPrompt]);
-  const submit=()=>{ if(!isWaiting) return; onSubmit(val); setVal(''); };
-  const C={output:VS.text,error:VS.red,success:VS.green,info:VS.textDim,system:VS.accent,prompt:VS.purple,input:VS.blue};
+/* ═══════════════════════════════════════════════════
+   OUTPUT PANEL
+═══════════════════════════════════════════════════ */
+function OutputPanel({ lines, isRunning, onClose, inputPrompt, onInputSubmit, langLabel }) {
+  const bottomRef = useRef(null);
+  const [inputVal, setInputVal] = useState("");
+  const [termCopied, setTermCopied] = useState(false);
+
+  useEffect(() => {
+    setTimeout(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, 30);
+  }, [lines]);
+
+  const submit = () => {
+    const v = inputVal.trim(); if (!v) return;
+    onInputSubmit(v); setInputVal("");
+  };
+
+  const copyOutput = async () => {
+    const text = lines.map(l => {
+      const prefix = l.type === "error" ? "✖ " : l.type === "system" ? "● " : "";
+      return prefix + l.text;
+    }).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setTermCopied(true);
+      setTimeout(() => setTermCopied(false), 1500);
+    } catch (_) {}
+  };
+
+  const lineStyle = (line) => {
+    switch (line.type) {
+      case "error":   return { color: "#ff0000" };
+      case "system":  return { color: "#888", fontStyle: "italic" };
+      case "input":   return { color: "#c18401" };
+      case "keyword": return { color: "#7c00d3" };
+      case "result":  return { color: "#0070c1" };
+      default:        return { color: "#1e1e1e" };
+    }
+  };
+
   return (
-    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0,background:VS.bg}}>
-      <div style={{flex:1,overflowY:'auto',padding:'10px 14px',fontFamily:VS.mono,fontSize:'13px',lineHeight:'1.85'}}>
-        {lines.map((line,i)=>(
-          <div key={i} style={{color:C[line.type]||VS.text,whiteSpace:'pre-wrap',wordBreak:'break-word',display:'flex',alignItems:'flex-start',gap:6}}>
-            {line.type==='error'  &&<span style={{flexShrink:0,marginTop:2}}>✕</span>}
-            {line.type==='success'&&<span style={{flexShrink:0,marginTop:2}}>✓</span>}
-            {line.type==='input'  &&<span style={{flexShrink:0,marginTop:2,color:VS.textDim}}>›</span>}
-            <span>{line.text}</span>
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "#ffffff", display: "flex", flexDirection: "column" }}>
+      <div style={{
+        background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
+        padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", gap: 5 }}>
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#ff5f56" }} />
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#ffbd2e" }} />
+          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#27c93f" }} />
+        </div>
+        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#555", marginLeft: 4 }}>
+          PySkill Terminal — {langLabel || "Output"}
+        </span>
+        {isRunning && (
+          <span style={{ fontSize: 11, color: "#0070c1", display: "flex", alignItems: "center", gap: 4, marginLeft: 6 }}>
+            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#0070c1", animation: "blink 1s infinite" }} />
+            Running
+          </span>
+        )}
+        {/* ✅ Copy Output button */}
+        <button onClick={copyOutput} style={{
+          marginLeft: "auto",
+          background: termCopied ? "#f0fdf4" : "#fff",
+          border: `1px solid ${termCopied ? "#bbf7d0" : "#ddd"}`,
+          color: termCopied ? "#16a34a" : "#555",
+          borderRadius: 7, padding: "5px 10px", fontSize: 11,
+          cursor: "pointer", transition: "all 0.2s",
+          fontFamily: "'JetBrains Mono',monospace",
+        }}>
+          {termCopied ? "✓ Copied!" : "⎘ Copy"}
+        </button>
+        <button onClick={onClose} style={{
+          background: "#fff", border: "1px solid #ddd", color: "#555",
+          borderRadius: 7, padding: "5px 14px", fontSize: 12, cursor: "pointer",
+        }}>✕ Close</button>
+      </div>
+
+      {/* ✅ userSelect: text — terminal output selectable hai */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", background: "#ffffff", userSelect: "text", WebkitUserSelect: "text" }}>
+        <div style={{
+          fontFamily: "'JetBrains Mono',monospace", fontSize: 12,
+          color: "#aaa", marginBottom: 8, borderBottom: "1px solid #f0f0f0", paddingBottom: 8,
+          userSelect: "none",
+        }}>
+          {langLabel} · PySkill Compiler ───────────────
+        </div>
+        {isRunning && lines.length === 0 && (
+          <span style={{ color: "#888", fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}>▶ Running...</span>
+        )}
+        {lines.map((line, i) => (
+          <div key={`${i}-${line.type}`} style={{
+            fontFamily: "'JetBrains Mono','Fira Code',monospace",
+            fontSize: 13, lineHeight: "1.85",
+            ...lineStyle(line),
+            whiteSpace: "pre-wrap", wordBreak: "break-all",
+            paddingLeft: line.type === "error" ? 10 : 0,
+            borderLeft: line.type === "error" ? "2px solid #ff0000" : "none",
+            userSelect: "text", WebkitUserSelect: "text",
+          }}>
+            {line.type === "error" ? "✖ " : line.type === "system" ? "● " : ""}{line.text}
           </div>
         ))}
-        {isWaiting&&(
-          <div style={{display:'flex',alignItems:'center',flexWrap:'wrap'}}>
-            <span style={{color:VS.purple,fontFamily:VS.mono,fontSize:'13px',whiteSpace:'pre'}}>{currentPrompt}</span>
-            <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)}
-              onKeyDown={e=>{ if(e.key==='Enter') submit(); }}
-              placeholder="type here..."
-              style={{flex:1,minWidth:60,background:'transparent',border:'none',outline:'none',fontFamily:VS.mono,fontSize:'13px',color:VS.blue,caretColor:VS.blue,fontWeight:600,lineHeight:'1.85'}}
-              autoFocus/>
+        {inputPrompt !== null && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+            <span style={{ color: "#c18401", fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}>
+              {inputPrompt || "▶"}
+            </span>
+            <input
+              autoFocus value={inputVal}
+              onChange={e => setInputVal(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submit()}
+              style={{
+                flex: 1, background: "#f5f5f5", border: "1px solid #ddd",
+                color: "#1e1e1e", borderRadius: 7, padding: "7px 12px",
+                fontFamily: "'JetBrains Mono',monospace", fontSize: 13, outline: "none",
+              }}
+            />
+            <button onClick={submit} style={{
+              background: "#0070c1", border: "none", color: "#fff",
+              borderRadius: 7, padding: "7px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13,
+            }}>↵</button>
           </div>
         )}
-        <div ref={bottomRef}/>
+        <div ref={bottomRef} />
       </div>
-      {isWaiting&&(
-        <div style={{display:'flex',alignItems:'center',gap:8,padding:'5px 12px',background:VS.bg2,borderTop:`1px solid ${VS.border}`,flexShrink:0}}>
-          <span style={{fontSize:'11px',color:VS.purple,fontFamily:VS.mono}}>⌨ Type → Enter</span>
-          <button onClick={submit} style={{marginLeft:'auto',background:VS.accent,border:'none',color:'#fff',padding:'3px 12px',borderRadius:4,fontFamily:VS.mono,fontSize:'11px',cursor:'pointer',fontWeight:700}}>Enter ↵</button>
-        </div>
-      )}
     </div>
   );
-};
+}
 
-// ═══════════════════════════════════════
-//  ✅ LOADING OVERLAY — shows only when
-//     user clicks Run for first time
-// ═══════════════════════════════════════
-const LoadingOverlay = ({ msg, progress }) => (
-  <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:16,background:VS.bg,padding:24}}>
-    <div style={{fontSize:44,animation:'bounce 0.9s ease infinite'}}>🐍</div>
-    <div style={{fontFamily:VS.mono,fontSize:'13px',color:VS.accent,fontWeight:600,textAlign:'center'}}>{msg}</div>
-    {/* Progress bar */}
-    <div style={{width:'220px',height:'4px',background:VS.bg3,borderRadius:4,overflow:'hidden'}}>
-      <div style={{height:'100%',width:progress+'%',background:VS.accent,borderRadius:4,transition:'width 0.4s ease'}}/>
+/* ═══════════════════════════════════════════════════
+   TURTLE SCREEN
+═══════════════════════════════════════════════════ */
+function TurtleScreen({ html, onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#fff" }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 46,
+        background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
+        display: "flex", alignItems: "center", padding: "0 16px", zIndex: 1,
+      }}>
+        <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 700, color: "#1e1e1e" }}>🐢 Turtle Graphics</span>
+        <button onClick={onClose} style={{
+          marginLeft: "auto", background: "#fff", border: "1px solid #ddd", color: "#555",
+          borderRadius: 7, padding: "6px 16px", fontFamily: "sans-serif", fontSize: 12, cursor: "pointer",
+        }}>← Back</button>
+      </div>
+      <iframe title="turtle" srcDoc={html} style={{ width: "100%", height: "100%", border: "none", paddingTop: 46 }} />
     </div>
-    <div style={{fontFamily:VS.mono,fontSize:'10px',color:VS.textDim}}>First run only — then instant ⚡</div>
-  </div>
-);
+  );
+}
 
-// ═══════════════════════════════════════
-//  MAIN COMPILER
-// ═══════════════════════════════════════
-const PythonCompiler = ({ initialCode='', onClose=null }) => {
-  const initLang = detectLang(initialCode)||'python';
-  const initCode = initialCode?.trim() ? initialCode : SAMPLES[initLang];
+/* ═══════════════════════════════════════════════════
+   HTML PREVIEW SCREEN
+═══════════════════════════════════════════════════ */
+function HTMLScreen({ html, onClose }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#fff" }}>
+      <div style={{
+        position: "absolute", top: 0, left: 0, right: 0, height: 46,
+        background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
+        display: "flex", alignItems: "center", padding: "0 16px", zIndex: 1,
+      }}>
+        <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 700, color: "#1e1e1e" }}>🌐 HTML Preview</span>
+        <button onClick={onClose} style={{
+          marginLeft: "auto", background: "#fff", border: "1px solid #ddd", color: "#555",
+          borderRadius: 7, padding: "6px 16px", fontFamily: "sans-serif", fontSize: 12, cursor: "pointer",
+        }}>← Back</button>
+      </div>
+      <iframe title="html-preview" srcDoc={html} style={{ width: "100%", height: "100%", border: "none", paddingTop: 46 }} />
+    </div>
+  );
+}
 
-  const [lang,       setLang]      = useState(initLang);
-  const [code,       setCode]      = useState(initCode);
-  // ✅ Status starts 'idle' immediately — no booting state on open
-  const [status,     setStatus]    = useState('idle');
-  const [termLines,  setTermLines] = useState([
-    {type:'system', text:`${LANGS[initLang].icon} ${LANGS[initLang].label} — Ready`},
-    {type:'info',   text:'▶ Press Run to execute your code\n'},
-  ]);
-  const [isWaiting,  setIsWaiting] = useState(false);
-  const [curPrompt,  setCurPrompt] = useState('');
-  const [inputQueue, setInputQueue]= useState([]);
-  const [inputIdx,   setInputIdx]  = useState(0);
-  const [allPrompts, setAllPrompts]= useState([]);
-  const [pendingCode,setPending]   = useState('');
-  const [execTime,   setExecTime]  = useState(null);
-  const [hasError,   setHasError]  = useState(false);
-  const [isFixing,   setIsFixing]  = useState(false);
-  const [fixMsg,     setFixMsg]    = useState('');
-  const [showFix,    setShowFix]   = useState(false);
-  const [fontSize,   setFontSize]  = useState(()=>window.innerWidth<=600?12:13);
-  const [copied,     setCopied]    = useState(false);
-  const [termCopied, setTermCopied]= useState(false);
-  const [showPreview,setShowPreview]=useState(false);
-  const [menuOpen,   setMenuOpen]  = useState(false);
-  const [isMobile,   setIsMobile]  = useState(()=>window.innerWidth<=600);
+/* ═══════════════════════════════════════════════════
+   PYTHON LOAD OVERLAY
+═══════════════════════════════════════════════════ */
+function PyLoadOverlay({ progress, msg }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 500,
+      background: "rgba(255,255,255,0.97)",
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 18,
+    }}>
+      <div style={{
+        width: 52, height: 52, borderRadius: 14, background: "#f0f7ff", border: "1px solid #bfdbfe",
+        display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26,
+      }}>🐍</div>
+      <div style={{ fontFamily: "sans-serif", fontSize: 14, fontWeight: 600, color: "#1e1e1e" }}>
+        {msg || "Loading Python..."}
+      </div>
+      <div style={{ width: 220, background: "#e0e0e0", borderRadius: 10, height: 5, overflow: "hidden" }}>
+        <div style={{
+          height: "100%", width: progress + "%",
+          background: "linear-gradient(90deg,#0070c1,#008000)",
+          borderRadius: 10, transition: "width 0.4s ease",
+        }} />
+      </div>
+      <div style={{ fontFamily: "sans-serif", fontSize: 11, color: "#aaa" }}>First time only — then instant ⚡</div>
+    </div>
+  );
+}
 
-  // ✅ Loading state for lazy pyodide
-  const [pyLoading,  setPyLoading] = useState(false);
-  const [pyLoadMsg,  setPyLoadMsg] = useState('');
-  const [pyProgress, setPyProgress]= useState(0);
+/* ═══════════════════════════════════════════════════
+   MAIN APP
+═══════════════════════════════════════════════════ */
+export default function App({ setCurrentPage, initialCode }) {
+  const [lang,       setLang]       = useState("python");
+  const [code,       setCode]       = useState(initialCode || TEMPLATES.python);
+  const [screen,     setScreen]     = useState("editor");
+  const [langOpen,   setLangOpen]   = useState(false);
+  const [termLines,  setTermLines]  = useState([]);
+  const [termRunning,setTermRunning]= useState(false);
+  const [inputPrompt,setInputPrompt]= useState(null);
+  const [turtleHTML, setTurtleHTML] = useState("");
+  const [htmlSrc,    setHtmlSrc]    = useState("");
+  const [pyLoading,  setPyLoading]  = useState(false);
+  const [pyProgress, setPyProgress] = useState(0);
+  const [pyMsg,      setPyMsg]      = useState("");
+  const [hasError,   setHasError]   = useState(false);
+  const [lastError,  setLastError]  = useState("");
+  const [isFixing,   setIsFixing]   = useState(false);
+  const [fixMsg,     setFixMsg]     = useState("");
+  const [copyDone,   setCopyDone]   = useState(false);
 
-  const codeRef = useRef(code);
-  useEffect(()=>{ codeRef.current=code; },[code]);
-  useEffect(()=>{
-    const h=()=>setIsMobile(window.innerWidth<=600);
-    window.addEventListener('resize',h);
-    return ()=>window.removeEventListener('resize',h);
-  },[]);
+  const inputResolveRef = useRef(null);
 
-  // ✅ NO useEffect boot — Pyodide loads only when Run is clicked
-  // Optionally: preload in background after 3s (silent, no UI change)
-  useEffect(()=>{
-    const timer = setTimeout(()=>{
-      if (!_pyodideReady) {
-        // Silent background preload — no UI change
-        loadPyodideLazy(()=>{}).catch(()=>{});
-      }
-    }, 3000); // start preloading after 3s silently
-    return ()=>clearTimeout(timer);
-  },[]);
+  useEffect(() => { if (initialCode) setCode(initialCode); }, [initialCode]);
 
-  const addLine  = (type,text) => setTermLines(p=>[...p,{type,text}]);
-  const addLines = (nl)        => setTermLines(p=>[...p,...nl]);
+  useEffect(() => {
+    if (!_pyReady && !_pyLoading) { loadPy(() => {}).catch(() => {}); }
+  }, []);
 
-  const resetTerminal = () => {
-    setIsWaiting(false); setCurPrompt('');
-    setInputQueue([]); setInputIdx(0); setAllPrompts([]);
-    setPending(''); setExecTime(null); setHasError(false);
-    setShowFix(false); setShowPreview(false);
+  const addLine = useCallback((text, type = "output") => {
+    setTermLines(p => [...p, { text, type }]);
+    if (type === "error") {
+      setHasError(true);
+      setLastError(prev => prev ? prev + "\n" + text : text);
+    }
+  }, []);
+
+  const waitForInput = useCallback((prompt) => {
+    return new Promise(resolve => { setInputPrompt(prompt); inputResolveRef.current = resolve; });
+  }, []);
+
+  const handleInputSubmit = useCallback((val) => {
+    setInputPrompt(null);
+    addLine(val, "input");
+    inputResolveRef.current?.(val);
+    inputResolveRef.current = null;
+  }, [addLine]);
+
+  const switchLang = (k) => {
+    setLang(k); setCode(TEMPLATES[k]); setLangOpen(false);
+    setHasError(false); setLastError(""); setFixMsg("");
+    setScreen("editor"); setTermLines([]);
   };
 
-  // ═══════════════════════════════════════
-  //  Execute Python (called after py ready)
-  // ═══════════════════════════════════════
-  const doExecute = useCallback(async(codeToRun, stdinArr) => {
-    setStatus('running');
-    const t0=Date.now();
+  const handleCopy = async () => {
+    try { await navigator.clipboard?.writeText(code); setCopyDone(true); setTimeout(() => setCopyDone(false), 1500); } catch (_) {}
+  };
+
+  /* ── AI FIX ── */
+  const doFix = useCallback(async () => {
+    if (!lastError || isFixing) return;
+    setIsFixing(true); setFixMsg("AI is analyzing the error...");
     try {
-      const py = _pyodide;
-      const BUILTIN = new Set(['sys','io','os','re','math','json','time','random','datetime','collections','itertools','functools','string','pathlib','builtins','abc','copy','typing','enum','dataclasses','contextlib','hashlib','base64','struct','array','heapq','bisect','gc','inspect','traceback','warnings','logging','csv','sqlite3','argparse','glob','tempfile','calendar','pprint','textwrap','ast','token','unittest','threading','queue','multiprocessing','concurrent','asyncio','subprocess','socket','ssl','http','html','xml','email','urllib','ftplib','smtplib','zipfile','tarfile','gzip','shutil','stat','platform','signal','ctypes','decimal','fractions','statistics','cmath','numbers','operator','codecs','unicodedata','locale','pickle','shelve','dbm','importlib','pkgutil','runpy','dis','py_compile','tokenize','keyword','linecache','symtable','antigravity','this','__future__','__main__']);
-      const importRe=/^(?:import|from)\s+([\w]+)/gm;
-      const toInstall=new Set(); let im;
-      while((im=importRe.exec(codeToRun))!==null){
-        const p=im[1]; if(!BUILTIN.has(p)&&!BUILTIN.has(p.toLowerCase())) toInstall.add(p);
+      const langLabel = LANGS[lang]?.label || lang;
+      let reply = "";
+      await callAI([
+        { role: "system", content: `You are an expert ${langLabel} developer. Fix the buggy code. Return ONLY the corrected code inside a markdown code block (\`\`\`${lang}\n...\n\`\`\`). No explanation, no extra text.` },
+        { role: "user",   content: `${langLabel} code with error:\n\`\`\`${lang}\n${code}\n\`\`\`\n\nError message:\n${lastError}\n\nReturn only the fixed code block.` },
+      ], (partial) => { reply = partial; });
+      const match = reply.match(/```(?:\w+)?\n([\s\S]+?)```/);
+      if (match) {
+        setCode(match[1].trim()); setHasError(false); setLastError("");
+        setFixMsg("✓ Fixed! Run again to verify."); setTimeout(() => setFixMsg(""), 4000);
+      } else {
+        setFixMsg("Could not auto-fix. Please check manually."); setTimeout(() => setFixMsg(""), 5000);
       }
-      if(toInstall.size>0){
-        addLine('system',`📦 Installing: ${[...toInstall].join(', ')}...`);
-        try{
-          const PYODIDE_PKGS=['numpy','pandas','matplotlib','scipy','Pillow','sympy','networkx','scikit-learn','statsmodels','bokeh','lxml','cryptography','regex','pyyaml'];
-          const pyPkgs=[...toInstall].filter(p=>PYODIDE_PKGS.map(x=>x.toLowerCase()).includes(p.toLowerCase()));
-          const mpPkgs=[...toInstall].filter(p=>!PYODIDE_PKGS.map(x=>x.toLowerCase()).includes(p.toLowerCase()));
-          if(pyPkgs.length>0) { try{ await py.loadPackage(pyPkgs); }catch{} }
-          if(mpPkgs.length>0){
-            await py.runPythonAsync(`
-import micropip
-for _p in ${JSON.stringify(mpPkgs)}:
-    try: await micropip.install(_p)
-    except: pass
-`);
-          }
-          addLine('success','Packages ready');
-        }catch{ addLine('info','Some packages unavailable in browser'); }
-      }
-
-      py.globals.set('_stdin_data', py.toPy(stdinArr));
-      py.runPython(`
-import sys,io,builtins
-_out=[];_err=[]
-_sin=list(_stdin_data);_si=0
-class _W(io.TextIOBase):
-    def __init__(self,b): self._b=b
-    def write(self,s): self._b.append(str(s));return len(s)
-    def flush(self): pass
-class _R(io.TextIOBase):
-    def readline(self):
-        global _si
-        if _si<len(_sin): v=_sin[_si];_si+=1;return str(v)+'\\n'
-        return ''
-sys.stdout=_W(_out);sys.stderr=_W(_err);sys.stdin=_R()
-def _inp(p=''):
-    if p: sys.stdout.write(str(p));sys.stdout.flush()
-    return sys.stdin.readline().rstrip('\\n')
-builtins.input=_inp
-try:
-    import requests as _req
-    _o_get=_req.get;_o_post=_req.post
-    _P='https://corsproxy.io/?'
-    def _pg(url,**kw): return _o_get((_P+url if not url.startswith(_P) else url),**kw)
-    def _pp(url,**kw): return _o_post((_P+url if not url.startswith(_P) else url),**kw)
-    _req.get=_pg;_req.post=_pp
-except: pass
-`);
-      let runErr=false, errMsg='';
-      try { py.runPython(codeToRun); }
-      catch(e){ runErr=true; errMsg=String(e).replace(/^PythonError:\s*/,''); }
-
-      const elapsed=((Date.now()-t0)/1000).toFixed(2);
-      setExecTime(elapsed);
-      const fullOut=py.globals.get('_out').toJs().join('');
-      const fullErr=py.globals.get('_err').toJs().join('')+(runErr?errMsg:'');
-      const nl=[];
-      if(fullOut) fullOut.split('\n').forEach((l,i,a)=>{ if(i<a.length-1||l) nl.push({type:'output',text:l}); });
-      if(fullErr) fullErr.split('\n').forEach(l=>{ if(l) nl.push({type:'error',text:l}); });
-      if(!fullOut&&!fullErr) nl.push({type:'success',text:'Ran successfully (no output)'});
-      nl.push({type:'info',text:`⏱ ${elapsed}s`});
-      addLines(nl);
-      if(runErr||fullErr){ setStatus('error');setHasError(true);setFixMsg('Error found — click Fix 🔧');setShowFix(true); }
-      else { setStatus('success');setHasError(false);setShowFix(false); }
-    } catch(e) {
-      addLine('error',e.message);
-      setStatus('error');setHasError(true);
-      setFixMsg('Error found — click Fix 🔧');setShowFix(true);
+    } catch (e) {
+      setFixMsg("AI unavailable: " + e.message); setTimeout(() => setFixMsg(""), 5000);
     }
-    setIsWaiting(false);
-    setPyLoading(false);
-  },[]);
+    setIsFixing(false);
+  }, [lang, code, lastError, isFixing]);
 
-  // ═══════════════════════════════════════
-  //  ✅ RUN — lazy load Pyodide if needed
-  // ═══════════════════════════════════════
-  const runCode = useCallback(async(codeOverride) => {
-    const raw = typeof codeOverride==='string' ? codeOverride : codeRef.current;
-    const detected = detectLang(raw);
-    const effectiveLang = detected||lang;
-    const effectiveRunner = LANGS[effectiveLang]?.runner||'python';
-    if(detected&&detected!==lang) setLang(detected);
+  /* ── RUN CODE ── */
+  const runCode = useCallback(async (codeToRun) => {
+    const raw = (codeToRun ?? code).trim();
+    if (!raw) return;
+    const runner = LANGS[lang]?.runner || "pyodide";
+    setHasError(false); setLastError(""); setFixMsg("");
 
-    // HTML preview
-    if(effectiveRunner==='html'){
-      setShowPreview(true); setStatus('success'); return;
-    }
+    if (runner === "html") { setHtmlSrc(raw); setScreen("html"); return; }
+    if (runner === "pyodide" && hasTurtle(raw)) { setTurtleHTML(makeTurtleHTML(raw)); setScreen("turtle"); return; }
 
-    // JavaScript
-    if(effectiveRunner==='js'){
-      resetTerminal();
-      setTermLines([{type:'info',text:'⚡ Running JavaScript...'}]);
-      setStatus('running');
-      const logs=[];
-      const oL=console.log,oE=console.error,oW=console.warn;
-      console.log  =(...a)=>logs.push({type:'output',text:a.map(x=>typeof x==='object'?JSON.stringify(x,null,2):String(x)).join(' ')});
-      console.error=(...a)=>logs.push({type:'error', text:a.map(String).join(' ')});
-      console.warn =(...a)=>logs.push({type:'info',  text:a.map(String).join(' ')});
-      const t0=Date.now();
-      try{
-        // eslint-disable-next-line no-eval
-        eval(raw);
-        const el=((Date.now()-t0)/1000).toFixed(2);
-        setTermLines([...logs,...(logs.length===0?[{type:'success',text:'Ran (no output)'}]:[]),{type:'info',text:`⏱ ${el}s`}]);
-        setExecTime(el);setStatus('success');setHasError(false);
-      }catch(e){
-        const el=((Date.now()-t0)/1000).toFixed(2);
-        setTermLines([...logs,{type:'error',text:e.message},{type:'info',text:`⏱ ${el}s`}]);
-        setStatus('error');setHasError(true);setFixMsg('Error — click Fix 🔧');setShowFix(true);
-      }
-      console.log=oL;console.error=oE;console.warn=oW;
-      return;
-    }
+    setTermLines([]); setTermRunning(true); setScreen("output");
 
-    // AI languages
-    if(effectiveRunner==='ai'){
-      resetTerminal();setStatus('running');
-      const cfg=LANGS[effectiveLang]||LANGS[lang];
-      setTermLines([{type:'system',text:`${cfg.icon} ${cfg.label} — AI simulating output...`}]);
-      try{
-        const resp=await fetch(AI_URL,{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({messages:[
-            {role:'system',content:`Simulate ${effectiveLang} output. Format: [one line what code does]\n\n[exact console output only]. No markdown.`},
-            {role:'user',content:`${effectiveLang}:\n\n${raw}`}
-          ],max_tokens:300,temperature:0.1})});
-        const reader=resp.body.getReader(),decoder=new TextDecoder();
-        let reply='',leftover='';
-        while(true){
-          const{done,value}=await reader.read();if(done)break;
-          const chunk=leftover+decoder.decode(value,{stream:true});
-          const ls=chunk.split('\n');leftover=ls.pop()||'';
-          for(const l of ls){
-            const t=l.trim();if(!t.startsWith('data: '))continue;
-            const d=t.slice(6).trim();if(d==='[DONE]'||!d)continue;
-            try{const p=JSON.parse(d);const delta=p.choices?.[0]?.delta?.content;if(delta)reply+=delta;}catch{}
-          }
-        }
-        const rlines=reply.trim().split('\n');
-        const nl=[];let outputSection=false;
-        for(let i=0;i<rlines.length;i++){
-          if(i===0){nl.push({type:'info',text:rlines[0]});continue;}
-          if(!outputSection&&rlines[i].trim()===''){outputSection=true;continue;}
-          if(outputSection) nl.push({type:'output',text:rlines[i]});
-        }
-        setTermLines(nl);setStatus('success');
-      }catch{
-        setTermLines([{type:'error',text:'AI offline. Check network.'}]);setStatus('error');
-      }
-      return;
-    }
-
-    // ✅ Python — lazy load Pyodide
-    const toRun = normalizeIndent(raw);
-    setCode(toRun); codeRef.current=toRun;
-    resetTerminal();
-
-    // If Pyodide not ready — show loading in output panel (not blocking UI)
-    if (!_pyodideReady) {
-      setPyLoading(true);
-      setPyProgress(5);
-      setPyLoadMsg('📦 Downloading Python runtime (~10MB)...');
-      setTermLines([{type:'system',text:'🐍 Loading Python for first run...'}]);
-      setStatus('booting');
-
+    if (runner === "eval") {
+      const logs = [];
+      const oL = console.log, oE = console.error, oW = console.warn;
+      console.log   = (...a) => logs.push({ t: "output", v: a.map(x => typeof x === "object" ? JSON.stringify(x, null, 2) : String(x)).join(" ") });
+      console.error = (...a) => logs.push({ t: "error",  v: a.map(String).join(" ") });
+      console.warn  = (...a) => logs.push({ t: "output", v: a.map(String).join(" ") });
       try {
-        await loadPyodideLazy((s) => {
-          if(s==='downloading') { setPyLoadMsg('📦 Downloading Python (~10MB, only once)...'); setPyProgress(20); }
-          if(s==='starting')    { setPyLoadMsg('🐍 Starting Python 3.11...');                  setPyProgress(70); }
-          if(s==='packages')    { setPyLoadMsg('📦 Loading micropip...');                       setPyProgress(90); }
-          if(s==='ready')       { setPyLoadMsg('✅ Python ready!');                              setPyProgress(100); }
-        });
-      } catch(err) {
-        setPyLoading(false);
-        setTermLines([{type:'error',text:`Failed to load Python: ${err.message}`}]);
-        setStatus('error');
-        return;
+        if (/\bawait\b/.test(raw)) {
+          // eslint-disable-next-line no-new-func
+          await (new Function("return (async () => { " + raw + " })()")());
+        } else {
+          eval(raw);
+        }
+      } catch (e) { logs.push({ t: "error", v: e.message }); }
+      console.log = oL; console.error = oE; console.warn = oW;
+      if (logs.length) logs.forEach(l => addLine(l.v, l.t));
+      else addLine("Done (no output)", "system");
+      setTermRunning(false); return;
+    }
+
+    if (runner === "ai") {
+      try {
+        const langLabel = LANGS[lang]?.label || lang;
+        let out = "";
+        await callAI([
+          { role: "system", content: `Simulate the exact console output of this ${langLabel} program. Return ONLY the raw output lines. No markdown, no explanation.` },
+          { role: "user",   content: raw },
+        ], (partial) => { out = partial; });
+        if (out.trim()) out.trim().split("\n").forEach(l => addLine(l));
+        else addLine("Done (no output)", "system");
+      } catch (e) { addLine("AI unavailable: " + e.message, "error"); }
+      setTermRunning(false); return;
+    }
+
+    if (!_pyReady) {
+      setPyLoading(true);
+      try {
+        await loadPy((pct, msg) => { setPyProgress(pct); setPyMsg(msg); });
+      } catch (e) {
+        addLine("Python load failed: " + e.message, "error");
+        setTermRunning(false); setPyLoading(false); return;
       }
       setPyLoading(false);
     }
 
-    setTermLines([{type:'info',text:'⚡ Running...'}]);
-    const prompts = detectInputCalls(toRun);
-    if(prompts.length>0){
-      setPending(toRun); setAllPrompts(prompts); setInputIdx(0); setInputQueue([]);
-      setTermLines([]); setCurPrompt(prompts[0]); setIsWaiting(true); setStatus('waiting');
-    } else {
-      await doExecute(toRun,[]);
+    if (!_py) {
+      addLine("Python runtime not available. Please refresh.", "error");
+      setTermRunning(false); return;
     }
-  },[doExecute,lang]);
 
-  const handleInput = useCallback((val)=>{
-    addLine('input',(curPrompt||'')+val);
-    const nq=[...inputQueue,val], ni=inputIdx+1;
-    setInputQueue(nq);
-    if(ni<allPrompts.length){ setInputIdx(ni); setCurPrompt(allPrompts[ni]); }
-    else{ setIsWaiting(false); setCurPrompt(''); addLine('info','⚡ Running...'); doExecute(pendingCode,nq); }
-  },[curPrompt,inputQueue,inputIdx,allPrompts,pendingCode,doExecute]);
+    const py = _py;
+    try {
+      const BUILTIN = new Set(["sys","io","os","re","math","json","time","random","datetime","collections","itertools","functools","string","pathlib","builtins","abc","copy","typing","enum","hashlib","base64","struct","array","heapq","bisect","gc","inspect","traceback","warnings","logging","csv","sqlite3","glob","tempfile","calendar","pprint","textwrap","ast","unittest","asyncio","subprocess","socket","http","html","xml","email","urllib","zipfile","gzip","shutil","stat","platform","decimal","fractions","statistics","cmath","operator","codecs"]);
+      const re2 = /^(?:import|from)\s+([\w]+)/gm;
+      const toInstall = new Set(); let m2;
+      while ((m2 = re2.exec(raw)) !== null) { const p = m2[1]; if (!BUILTIN.has(p)) toInstall.add(p); }
+      if (toInstall.size > 0) {
+        addLine(`Installing: ${[...toInstall].join(", ")}...`, "system");
+        try { await py.runPythonAsync(`import micropip\nfor _p in ${JSON.stringify([...toInstall])}:\n    try: await micropip.install(_p)\n    except: pass`); addLine(`Packages ready ✓`, "system"); } catch (_) {}
+      }
 
-  // AI Fix
-  const handleFix = useCallback(async()=>{
-    if(isFixing||!codeRef.current.trim()) return;
-    setIsFixing(true); setFixMsg('🤖 AI fixing...'); setShowFix(true);
-    const fixed=await aiAutoFix(codeRef.current,lang);
-    if(fixed){
-      const oL=codeRef.current.split('\n'), fL=fixed.split('\n');
-      let diff=0;
-      for(let i=0;i<Math.max(oL.length,fL.length);i++) if(oL[i]!==fL[i]) diff++;
-      setCode(fixed); codeRef.current=fixed;
-      setFixMsg(diff>0?`✅ Fixed ${diff} line${diff>1?'s':''}`:'✅ No changes needed');
-    } else {
-      const f=normalizeIndent(codeRef.current); setCode(f); codeRef.current=f;
-      setFixMsg('🔧 Indentation fixed');
-    }
-    setIsFixing(false); setHasError(false);
-    setTimeout(()=>setShowFix(false),4000);
-  },[isFixing,lang]);
+      py.runPython(`
+import sys,io,builtins
+_out=[];_err=[]
+class _W(io.TextIOBase):
+    def __init__(self,b):self._b=b
+    def write(self,s):self._b.append(str(s));return len(s)
+    def flush(self):pass
+sys.stdout=_W(_out);sys.stderr=_W(_err)
+`);
 
-  const handleLangChange = (l) => {
-    setLang(l); setCode(SAMPLES[l]||''); codeRef.current=SAMPLES[l]||'';
-    resetTerminal(); setMenuOpen(false);
-    const c=LANGS[l];
-    setTermLines([{type:'system',text:`${c.icon} ${c.label} — Ready`},{type:'info',text:'▶ Run to execute\n'}]);
-    setStatus('idle');
+      if (hasInput(raw)) {
+        const prompts = getPrompts(raw);
+        const inputs = [];
+        for (const p of prompts) { const val = await waitForInput(p); inputs.push(val); }
+        py.globals.set("_stdin_data", py.toPy(inputs));
+        py.runPython(`
+import sys,io
+_sin=list(_stdin_data);_si=0
+class _R(io.TextIOBase):
+    def readline(self):
+        global _si
+        if _si<len(_sin):v=_sin[_si];_si+=1;return str(v)+"\\n"
+        return ""
+def _inp(p=""):
+    if p:sys.stdout.write(str(p));sys.stdout.flush()
+    return sys.stdin.readline().rstrip("\\n")
+sys.stdin=_R()
+builtins.input=_inp
+`);
+      }
+
+      let runErr = false, errMsg = "";
+      try { py.runPython(raw); }
+      catch (e) { runErr = true; errMsg = String(e).replace(/^PythonError:\s*/, "").trim(); }
+
+      const out = py.globals.get("_out").toJs().join("");
+      const err = py.globals.get("_err").toJs().join("") + (runErr ? errMsg : "");
+      if (out) out.trimEnd().split("\n").forEach(l => addLine(l));
+      if (!out && !err) addLine("Done (no output)", "system");
+      if (err) addLine(err.trimEnd(), "error");
+
+    } catch (e) { addLine("Error: " + e.message, "error"); }
+    setTermRunning(false);
+  }, [code, lang, addLine, waitForInput]);
+
+  const handleBack = () => {
+    if (typeof setCurrentPage === "function") setCurrentPage("home");
+    else window.history.back();
   };
 
-  const handleBack     = ()=>{ if(onClose) onClose(); else if(window.history.length>1) window.history.back(); else window.location.href='/'; };
-  const handleCopyCode = ()=>{
-    const el=document.createElement('textarea'); el.value=code;
-    document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-    navigator.clipboard?.writeText(code).catch(()=>{});
-    setCopied(true); setTimeout(()=>setCopied(false),2000);
-  };
-  const handleCopyOutput = ()=>{
-    const text=termLines.filter(l=>l.type!=='system').map(l=>l.text).join('\n').trim()||'(no output)';
-    const el=document.createElement('textarea'); el.value=text;
-    document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el);
-    navigator.clipboard?.writeText(text).catch(()=>{});
-    setTermCopied(true); setTimeout(()=>setTermCopied(false),2000);
-  };
-  const handleClear = ()=>{
-    resetTerminal(); setStatus('idle');
-    const c=LANGS[lang];
-    setTermLines([{type:'system',text:`${c.icon} ${c.label} — Ready`},{type:'info',text:'▶ Run\n'}]);
-  };
-  const handleDownload = ()=>{
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([code],{type:'text/plain'}));
-    a.download=LANGS[lang]?.file||'main.txt'; a.click();
-  };
+  const cl = LANGS[lang];
+  if (screen === "turtle") return <TurtleScreen html={turtleHTML} onClose={() => setScreen("editor")} />;
+  if (screen === "html")   return <HTMLScreen   html={htmlSrc}    onClose={() => setScreen("editor")} />;
+  if (screen === "output") return (
+    <>
+      {pyLoading && <PyLoadOverlay progress={pyProgress} msg={pyMsg} />}
+      <OutputPanel
+        lines={termLines} isRunning={termRunning}
+        onClose={() => setScreen("editor")}
+        inputPrompt={inputPrompt} onInputSubmit={handleInputSubmit}
+        langLabel={cl.label}
+      />
+    </>
+  );
 
-  const lineCount=(code||'').split('\n').length;
-  const runner=LANGS[lang]?.runner||'python';
-  // ✅ canRun — always true for non-python, always true for python (lazy loads)
-  const canRun = status!=='running'&&status!=='waiting'&&status!=='booting';
-  const isRunning=status==='running'||status==='booting';
-  const cfg=LANGS[lang]||LANGS.python;
-
-  const sColor={idle:VS.accent,booting:'#d97706',running:VS.accent,waiting:VS.purple,success:VS.green,error:VS.red}[status]||VS.accent;
-  const sLabel={idle:'Ready',booting:'Loading...',running:'Running...',waiting:'Waiting',success:'Done ✓',error:'Error'}[status]||'Ready';
-
-  const fixBg   = fixMsg.startsWith('✅')?VS.greenBg : fixMsg.startsWith('🤖')?VS.accentBg : '#fef2f2';
-  const fixBord = fixMsg.startsWith('✅')?VS.green   : fixMsg.startsWith('🤖')?VS.accent   : VS.red;
-  const fixTxt  = fixMsg.startsWith('✅')?VS.green   : fixMsg.startsWith('🤖')?VS.accent   : VS.red;
-
+  /* ═══════════════════════════════════════════════════
+     EDITOR SCREEN
+  ═══════════════════════════════════════════════════ */
   return (
-    <div style={{display:'flex',flexDirection:'column',position:'fixed',inset:0,background:VS.bg,color:VS.text,fontFamily:'"Segoe UI",system-ui,sans-serif',overflow:'hidden',zIndex:9999}}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#ffffff", overflow: "hidden" }}>
 
-      {/* ── HEADER */}
-      <div style={{background:VS.bg2,borderBottom:`1px solid ${VS.border}`,display:'flex',alignItems:'center',height:isMobile?'48px':'46px',padding:isMobile?'0 8px':'0 10px',flexShrink:0,gap:isMobile?4:6,boxShadow:'0 1px 4px rgba(0,0,0,0.06)'}}>
+      {/* ── ROW 1: Back + Title + Lang selector ── */}
+      <div style={{
+        height: 46,
+        background: "#f5f5f5",
+        borderBottom: "1px solid #e0e0e0",
+        display: "flex",
+        alignItems: "center",
+        padding: "0 10px",
+        gap: 8,
+        flexShrink: 0,
+      }}>
         {/* Back */}
-        <button onClick={handleBack} style={{background:'transparent',border:`1px solid ${VS.border}`,color:VS.textDim,borderRadius:5,padding:'5px 10px',cursor:'pointer',fontSize:'13px',fontFamily:'inherit',flexShrink:0}}>←</button>
+        <button onClick={handleBack} style={{
+          background: "#fff", border: "1px solid #ddd", color: "#555", borderRadius: 8,
+          padding: "5px 10px", fontSize: 12, cursor: "pointer",
+          fontFamily: "'Space Grotesk', sans-serif",
+          display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
+        }}>← Back</button>
 
-        {/* Language dropdown */}
-        <div style={{position:'relative',flexShrink:0}}>
-          <button onClick={()=>setMenuOpen(o=>!o)} style={{background:VS.bg,border:`1px solid ${VS.border}`,color:VS.text,borderRadius:6,padding:'6px 10px',cursor:'pointer',fontFamily:VS.mono,fontSize:'12px',fontWeight:600,display:'flex',alignItems:'center',gap:5,boxShadow:'0 1px 3px rgba(0,0,0,0.08)'}}>
-            {cfg.icon}{!isMobile&&' '+cfg.label}
-            <span style={{fontSize:'9px',color:VS.textDim}}>▾</span>
+        {/* ✅ NEW TITLE — Space Grotesk, gaand-faad bold */}
+        <span style={{
+          fontFamily: "'Space Grotesk', sans-serif",
+          fontSize: 15,
+          fontWeight: 800,
+          letterSpacing: "-0.4px",
+          flexShrink: 0,
+          color: "#1e1e1e",
+          whiteSpace: "nowrap",
+        }}>
+          Py<span style={{ color: "#0070c1" }}>Skill</span>
+          <span style={{
+            marginLeft: 6,
+            fontSize: 10,
+            fontWeight: 600,
+            color: "#888",
+            letterSpacing: "0.5px",
+            textTransform: "uppercase",
+            verticalAlign: "middle",
+          }}>Compiler</span>
+        </span>
+
+        <div style={{ flex: 1 }} />
+
+        {/* Language selector */}
+        <div style={{ position: "relative" }}>
+          <button onClick={() => setLangOpen(o => !o)} style={{
+            display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid #ddd",
+            borderRadius: 8, padding: "5px 8px", fontFamily: "'JetBrains Mono',monospace",
+            fontSize: 11, fontWeight: 700, color: "#333", cursor: "pointer", flexShrink: 0,
+          }}>
+            <span style={{ width: 20, height: 20, borderRadius: 4, background: cl.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff" }}>{cl.badge}</span>
+            {cl.label}
+            <span style={{ fontSize: 9, color: "#aaa" }}>▾</span>
           </button>
-          {menuOpen&&(
-            <div style={{position:'absolute',top:'calc(100% + 4px)',left:0,background:VS.bg,border:`1px solid ${VS.border}`,borderRadius:8,zIndex:1000,minWidth:'160px',boxShadow:'0 8px 24px rgba(0,0,0,0.12)',overflow:'hidden'}}>
-              {Object.entries(LANGS).map(([k,v])=>(
-                <button key={k} onClick={()=>handleLangChange(k)} style={{width:'100%',padding:'10px 14px',background:lang===k?VS.accentBg:'transparent',border:'none',color:lang===k?VS.accent:VS.text,cursor:'pointer',textAlign:'left',fontFamily:VS.mono,fontSize:'12px',display:'flex',alignItems:'center',gap:8}}>
-                  <span>{v.icon}</span>
-                  <span style={{flex:1}}>{v.label}</span>
-                  {lang===k&&<span style={{color:VS.accent,fontSize:'11px'}}>✓</span>}
+          {langOpen && (
+            <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: "#fff", borderRadius: 10, border: "1px solid #e0e0e0", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, overflow: "hidden", minWidth: 165 }}>
+              {Object.entries(LANGS).map(([k, v]) => (
+                <button key={k} onClick={() => switchLang(k)} style={{
+                  width: "100%", padding: "10px 14px", background: lang === k ? "#f5f5f5" : "transparent",
+                  border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+                  fontFamily: "sans-serif", fontSize: 13, fontWeight: lang === k ? 700 : 400,
+                  color: lang === k ? "#1e1e1e" : "#555", textAlign: "left",
+                }}>
+                  <span style={{ width: 22, height: 22, borderRadius: 5, background: v.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff" }}>{v.badge}</span>
+                  {v.label}
+                  {lang === k && <span style={{ marginLeft: "auto", color: v.color }}>✓</span>}
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Run */}
-        <button onClick={()=>runCode()} disabled={!canRun} style={{background:canRun?VS.accent:'#f0f0f0',border:'none',color:canRun?'#fff':'#aaa',borderRadius:6,padding:isMobile?'7px 12px':'7px 18px',fontWeight:700,fontSize:isMobile?'12px':'13px',cursor:canRun?'pointer':'not-allowed',fontFamily:'inherit',flexShrink:0,transition:'all 0.15s',whiteSpace:'nowrap',boxShadow:canRun?'0 2px 6px rgba(0,102,184,0.3)':'none'}}>
-          {isRunning?'⟳ Running':'▶ Run'}
+        {/* ── RUN BUTTON — animated live gradient, same row ── */}
+        <button onClick={() => runCode(code)} className="run-btn-live" style={{
+          border: "none",
+          color: "#fff",
+          borderRadius: 9,
+          padding: "7px 16px",
+          fontSize: 13,
+          fontWeight: 800,
+          cursor: "pointer",
+          fontFamily: "'Space Grotesk', sans-serif",
+          display: "flex",
+          alignItems: "center",
+          gap: 5,
+          letterSpacing: "0.2px",
+          flexShrink: 0,
+          textShadow: "0 1px 3px rgba(0,0,0,0.25)",
+        }}>
+          <span style={{ fontSize: 10 }}>▶</span> Run
         </button>
-
-        {/* Fix */}
-        <button onClick={handleFix} disabled={isFixing} style={{background:hasError?'#fef2f2':'transparent',border:`1px solid ${hasError?VS.red:VS.border}`,color:hasError?VS.red:VS.textDim,borderRadius:6,padding:isMobile?'7px 8px':'7px 11px',fontSize:'13px',cursor:'pointer',fontFamily:'inherit',flexShrink:0,fontWeight:hasError?700:400,transition:'all 0.15s'}}>
-          {isFixing?'⟳':'🔧'}
-        </button>
-
-        {/* Status */}
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
-          <span style={{width:6,height:6,borderRadius:'50%',background:sColor,animation:(isRunning||status==='waiting')?'pulse 1s ease infinite':'none',display:'inline-block'}}/>
-          <span style={{fontFamily:VS.mono,fontSize:'10px',color:sColor,fontWeight:600}}>{sLabel}</span>
-        </div>
-
-        <button onClick={handleCopyCode} style={{background:'transparent',border:'none',color:VS.textDim,cursor:'pointer',fontSize:'16px',padding:'4px',flexShrink:0}}>{copied?'✅':'⎘'}</button>
-        {!isMobile&&<button onClick={handleDownload} style={{background:'transparent',border:'none',color:VS.textDim,cursor:'pointer',fontSize:'16px',padding:'4px',flexShrink:0}}>↓</button>}
       </div>
 
-      {/* ── TAB BAR */}
-      <div style={{background:VS.bg2,borderBottom:`1px solid ${VS.border}`,display:'flex',alignItems:'flex-end',height:'28px',padding:'0 10px',flexShrink:0}}>
-        <div style={{display:'flex',alignItems:'center',gap:5,background:VS.bg,borderTop:`2px solid ${VS.accent}`,padding:'0 12px',height:'26px',fontSize:'11px',color:VS.textDim,fontFamily:VS.mono}}>
-          {cfg.file}
-          <span style={{width:5,height:5,borderRadius:'50%',background:'#f0883e',marginLeft:3,display:'inline-block'}}/>
-        </div>
-        <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:3,paddingBottom:2}}>
-          <button onClick={()=>setFontSize(f=>Math.max(10,f-1))} style={S.tabBtn}>A-</button>
-          <span style={{fontSize:'10px',color:VS.textMute,minWidth:16,textAlign:'center',fontFamily:VS.mono}}>{fontSize}</span>
-          <button onClick={()=>setFontSize(f=>Math.min(20,f+1))} style={S.tabBtn}>A+</button>
-          <button onClick={handleClear} style={{...S.tabBtn,marginLeft:6}}>🗑</button>
-        </div>
-      </div>
 
-      {/* ── FIX BANNER */}
-      {showFix&&(
-        <div style={{background:fixBg,borderBottom:`1px solid ${fixBord}`,padding:'5px 12px',display:'flex',alignItems:'center',gap:8,flexShrink:0}}>
-          <span style={{fontFamily:VS.mono,fontSize:'11px',fontWeight:600,color:fixTxt}}>{fixMsg}</span>
-          {isFixing&&<span style={{display:'inline-flex',gap:3}}>{[0,1,2].map(i=><span key={i} style={{width:4,height:4,borderRadius:'50%',background:VS.accent,display:'inline-block',animation:`bounce 0.6s ease ${i*0.13}s infinite`}}/>)}</span>}
-          <button onClick={()=>setShowFix(false)} style={{marginLeft:'auto',background:'none',border:'none',color:VS.textMute,cursor:'pointer',fontSize:'13px'}}>✕</button>
+
+      {/* AI FIX BANNER */}
+      {(hasError || fixMsg) && (
+        <div style={{
+          background: !hasError && fixMsg ? "#f0fdf4" : "#fff5f5",
+          borderBottom: "1px solid " + (!hasError && fixMsg ? "#bbf7d0" : "#fecaca"),
+          padding: "7px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+        }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: !hasError && fixMsg ? "#22c55e" : "#ff0000" }} />
+          <span style={{ fontSize: 12, fontFamily: "sans-serif", flex: 1, color: !hasError && fixMsg ? "#16a34a" : "#cc0000" }}>
+            {fixMsg || `${cl.label} error detected`}
+          </span>
+          {hasError && !isFixing && (
+            <button onClick={doFix} style={{ background: "#ff0000", border: "none", color: "#fff", borderRadius: 7, padding: "5px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+              🔧 AI Fix
+            </button>
+          )}
+          {isFixing && (
+            <span style={{ fontSize: 11, color: "#0070c1", display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#0070c1", animation: "blink 0.8s infinite" }} />
+              Fixing...
+            </span>
+          )}
+          {!hasError && fixMsg && (
+            <button onClick={() => setFixMsg("")} style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", fontSize: 15 }}>×</button>
+          )}
         </div>
       )}
 
-      {/* ── MAIN PANE */}
-      <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
-        {/* EDITOR */}
-        <div style={{flex:isMobile?'0 0 50%':'0 0 55%',display:'flex',flexDirection:'column',overflow:'hidden',borderBottom:`1px solid ${VS.border}`}}>
-          <CodeEditor value={code} onChange={v=>{setCode(v);codeRef.current=v;}} lang={lang} fontSize={fontSize} isMobile={isMobile}/>
-        </div>
+      {/* CODE EDITOR */}
+      <CodeEditor code={code} onChange={setCode} lang={lang} />
 
-        {/* OUTPUT HEADER */}
-        <div style={{background:VS.bg2,display:'flex',alignItems:'center',height:'24px',padding:'0 10px',flexShrink:0,gap:8,borderBottom:`1px solid ${VS.border}`}}>
-          <span style={{fontFamily:VS.mono,fontSize:'10px',fontWeight:700,textTransform:'uppercase',letterSpacing:'0.08em',color:VS.textDim}}>
-            {showPreview?'Preview':status==='waiting'?'Input':'Output'}
-          </span>
-          {status==='waiting' &&<span style={{fontSize:'10px',color:VS.purple,animation:'pulse 1s ease infinite'}}>● waiting</span>}
-          {status==='success' &&<span style={{fontSize:'10px',color:VS.green}}>● done</span>}
-          {status==='error'   &&<span style={{fontSize:'10px',color:VS.red}}>● error</span>}
-          {status==='running' &&<span style={{fontSize:'10px',color:VS.accent,animation:'pulse 0.8s ease infinite'}}>● running</span>}
-          {status==='booting' &&<span style={{fontSize:'10px',color:'#d97706',animation:'pulse 0.8s ease infinite'}}>● loading python</span>}
-          <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:6}}>
-            {!showPreview&&!isRunning&&termLines.length>0&&(
-              <button onClick={handleCopyOutput} style={{display:'flex',alignItems:'center',gap:3,background:termCopied?VS.greenBg:'transparent',border:`1px solid ${termCopied?VS.green:VS.border}`,color:termCopied?VS.green:VS.textDim,borderRadius:4,padding:'2px 8px',cursor:'pointer',fontSize:'10px',fontFamily:VS.mono}}>
-                {termCopied?'✅ Copied':'⎘ Copy'}
-              </button>
-            )}
-            {showPreview&&(
-              <button onClick={()=>setShowPreview(false)} style={{background:'none',border:'none',color:VS.textDim,cursor:'pointer',fontSize:'11px',fontFamily:VS.mono}}>← Code</button>
-            )}
-          </div>
-        </div>
+      {/* ── BOTTOM BAR: Clear, Copy, Turtle only (Run moved to top row 2) ── */}
+      <div style={{
+        height: 44, background: "#f5f5f5", borderTop: "1px solid #e0e0e0",
+        display: "flex", alignItems: "center", padding: "0 12px", gap: 6, flexShrink: 0,
+      }}>
+        <button onClick={() => { setCode(""); setHasError(false); setLastError(""); setFixMsg(""); }} style={{
+          background: "#fff", border: "1px solid #ddd", color: "#555",
+          borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer",
+          fontFamily: "sans-serif",
+        }}>Clear</button>
 
-        {/* OUTPUT */}
-        <div style={{flex:1,overflow:'hidden',minHeight:0}}>
-          {showPreview
-            ? <iframe title="preview" style={{width:'100%',height:'100%',border:'none',background:'#fff'}} srcDoc={code}/>
-            : pyLoading
-              ? <LoadingOverlay msg={pyLoadMsg} progress={pyProgress}/>
-              : <Terminal lines={termLines} isWaiting={isWaiting} currentPrompt={curPrompt} onSubmit={handleInput}/>
-          }
-        </div>
+        <button onClick={handleCopy} style={{
+          background: copyDone ? "#f0fdf4" : "#fff",
+          border: `1px solid ${copyDone ? "#bbf7d0" : "#ddd"}`,
+          color: copyDone ? "#16a34a" : "#555",
+          borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer",
+          transition: "all 0.2s", fontFamily: "sans-serif",
+        }}>
+          {copyDone ? "✓ Copied!" : "Copy"}
+        </button>
+
+        {lang === "python" && (
+          <button onClick={() => setCode(TURTLE_CODE)} style={{
+            background: "#fff", border: "1px solid #ddd", color: "#008000",
+            borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer",
+            fontFamily: "sans-serif",
+          }}>🐢 Turtle</button>
+        )}
+
+        <div style={{ flex: 1 }} />
+        <span style={{ fontSize: 11, color: "#bbb", fontFamily: "'JetBrains Mono',monospace" }}>
+          PySkill
+        </span>
       </div>
 
-      {/* ── STATUS BAR */}
-      <div style={{background:VS.accent,display:'flex',alignItems:'center',gap:10,padding:'0 12px',height:'20px',flexShrink:0}}>
-        <span style={{fontFamily:VS.mono,fontSize:'10px',color:'#fff',fontWeight:700}}>{cfg.icon}{!isMobile&&' '+cfg.label}</span>
-        <span style={{color:'rgba(255,255,255,0.4)'}}>|</span>
-        <span style={{fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.9)'}}>Ln {lineCount}</span>
-        {execTime&&<><span style={{color:'rgba(255,255,255,0.4)'}}>|</span><span style={{fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.9)'}}>⏱ {execTime}s</span></>}
-        {runner==='python'&&!_pyodideReady&&<span style={{fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.6)',marginLeft:4}}>· Python loads on first Run</span>}
-        <span style={{marginLeft:'auto',fontFamily:VS.mono,fontSize:'10px',color:'rgba(255,255,255,0.5)'}}>PySkill</span>
-      </div>
-
-      {menuOpen&&<div style={{position:'fixed',inset:0,zIndex:999}} onClick={()=>setMenuOpen(false)}/>}
+      {langOpen && <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setLangOpen(false)} />}
 
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
-        *{box-sizing:border-box;}
-        @keyframes pulse  {0%,100%{opacity:1}50%{opacity:0.3}}
-        @keyframes bounce {0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-        @keyframes fadeIn {from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}
-        ::-webkit-scrollbar{width:4px;height:4px}
-        ::-webkit-scrollbar-track{background:#f3f3f3}
-        ::-webkit-scrollbar-thumb{background:#c0c0c0;border-radius:2px}
-        textarea{-webkit-tap-highlight-color:transparent;}
-        *{-webkit-tap-highlight-color:transparent;}
-        body,html{overflow:hidden;position:fixed;width:100%;height:100%;}
-        input,textarea,select{font-size:16px !important;}
-        button:active{opacity:0.75;}
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: #f5f5f5; }
+        ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+        textarea { -webkit-tap-highlight-color: transparent; }
+        input, textarea { font-size: 16px !important; }
+        button:active { opacity: 0.85; transform: scale(0.97); }
+        body, html { overflow: hidden; position: fixed; width: 100%; height: 100%; background: #fff; }
+        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+        /* ── LIVE GRADIENT RUN BUTTON ── */
+        @keyframes liveGrad {
+          0%   { background-position: 0% 50%; }
+          50%  { background-position: 100% 50%; }
+          100% { background-position: 0% 50%; }
+        }
+        .run-btn-live {
+          background: linear-gradient(
+            270deg,
+            #f43f5e, #f97316, #eab308, #22c55e,
+            #06b6d4, #6366f1, #a855f7, #ec4899, #f43f5e
+          );
+          background-size: 400% 400%;
+          animation: liveGrad 5s ease infinite;
+        }
+        .run-btn-live:hover { filter: brightness(1.1); }
+        .run-btn-live:active { filter: brightness(0.9); transform: scale(0.97); }
       `}</style>
     </div>
   );
-};
-
-const S = {
-  tabBtn:{background:'transparent',border:`1px solid #e4e4e4`,color:'#6e7681',borderRadius:4,padding:'2px 7px',fontSize:'10px',cursor:'pointer',fontFamily:'inherit'},
-};
-
-export default PythonCompiler;
+}

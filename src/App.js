@@ -503,7 +503,17 @@ function App() {
                   {currentPage === 'mocktests' && <MockTestPage />}
                   {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
                   {currentPage === 'aichat' && <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />}
-                  {currentPage === 'compiler' && <PythonCompiler initialCode={compilerInitialCode} onClose={() => setCurrentPage('aichat')} />}
+
+                  {/* ✅ FIX: setCurrentPage prop ab compiler ko pass ho raha hai
+                      Back button click karne par seedha home page pe jayega */}
+                  {currentPage === 'compiler' && (
+                    <PythonCompiler
+                      initialCode={compilerInitialCode}
+                      onClose={() => setCurrentPage('aichat')}
+                      setCurrentPage={setCurrentPage}
+                    />
+                  )}
+
                   {currentPage === 'streak' && <StreakChallengePage isMobile={window.innerWidth <= 768} isDark={isDark} user={user} setCurrentPage={setCurrentPage} onBuy={handleStreakPayment} />}
                   {currentPage === 'streak-practice' && <DailyPractice isMobile={window.innerWidth <= 768} isDark={isDark} user={user} setCurrentPage={setCurrentPage} />}
                   {currentPage === 'streak-result' && <StreakResult isMobile={window.innerWidth <= 768} isDark={isDark} user={user} setCurrentPage={setCurrentPage} />}

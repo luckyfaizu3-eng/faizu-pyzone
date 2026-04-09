@@ -12,7 +12,7 @@
 // ✅ Copy/paste etc     → sirf WARNING, disqualify nahi
 // ✅ SEC-1:  window.open blocked
 // ✅ SEC-2:  Object.freeze on APP_CONFIG
-// ✅ SEC-4:  Console methods neutered
+// ✅ SEC-4:  Console methods neutered + restored on disable
 // ✅ SEC-5:  navigator.clipboard fully poisoned
 // ✅ SEC-6:  localStorage + sessionStorage wiped
 // ✅ SEC-8:  ALL F1–F12 keys blocked
@@ -24,6 +24,12 @@
 // ✅ SEC-15: CleanupManager
 // ✅ FIX-1:  touchend — button taps work on mobile
 // ✅ FIX-2:  DesktopModeEnforcer — permanent, never resets
+// ✅ FIX-3:  contextmenu event name fixed (was camelCase — silently did nothing)
+// ✅ FIX-4:  beforeprint properly blocked via window.print override
+// ✅ FIX-5:  console methods restored on SecurityManager.disable()
+// ✅ FIX-6:  calculateScore — division-by-zero guard for empty questions
+// ✅ FIX-7:  NetworkGuard.enable() — double-enable guard
+// ✅ FIX-8:  formatTime/formatShort — negative seconds guard
 // ============================================================
 
 // ==========================================
@@ -91,7 +97,8 @@ export class LeaderboardStorage {
       ({ collection, addDoc } = await import('firebase/firestore'));
       ({ db }                 = await import('../firebase'));
     } catch (importErr) {
-      console.warn('[MockTest] Firebase module import failed:', importErr.message);
+      // Use native console to bypass any neutering
+      (window.__nativeConsoleWarn || console.warn)('[MockTest] Firebase module import failed:', importErr.message);
       return { success: false, error: importErr.message };
     }
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -114,7 +121,7 @@ export class LeaderboardStorage {
         return { success: true };
       } catch (error) {
         if (attempt === MAX_RETRIES) {
-          console.warn('[MockTest] Leaderboard save failed after retries:', error.message);
+          (window.__nativeConsoleWarn || console.warn)('[MockTest] Leaderboard save failed after retries:', error.message);
           return { success: false, error: error.message };
         }
         await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
@@ -241,20 +248,32 @@ export class TestUtils {
   static isAdmin(email) { return email === APP_CONFIG.ADMIN_EMAIL; }
 
   static formatTime(s) {
-    const h  = Math.floor(s / 3600);
-    const m  = Math.floor((s % 3600) / 60);
-    const sc = s % 60;
+    // FIX-8: guard against negative seconds
+    const safe = Math.max(0, Math.floor(s));
+    const h    = Math.floor(safe / 3600);
+    const m    = Math.floor((safe % 3600) / 60);
+    const sc   = safe % 60;
     return { display: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sc).padStart(2,'0')}` };
   }
 
   static formatShort(s) {
-    const m  = Math.floor(s / 60);
-    const sc = s % 60;
+    // FIX-8: guard against negative seconds
+    const safe = Math.max(0, Math.floor(s));
+    const m    = Math.floor(safe / 60);
+    const sc   = safe % 60;
     if (m > 0) return `${m}:${String(sc).padStart(2,'0')}`;
     return `${sc}s`;
   }
 
   static calculateScore(answers, questions, tabSwitches, isAdmin, passPercent) {
+    // FIX-6: guard against empty questions array (division by zero)
+    if (!questions || questions.length === 0) {
+      return {
+        correct: 0, wrong: 0, total: 0,
+        percentage: 0, passed: false,
+        correctQuestions: [], wrongQuestions: [], penalized: false,
+      };
+    }
     let correct = 0;
     const correctQuestions = [], wrongQuestions = [];
     questions.forEach((q, idx) => {
@@ -450,11 +469,16 @@ export class SecurityManager {
     this._touchStartTime     = 0;
     this._longPressThreshold = 500;
 
+    // FIX-5: store original console methods so we can restore them on disable()
+    this._origConsoleMethods = {};
+
     this.handlers = {
       copy:        (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Copying is disabled during the test.'); },
       cut:         (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Cutting is disabled during the test.'); },
       paste:       (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Pasting is disabled during the test.'); },
-      contextMenu: (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Right-click is disabled during the test.'); },
+      // FIX-3: was 'contextMenu' (camelCase) — DOM event is 'contextmenu' (all lowercase)
+      // camelCase key caused addEventListener('contextMenu') which silently did nothing
+      contextmenu: (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Right-click is disabled during the test.'); },
 
       keydown: (e) => {
         const ctrl    = e.ctrlKey || e.metaKey;
@@ -528,7 +552,13 @@ export class SecurityManager {
       dragstart:   (e) => { e.preventDefault(); e.stopPropagation(); },
       drop:        (e) => { e.preventDefault(); e.stopPropagation(); },
       selectstart: (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); },
-      beforeprint: (e) => { e.preventDefault(); this.recordViolation('Printing is disabled during the test.'); },
+
+      // FIX-4: beforeprint e.preventDefault() does NOT stop print dialog in any browser.
+      // Real fix: override window.print directly so the dialog never opens.
+      // The @media print CSS in injectGlobalCSS() handles the visual side.
+      beforeprint: (e) => {
+        this.recordViolation('Printing is disabled during the test.');
+      },
 
       // ✅ touchstart: sirf start time record karo
       // Multi-touch pinch zoom ALLOWED — koi block nahi
@@ -610,12 +640,24 @@ export class SecurityManager {
     // Block window.open
     try { window.__origOpen = window.open; window.open = () => null; } catch (e) {}
 
-    // Neuter console
+    // FIX-4: Override window.print to actually block print dialog
+    try {
+      window.__origPrint = window.print;
+      window.print = () => { this.recordViolation('Printing is disabled during the test.'); };
+    } catch (e) {}
+
+    // FIX-5: Save originals BEFORE neutering so we can restore on disable()
+    // Also save to window so LeaderboardStorage can use them even after neutering
     try {
       const noop = () => {};
-      ['log','warn','error','info','table','dir','dirxml','group','groupEnd',
-       'time','timeEnd','assert','profile','profileEnd','trace','count'].forEach(m => {
-        try { console[m] = noop; } catch (e) {}
+      const methods = ['log','warn','error','info','table','dir','dirxml','group','groupEnd',
+                       'time','timeEnd','assert','profile','profileEnd','trace','count'];
+      methods.forEach(m => {
+        try {
+          this._origConsoleMethods[m] = console[m];
+          if (m === 'warn') window.__nativeConsoleWarn = console[m]; // preserve for LeaderboardStorage
+          console[m] = noop;
+        } catch (e) {}
       });
     } catch (e) {}
   }
@@ -631,6 +673,18 @@ export class SecurityManager {
     this._restoreClipboard();
     if (this._windowsKeyTimer) clearTimeout(this._windowsKeyTimer);
     try { if (window.__origOpen) { window.open = window.__origOpen; delete window.__origOpen; } } catch (e) {}
+
+    // FIX-4: Restore window.print
+    try { if (window.__origPrint) { window.print = window.__origPrint; delete window.__origPrint; } } catch (e) {}
+
+    // FIX-5: Restore all neutered console methods
+    try {
+      Object.entries(this._origConsoleMethods).forEach(([m, fn]) => {
+        try { if (fn) console[m] = fn; } catch (e) {}
+      });
+      this._origConsoleMethods = {};
+      delete window.__nativeConsoleWarn;
+    } catch (e) {}
   }
 }
 
@@ -684,6 +738,9 @@ export class NetworkGuard {
   }
 
   static enable() {
+    // FIX-7: double-enable guard — don't wrap an already-wrapped fetch
+    if (this._origFetch !== null) return;
+
     this._origFetch = window.fetch;
     window.fetch = (...args) => {
       const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
