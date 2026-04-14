@@ -1,26 +1,10 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/ExamComponents.jsx
-// Shared UI components used across the exam interface
-//
-// FIXES APPLIED (NEW):
-// ✅ FIX-WATERMARK-Z: Watermark z-index lowered to 9990 so it doesn't overlay code blocks
-// ✅ FIX-DISQ-15S:   WarningModal 'final' type countdown starts at 15s minimum
-//
-// PREVIOUS FIXES:
-// ✅ FIX-1: QuestionTimer wall-clock sync on visibilitychange
-// ✅ FIX-2: SyntaxHighlight mobile overflow clipping fixed
-// ✅ FIX-3: WarningModal countdown urgent tick in last 5s
-// ✅ FIX-4: ExamProgressBar inline after options
-// ✅ FIX-6: IsolatedTimer wall-clock sync
-// ✅ FIX-7: Removed unused 'tick' variable
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Clock, AlertTriangle } from 'lucide-react';
 import { APP_CONFIG, THEME, TestUtils } from './utils';
 
-// ==========================================
-// AUDIO CONTEXT — shared singleton
-// ==========================================
 let _audioCtx = null;
 function getAudioCtx() {
   if (!_audioCtx) {
@@ -61,9 +45,6 @@ function unlockAudio() {
   if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
 }
 
-// ==========================================
-// SCROLL UTILITY
-// ==========================================
 export function scrollToQuestion(questionIndex) {
   let el = document.querySelector(`[data-question-index="${questionIndex}"]`);
   if (!el) el = document.getElementById(`question-${questionIndex}`);
@@ -83,9 +64,6 @@ export function scrollToQuestion(questionIndex) {
   }, 320);
 }
 
-// ==========================================
-// OPTIONS GRID
-// ==========================================
 export function OptionsGrid({
   options = [],
   selected = null,
@@ -233,9 +211,6 @@ export function OptionsGrid({
   );
 }
 
-// ==========================================
-// SYNTAX HIGHLIGHTER
-// ==========================================
 export function SyntaxHighlight({ code }) {
   if (!code) return null;
 
@@ -282,20 +257,19 @@ export function SyntaxHighlight({ code }) {
 
   return (
     <div style={{
-      background: '#1a1a2e',
-      border: '2px solid #2d2d44',
+      background: '#000000',
+      border: '2px solid #222',
       borderRadius: '12px',
       overflow: 'hidden',
       marginTop: '14px',
       maxWidth: '100%',
       width: '100%',
       boxSizing: 'border-box',
-      // ✅ FIX-WATERMARK: position:relative + z-index so code block renders above watermark
       position: 'relative',
       zIndex: 2,
     }}>
       <div style={{
-        background: '#252540',
+        background: '#111111',
         padding: '6px 12px',
         display: 'flex',
         alignItems: 'center',
@@ -330,39 +304,6 @@ export function SyntaxHighlight({ code }) {
   );
 }
 
-// ==========================================
-// WATERMARK
-// ✅ FIX-WATERMARK-Z: z-index lowered to 9990 so code blocks (z-index:2) appear on top
-// ==========================================
-export const Watermark = React.memo(function Watermark({ userEmail, userName }) {
-  const text = `${userName || 'Student'} • ${userEmail || ''} • EXAM`;
-  return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      pointerEvents: 'none',
-      // ✅ z-index 9990: above exam UI (999999) but code blocks have position:relative z-index:2
-      // which creates a stacking context inside the exam container — watermark stays behind them
-      zIndex: 9990,
-      overflow: 'hidden',
-      userSelect: 'none',
-      WebkitUserSelect: 'none',
-    }}>
-      {Array.from({ length: 8 }).map((_, row) =>
-        Array.from({ length: 5 }).map((_, col) => (
-          <div key={`${row}-${col}`} style={{ position:'absolute', left:`${col*22-5}%`, top:`${row*14-2}%`, transform:'rotate(-25deg)', fontSize:'13px', fontWeight:'700', color:'rgba(99,102,241,0.10)', whiteSpace:'nowrap', letterSpacing:'0.05em', fontFamily:'monospace' }}>
-            {text}
-          </div>
-        ))
-      )}
-    </div>
-  );
-});
-
-// ==========================================
-// WARNING MODAL
-// ✅ FIX-DISQ-15S: 'final' type always gets at least 15 seconds countdown
-// ==========================================
 export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, initialCountdown }) {
   const [countdown, setCountdown]    = useState(() => initialCountdown ?? 20);
   const timerRef                     = useRef(null);
@@ -383,7 +324,6 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
     const isDevtools = type === 'devtools-warning';
     const needsTimer = isFinal || isCritical || isDevtools;
 
-    // ✅ FIX-DISQ-15S: final messages always start at minimum 15 seconds
     const startVal = isFinal
       ? Math.max(15, initialCountdown ?? 15)
       : (initialCountdown ?? 20);
@@ -394,9 +334,7 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
       timerRef.current = setInterval(() => {
         setCountdown(prev => {
           const next = prev - 1;
-          if (next > 0 && next <= 5) {
-            playTick(true);
-          }
+          if (next > 0 && next <= 5) playTick(true);
           if (next <= 0) {
             clearInterval(timerRef.current);
             onAcknowledgeRef.current();
@@ -420,7 +358,6 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
   const isCritical = type === 'critical';
   const isDevtools = type === 'devtools-warning';
   const needsOk    = isFinal || isCritical || isDevtools;
-  // ✅ FIX-DISQ-15S: totalSecs for progress bar — final = 15s minimum
   const totalSecs  = isFinal
     ? Math.max(15, initialCountdown ?? 15)
     : (initialCountdown ?? 20);
@@ -478,9 +415,6 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
   );
 }
 
-// ==========================================
-// PER-QUESTION TIMER
-// ==========================================
 export const QuestionTimer = React.memo(function QuestionTimer({
   questionIndex,
   totalQuestions,
@@ -629,9 +563,6 @@ export const QuestionTimer = React.memo(function QuestionTimer({
   );
 });
 
-// ==========================================
-// TOTAL EXAM TIMER (hidden when per-question timer active, but still runs)
-// ==========================================
 export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onExpire, onTick, isAdmin }) {
   const onExpireRef  = useRef(onExpire);
   const onTickRef    = useRef(onTick);
@@ -740,9 +671,6 @@ export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onEx
   );
 });
 
-// ==========================================
-// EXAM PROGRESS BAR
-// ==========================================
 export const ExamProgressBar = React.memo(function ExamProgressBar({
   questions,
   answers,

@@ -1,24 +1,5 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/ExamScreens.jsx
-// InstructionScreen and TestInterface components
-//
-// FIXES APPLIED (NEW):
-// ✅ FIX-TAB:        Tab switch threshold now 3 (from utils APP_CONFIG)
-// ✅ FIX-SUBMIT-DLG: window.onbeforeunload cleared BEFORE submit so browser dialog never shows
-// ✅ FIX-FULLSCREEN: CleanupManager called with delayFullscreen=true → no flicker on result page
-// ✅ FIX-CONFIRM:    Submit confirmation modal removed — direct submit on last question
-// ✅ FIX-TIMER:      Only QuestionTimer shown in header; IsolatedTimer hidden (still runs for expiry)
-// ✅ FIX-WATERMARK:  Watermark z-index lowered so it doesn't overlay code blocks
-//
-// PREVIOUS FIXES:
-// ✅ FIX-1:  New mobile layout
-// ✅ FIX-2:  No Skip button
-// ✅ FIX-4:  window.scrollTo instant on question change
-// ✅ FIX-5:  Expired question options show locked state
-// ✅ FIX-6:  Header simplified
-// ✅ FIX-7:  All text English only
-// ✅ FIX-8:  Footer always visible
-// ✅ FIX-9:  Removed unused 'unansweredCount'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRight, CheckCircle, Shield, BookOpen, EyeOff } from 'lucide-react';
@@ -37,7 +18,6 @@ import {
 } from './utils';
 
 import {
-  Watermark,
   WarningModal,
   SyntaxHighlight,
   QuestionTimer,
@@ -45,9 +25,6 @@ import {
   ExamProgressBar,
 } from './ExamComponents';
 
-// ==========================================
-// INSTRUCTION SCREEN
-// ==========================================
 export function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestions, passPercent, timePerQuestion }) {
   const [accepted, setAccepted] = useState(false);
 
@@ -79,7 +56,6 @@ export function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestio
     { text: 'Copy, paste, right-click, printing, saving and Ctrl+U are completely blocked.' },
     { text: 'Browser screen recording is blocked automatically.' },
     { text: 'Test runs in fullscreen — exiting triggers a warning and auto-returns.' },
-    { text: 'Your name and email are watermarked on every screen permanently.' },
     { text: `Inactivity for ${inactivityMin} minute${inactivityMin > 1 ? 's' : ''} will trigger a warning.` },
     { text: 'Questions and answer options are shuffled — every student gets a different order.', highlight: true },
     { text: `Score ${passPercent}% or above to PASS and receive a Certificate of Achievement.` },
@@ -151,9 +127,6 @@ export function InstructionScreen({ onAccept, testTitle, timeLimit, totalQuestio
   );
 }
 
-// ==========================================
-// TEST INTERFACE
-// ==========================================
 export function TestInterface({ questions, onComplete, testTitle, timeLimit, userEmail, studentInfo, passPercent, timePerQuestion }) {
   const [currentQuestion, setCurrentQuestion]     = useState(0);
   const [answers, setAnswers]                     = useState({});
@@ -183,15 +156,10 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const tabSwitchHappeningRef = useRef(false);
   const isDisqualifiedRef     = useRef(false);
 
-  const isAdmin           = TestUtils.isAdmin(userEmail);
-  const answeredCount     = Object.keys(answers).length;
-  const studentName       = studentInfo?.fullName || 'Student';
+  const isAdmin        = TestUtils.isAdmin(userEmail);
+  const studentName    = studentInfo?.fullName || 'Student';
   const inactivityLimitMs = Math.max(60000, timeLimit * 60 * 1000 * APP_CONFIG.INACTIVITY_PERCENT);
-  const isLastQuestion    = currentQuestion === questions.length - 1;
-
-  const allAnswered = questions.every((_, idx) =>
-    answers[idx] !== undefined || timerStateRef.current[idx]?.expired === true
-  );
+  const isLastQuestion = currentQuestion === questions.length - 1;
 
   const setIsDisqualifiedSynced = useCallback((val) => {
     isDisqualifiedRef.current = val;
@@ -203,7 +171,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const showWarningMessage = useCallback((message, type = 'normal', mustAck = false) => {
     if (warningTimerRef.current) { clearTimeout(warningTimerRef.current); warningTimerRef.current = null; }
     const needsOk = mustAck || type === 'critical' || type === 'final' || type === 'devtools-warning';
-    // ✅ FIX-DISQ-TIME: final/critical warnings show for at least DISQUALIFY_MIN_SECONDS (15s)
     const countdownSecs = (type === 'final' || type === 'critical')
       ? Math.max(APP_CONFIG.DISQUALIFY_MIN_SECONDS, 15)
       : 20;
@@ -242,31 +209,16 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     setAnswers(prev => ({ ...prev, [qIndex]: optIdx }));
   }, [resetActivity]);
 
-  // ✅ FIX-SUBMIT-DLG + FIX-FULLSCREEN: clear beforeunload immediately, delay fullscreen exit
   const handleSubmit = useCallback((penalized = false, reason = '') => {
     if (hasSubmittedRef.current) return;
-
-    // ✅ Kill beforeunload FIRST — prevents browser "do you want to leave" dialog
     window.onbeforeunload = null;
-
-    const currentAnswers   = answersRef.current;
-    const answeredNow      = Object.keys(currentAnswers).length;
-    const effectiveDone    = questions.filter((_, idx) =>
-      currentAnswers[idx] !== undefined || timerStateRef.current[idx]?.expired === true
-    ).length;
-    if (!isAdmin && effectiveDone < questions.length && !penalized) {
-      showWarningMessage(`Please answer all questions before submitting.\n(${answeredNow}/${questions.length} answered)`, 'normal');
-      return;
-    }
+    const currentAnswers = answersRef.current;
     hasSubmittedRef.current = true;
     const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
     const score     = TestUtils.calculateScore(currentAnswers, questions, tabSwitchRef.current, isAdmin, passPercent);
-
-    // ✅ FIX-FULLSCREEN: pass delayFullscreen=true so result page renders before fullscreen exits
     CleanupManager.performFullCleanup(true);
     if (devToolsRef.current) devToolsRef.current.stop();
     if (securityRef.current) securityRef.current.disable();
-
     onComplete({
       ...score,
       timeTaken: `${Math.floor(timeTaken/60)}m ${timeTaken%60}s`,
@@ -275,7 +227,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       disqualificationReason: reason,
       studentInfo,
     });
-  }, [questions, isAdmin, studentInfo, onComplete, showWarningMessage, passPercent]);
+  }, [questions, isAdmin, studentInfo, onComplete, passPercent]);
 
   useEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
 
@@ -291,7 +243,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [currentQuestion]);
 
-  // Setup/teardown
   useEffect(() => {
     const sels = ['nav','header','footer','.navbar','.header','.footer','.menu','.toolbar','#toolbar','[role="navigation"]','[role="banner"]','[role="contentinfo"]','.telegram-button','#telegram-button','.TelegramButton','[class*="telegram"]','.background','.Background','[class*="background"]','.toast-container','.ToastContainer','[class*="toast"]','[class*="razorpay"]','[id*="razorpay"]','aside','.sidebar','#sidebar'];
     const hidden = [];
@@ -339,7 +290,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       DesktopModeEnforcer.enable();
     }
 
-    // ✅ FIX-SUBMIT-DLG: set beforeunload only while test is active; cleared in handleSubmit
     window.onbeforeunload = (e) => {
       if (!hasSubmittedRef.current) { e.preventDefault(); e.returnValue=''; return ''; }
     };
@@ -349,14 +299,16 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     return () => {
       window.onbeforeunload = null;
       hidden.forEach(({ el, d, v }) => { if (el) { el.style.display=d||''; el.style.visibility=v||''; } });
-      document.body.style.overflow=orig.overflow;
-      document.documentElement.style.overflow=orig.htmlOverflow;
-      document.body.style.position=orig.position;
-      document.body.style.margin=orig.margin;
-      document.body.style.padding=orig.padding;
-      document.body.style.width=orig.width;
-      document.body.style.height=orig.height;
-      document.body.style.top=''; document.body.style.left='';
+      document.body.style.overflow = orig.overflow;
+      document.documentElement.style.overflow = orig.htmlOverflow;
+      document.body.style.position = orig.position;
+      document.body.style.margin   = orig.margin;
+      document.body.style.padding  = orig.padding;
+      document.body.style.width    = orig.width;
+      document.body.style.height   = orig.height;
+      document.body.style.top  = '';
+      document.body.style.left = '';
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
       ca.destroy();
       NetworkGuard.disable();
       VisibilityManager.disable();
@@ -365,14 +317,12 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage]);
 
-  // Resize
   useEffect(() => {
     const r = () => setIsMobile(window.innerWidth <= 768);
     window.addEventListener('resize', r, { passive: true });
     return () => window.removeEventListener('resize', r);
   }, []);
 
-  // Inactivity
   useEffect(() => {
     if (isAdmin) return;
     const events = ['mousemove','mousedown','keydown','touchstart','touchmove','scroll','click'];
@@ -397,11 +347,9 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, inactivityLimitMs, resetActivity, showWarningMessage]);
 
-  // Fullscreen
   useEffect(() => {
     if (isAdmin) return;
     const handler = () => {
-      if (tabSwitchHappeningRef.current) return;
       if (!FullscreenManager.isActive() && !hasSubmittedRef.current && !isDisqualifiedRef.current) {
         showWarningMessage('You exited fullscreen mode. Returning to fullscreen...', 'normal');
         setTimeout(() => FullscreenManager.enter(), 1500);
@@ -411,7 +359,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage]);
 
-  // ✅ FIX-TAB: Tab switch — now uses APP_CONFIG.MAX_TAB_SWITCHES (3) with warning before disqualify
   useEffect(() => {
     if (isAdmin) return;
     const handler = () => {
@@ -424,7 +371,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       setTabSwitches(n);
 
       if (n >= APP_CONFIG.MAX_TAB_SWITCHES) {
-        // Final disqualify
         setIsDisqualifiedSynced(true);
         showWarningMessage(
           `DISQUALIFIED — Tab Switch Limit Reached!\n\nYou switched tabs ${n} times.\nTest is being submitted as FAIL.\nNo certificate will be issued.`,
@@ -434,7 +380,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
           if (handleSubmitRef.current) handleSubmitRef.current(true, 'tab-switching-disqualified');
         }, APP_CONFIG.AUTO_SUBMIT_DELAY);
       } else {
-        // Warning — not yet disqualified
         const remaining = APP_CONFIG.MAX_TAB_SWITCHES - n;
         showWarningMessage(
           `⚠️ Tab Switch Detected! (${n}/${APP_CONFIG.MAX_TAB_SWITCHES})\n\nYou switched away from the exam.\n\nAur ${remaining} baar kiya toh DISQUALIFY ho jaoge!`,
@@ -447,7 +392,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage, setIsDisqualifiedSynced]);
 
-  // Window blur
   useEffect(() => {
     if (isAdmin) return;
     const handleBlur = () => {
@@ -468,7 +412,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage, resetActivity]);
 
-  // Mouse leave
   useEffect(() => {
     if (isAdmin) return;
     const handler = (e) => {
@@ -498,10 +441,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         userSelect: isAdmin ? 'auto' : 'none',
       }}
     >
-      {/* ✅ FIX-WATERMARK: z-index 9990 instead of 99998 so it stays BEHIND code blocks (which are z-index auto/stacking context) */}
-      {!isAdmin && <Watermark userEmail={userEmail} userName={studentName} />}
-
-      {/* Content blur overlay */}
       {isContentBlurred && !isAdmin && (
         <div style={{ position:'fixed', inset:0, zIndex:99997, backdropFilter:'blur(24px)', WebkitBackdropFilter:'blur(24px)', background:'rgba(0,0,0,0.65)', display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:'1.25rem' }}>
           <EyeOff size={64} color="#fff" />
@@ -510,7 +449,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         </div>
       )}
 
-      {/* Warning modal */}
       {!isAdmin && (
         <WarningModal
           show={showWarning}
@@ -522,14 +460,12 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         />
       )}
 
-      {/* Admin badge */}
       {isAdmin && (
         <div style={{ position:'fixed', top:'10px', left:'10px', background:'linear-gradient(135deg,#10b981,#059669)', color:'#fff', padding:'0.5rem 1rem', borderRadius:'10px', fontSize:'0.78rem', fontWeight:'900', zIndex:10000000 }}>
           ADMIN MODE — Security Disabled
         </div>
       )}
 
-      {/* ── STICKY HEADER ── */}
       <div style={{
         flexShrink: 0,
         background: '#fff',
@@ -539,8 +475,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         opacity: isDisqualified ? 0.5 : 1,
       }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
-
-          {/* Student row */}
           {!isAdmin && (
             <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'5px' }}>
               <span style={{ fontSize:'11px' }}>👤</span>
@@ -564,7 +498,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
             </div>
           )}
 
-          {/* Main row — ✅ FIX-TIMER: only QuestionTimer shown; IsolatedTimer runs hidden */}
           <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize: isMobile?'0.68rem':'0.78rem', color:'#94a3b8', fontWeight:'600', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
@@ -576,7 +509,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
               </div>
             </div>
 
-            {/* ✅ FIX-TIMER: Show ONLY QuestionTimer in header; IsolatedTimer runs in background (display:none) */}
             {!isAdmin && timePerQuestion > 0 ? (
               <>
                 <QuestionTimer
@@ -587,7 +519,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
                   isAdmin={isAdmin}
                   timerStateRef={timerStateRef}
                 />
-                {/* IsolatedTimer hidden but still functional — expires whole test on time up */}
                 <div style={{ display: 'none' }}>
                   <IsolatedTimer
                     timeLimit={timeLimit}
@@ -598,7 +529,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
                 </div>
               </>
             ) : (
-              /* No per-question timer: show total timer */
               <IsolatedTimer
                 timeLimit={timeLimit}
                 isAdmin={isAdmin}
@@ -610,7 +540,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         </div>
       </div>
 
-      {/* ── SCROLLABLE BODY ── */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
@@ -628,8 +557,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
           flexDirection: 'column',
           gap: '12px',
         }}>
-
-          {/* Question Card */}
           <div
             key={`q-${currentQuestion}`}
             style={{
@@ -639,7 +566,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
               padding: isMobile ? '16px' : '24px',
               boxShadow: '0 4px 16px rgba(0,0,0,0.06)',
               animation: 'slideIn 0.3s ease',
-              // ✅ FIX-WATERMARK: position:relative + z-index so code block stacks above watermark
               position: 'relative',
               zIndex: 1,
             }}
@@ -655,7 +581,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
             {currentQ.code && <SyntaxHighlight code={currentQ.code} />}
           </div>
 
-          {/* Options 2x2 */}
           <div
             key={`opts-${currentQuestion}`}
             style={{
@@ -675,9 +600,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
                   disabled={isDisqualified || isExpired}
                   style={{
                     padding: isMobile ? '12px 10px' : '16px 14px',
-                    background: isExpired
-                      ? '#f8fafc'
-                      : isSelected ? '#eef2ff' : '#fff',
+                    background: isExpired ? '#f8fafc' : isSelected ? '#eef2ff' : '#fff',
                     border: `2px solid ${isExpired ? '#e2e8f0' : isSelected ? '#6366f1' : '#e2e8f0'}`,
                     borderRadius: '14px',
                     cursor: (isDisqualified || isExpired) ? 'not-allowed' : 'pointer',
@@ -726,7 +649,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
             })}
           </div>
 
-          {/* Time-up notice */}
           {isExpired && (
             <div style={{
               display: 'flex',
@@ -747,7 +669,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
             </div>
           )}
 
-          {/* Progress Bar */}
           <ExamProgressBar
             questions={questions}
             answers={answers}
@@ -755,13 +676,11 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
             currentQuestion={currentQuestion}
             isMobile={isMobile}
           />
-
         </div>
 
         <div style={{ height: '88px' }} />
       </div>
 
-      {/* ── STICKY FOOTER ── */}
       <div style={{
         flexShrink: 0,
         padding: isMobile ? '10px 14px' : '12px 20px',
@@ -775,41 +694,24 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
             <button
               onClick={() => {
                 if (isDisqualified) return;
-                if (!isAdmin && !allAnswered) {
-                  showWarningMessage(`Please answer all questions before submitting.\n(${answeredCount}/${questions.length} answered)`, 'normal');
-                  return;
-                }
-                // ✅ FIX-CONFIRM: Direct submit — no confirmation modal
                 handleSubmit(false, '');
               }}
               disabled={isDisqualified}
               style={{
                 width: '100%',
                 padding: isMobile ? '14px' : '16px',
-                background: isDisqualified
-                  ? '#e2e8f0'
-                  : (!allAnswered && !isAdmin)
-                  ? '#fef3c7'
-                  : 'linear-gradient(135deg,#10b981,#059669)',
+                background: isDisqualified ? '#e2e8f0' : 'linear-gradient(135deg,#10b981,#059669)',
                 border: 'none',
                 borderRadius: '14px',
                 cursor: isDisqualified ? 'not-allowed' : 'pointer',
                 fontWeight: '800',
-                color: isDisqualified
-                  ? '#94a3b8'
-                  : (!allAnswered && !isAdmin) ? '#92400e' : '#fff',
+                color: isDisqualified ? '#94a3b8' : '#fff',
                 fontSize: isMobile ? '1rem' : '1.05rem',
-                boxShadow: (!isDisqualified && (allAnswered || isAdmin))
-                  ? '0 6px 20px rgba(16,185,129,0.35)'
-                  : 'none',
+                boxShadow: isDisqualified ? 'none' : '0 6px 20px rgba(16,185,129,0.35)',
                 transition: 'all 0.2s',
               }}
             >
-              {isDisqualified
-                ? 'Disqualified'
-                : (!allAnswered && !isAdmin)
-                ? `${answeredCount}/${questions.length} answered — finish all to submit`
-                : 'Submit Test'}
+              {isDisqualified ? 'Disqualified' : 'Submit Test'}
             </button>
           ) : (
             <button
@@ -838,7 +740,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
           )}
         </div>
       </div>
-
     </div>
   );
 }

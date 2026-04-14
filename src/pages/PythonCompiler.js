@@ -1,9 +1,6 @@
 /* eslint-disable no-useless-escape, no-eval */
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 
-/* ═══════════════════════════════════════════════════
-   AI
-═══════════════════════════════════════════════════ */
 const AI_URL = "https://white-limit-e2fe.luckyfaizu3.workers.dev/chat";
 
 async function callAI(messages, onChunk) {
@@ -37,9 +34,6 @@ async function callAI(messages, onChunk) {
   return full.trim();
 }
 
-/* ═══════════════════════════════════════════════════
-   LANGUAGES CONFIG
-═══════════════════════════════════════════════════ */
 const LANGS = {
   python:     { label: "Python",     ext: "py",   badge: "PY", color: "#3b82f6", runner: "pyodide" },
   javascript: { label: "JavaScript", ext: "js",   badge: "JS", color: "#f59e0b", runner: "eval"   },
@@ -50,9 +44,6 @@ const LANGS = {
   java:       { label: "Java",       ext: "java", badge: "JV", color: "#ef4444", runner: "ai"     },
 };
 
-/* ═══════════════════════════════════════════════════
-   STARTER TEMPLATES
-═══════════════════════════════════════════════════ */
 const TEMPLATES = {
   python: `# Python 3.11
 def greet(name):
@@ -167,9 +158,6 @@ for i in range(60):
     t.right(91)
 turtle.done()`;
 
-/* ═══════════════════════════════════════════════════
-   HELPERS
-═══════════════════════════════════════════════════ */
 const hasTurtle = c => /\bimport\s+turtle\b|from\s+turtle\s+import/.test(c);
 const hasInput  = c => /\binput\s*\(/.test(c);
 
@@ -190,9 +178,6 @@ const getPrompts = c => {
 
 const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/* ═══════════════════════════════════════════════════
-   SYNTAX HIGHLIGHTERS
-═══════════════════════════════════════════════════ */
 const PY_KW   = new Set(["def","class","import","from","return","if","elif","else","for","while","in","not","and","or","True","False","None","try","except","finally","with","as","pass","break","continue","lambda","yield","async","await","raise","del","global","nonlocal","assert","is"]);
 const PY_BT   = new Set(["print","len","range","type","int","str","float","list","dict","set","tuple","input","enumerate","zip","map","filter","sorted","max","min","sum","abs","round","isinstance","super","bool","repr","format","any","all","open","next","iter"]);
 const JS_KW   = new Set(["const","let","var","function","return","if","else","for","while","class","import","export","new","true","false","null","undefined","async","await","typeof","instanceof","of","in","do","switch","case","break","continue","throw","try","catch","finally","from","default","extends","static","this","super"]);
@@ -270,7 +255,7 @@ function hlCode(lang, code) {
 }
 
 /* ═══════════════════════════════════════════════════
-   FIX 1: TURTLE HTML — Proper canvas sizing + wait for DOM
+   FIX 1: TURTLE HTML — Fullscreen + Fast CDN
 ═══════════════════════════════════════════════════ */
 function makeTurtleHTML(code) {
   const escaped = code.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
@@ -280,36 +265,50 @@ function makeTurtleHTML(code) {
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  body {
+  html, body {
+    width:100%; height:100%;
     background:#1e2127;
+    overflow:hidden;
+  }
+  body {
     display:flex;
     flex-direction:column;
     align-items:center;
     justify-content:center;
-    min-height:100vh;
-    gap:12px;
+    gap:10px;
     font-family:'Segoe UI',sans-serif;
   }
+  #turtle-canvas-container {
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:100vw;
+    flex:1;
+  }
   #turtle-canvas-container canvas {
-    border-radius:12px;
-    box-shadow:0 4px 24px rgba(0,0,0,0.4);
-    max-width:95vw;
-    max-height:75vh;
+    border-radius:10px;
+    box-shadow:0 4px 24px rgba(0,0,0,0.5);
+    max-width:98vw;
+    max-height:calc(100vh - 60px);
+    width:auto !important;
+    height:auto !important;
+    object-fit:contain;
   }
   #st {
     color:#98c379;font-size:13px;font-weight:600;
-    padding:5px 16px;background:rgba(152,195,121,0.1);
+    padding:4px 14px;background:rgba(152,195,121,0.1);
     border-radius:20px;border:1px solid rgba(152,195,121,0.3);
+    flex-shrink:0;
   }
   #er {
     color:#e06c75;font-size:12px;max-width:90vw;
     word-break:break-word;text-align:center;
     padding:8px 16px;background:rgba(224,108,117,0.1);
     border-radius:8px;border:1px solid rgba(224,108,117,0.3);
-    display:none;
+    display:none; flex-shrink:0;
   }
   .loader {
-    width:14px;height:14px;
+    width:12px;height:12px;
     border:2px solid rgba(97,175,239,0.2);
     border-top-color:#61afef;
     border-radius:50%;
@@ -325,8 +324,9 @@ function makeTurtleHTML(code) {
 <div id="er"></div>
 <script>
 function showErr(msg) {
-  document.getElementById('er').textContent = msg;
-  document.getElementById('er').style.display = 'block';
+  var er = document.getElementById('er');
+  er.textContent = msg;
+  er.style.display = 'block';
   document.getElementById('st').textContent = 'Error';
   document.getElementById('ld').style.display = 'none';
 }
@@ -338,34 +338,36 @@ function loadScript(src, cb) {
   document.head.appendChild(s);
 }
 window.addEventListener('load', function() {
-  loadScript('https://skulpt.org/js/skulpt.min.js', function() {
-    loadScript('https://skulpt.org/js/skulpt-stdlib.js', function() {
+  var SKULPT_MIN = 'https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js';
+  var SKULPT_STD = 'https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js';
+  loadScript(SKULPT_MIN, function() {
+    loadScript(SKULPT_STD, function() {
       document.getElementById('ld').style.display = 'none';
       document.getElementById('st').textContent = 'Running...';
-      try {
-        Sk.configure({
-          output: function() {},
-          read: function(f) {
-            if (!Sk.builtinFiles || !Sk.builtinFiles.files[f])
-              throw 'File not found: ' + f;
-            return Sk.builtinFiles.files[f];
-          }
-        });
-        Sk.TurtleGraphics = {
-          target: 'turtle-canvas-container',
-          width: 480,
-          height: 480
-        };
-        Sk.misceval.asyncToPromise(function() {
-          return Sk.importMainWithBody('<stdin>', false, \`${escaped}\`, true);
-        }).then(function() {
-          document.getElementById('st').textContent = '✓ Done';
-        }).catch(function(e) {
-          showErr(e.toString());
-        });
-      } catch(e) {
+      var container = document.getElementById('turtle-canvas-container');
+      var vw = Math.min(window.innerWidth - 16, 600);
+      var vh = Math.min(window.innerHeight - 80, 500);
+      var sz = Math.min(vw, vh);
+      Sk.configure({
+        output: function() {},
+        read: function(f) {
+          if (!Sk.builtinFiles || !Sk.builtinFiles.files[f])
+            throw 'File not found: ' + f;
+          return Sk.builtinFiles.files[f];
+        }
+      });
+      Sk.TurtleGraphics = {
+        target: 'turtle-canvas-container',
+        width: sz,
+        height: sz
+      };
+      Sk.misceval.asyncToPromise(function() {
+        return Sk.importMainWithBody('<stdin>', false, \`${escaped}\`, true);
+      }).then(function() {
+        document.getElementById('st').textContent = '✓ Done';
+      }).catch(function(e) {
         showErr(e.toString());
-      }
+      });
     });
   });
 });
@@ -375,11 +377,8 @@ window.addEventListener('load', function() {
 }
 
 /* ═══════════════════════════════════════════════════
-   FIX 2: WEB WORKER PYTHON RUNNER (while True support)
-   Pyodide runs in a Web Worker so main thread never freezes
+   PYODIDE WEB WORKER
 ═══════════════════════════════════════════════════ */
-
-// Worker script as a Blob URL
 function createPyWorkerURL() {
   const workerCode = `
 importScripts('https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js');
@@ -406,7 +405,6 @@ self.onmessage = async function(e) {
     return;
   }
   try {
-    // Reset stdout/stderr capture
     pyodide.runPython(\`
 import sys, io, builtins
 _out_lines = []
@@ -422,7 +420,6 @@ sys.stdout = _Writer(_out_lines)
 sys.stderr = _Writer(_err_lines)
 \`);
 
-    // Install missing packages
     const BUILTIN = new Set(['sys','io','os','re','math','json','time','random','datetime',
       'collections','itertools','functools','string','pathlib','builtins','abc','copy',
       'typing','enum','hashlib','base64','struct','array','heapq','bisect','gc','inspect',
@@ -446,7 +443,6 @@ sys.stderr = _Writer(_err_lines)
       } catch(_) {}
     }
 
-    // Set up input
     if (inputs && inputs.length > 0) {
       pyodide.globals.set('_stdin_data', pyodide.toPy(inputs));
       pyodide.runPython(\`
@@ -466,20 +462,16 @@ builtins.input = _inp
 \`);
     }
 
-    // MAX_LINES guard to prevent infinite output flood
     const MAX_LINES = 2000;
     let lineCount = 0;
     let truncated = false;
 
-    // Run with streaming output using a chunk approach
-    // We inject a print wrapper that sends lines back as they're produced
     pyodide.globals.set('_post_line', (line) => {
       if (lineCount >= MAX_LINES) { truncated = true; return; }
       lineCount++;
       self.postMessage({ type: 'output', id, text: String(line), kind: 'output' });
     });
 
-    // Patch stdout to send lines immediately via postMessage
     pyodide.runPython(\`
 import sys, io
 class _StreamWriter(io.TextIOBase):
@@ -502,7 +494,6 @@ sys.stdout = _StreamWriter()
     let runErr = false, errMsg = '';
     try {
       await pyodide.runPythonAsync(code);
-      // Flush remaining
       pyodide.runPython('sys.stdout.flush()');
     } catch(ex) {
       runErr = true;
@@ -530,7 +521,6 @@ sys.stdout = _StreamWriter()
   return URL.createObjectURL(blob);
 }
 
-// Worker singleton manager
 let _workerURL = null;
 let _worker = null;
 let _workerReady = false;
@@ -561,9 +551,7 @@ function getWorker(onProgress) {
         delete _runCallbacks[msg.id];
       }
     };
-    _worker.onerror = (e) => {
-      console.error('Worker error:', e);
-    };
+    _worker.onerror = (e) => { console.error('Worker error:', e); };
   }
   _workerProgress = onProgress;
   return _worker;
@@ -573,35 +561,66 @@ function runPythonInWorker({ code, inputs, onProgress, onLine, onDone }) {
   const worker = getWorker(onProgress);
   const id = Math.random().toString(36).slice(2);
   _runCallbacks[id] = { onLine, onDone };
-
-  const doRun = () => {
-    worker.postMessage({ code, inputs, id });
-  };
-
-  if (_workerReady) {
-    doRun();
-  } else {
-    _workerReadyCallbacks.push(doRun);
-    if (!_workerProgress) _workerProgress = onProgress;
-  }
+  const doRun = () => { worker.postMessage({ code, inputs, id }); };
+  if (_workerReady) { doRun(); } else { _workerReadyCallbacks.push(doRun); }
   return id;
 }
 
 function terminateWorker() {
   if (_worker) {
     _worker.terminate();
-    _worker = null;
-    _workerReady = false;
-    _workerURL = null;
-    _runCallbacks = {};
-    _workerProgress = null;
+    _worker = null; _workerReady = false; _workerURL = null;
+    _runCallbacks = {}; _workerProgress = null;
   }
+}
+
+/* ═══════════════════════════════════════════════════
+   FIX 2: UNDO/REDO HISTORY HOOK
+═══════════════════════════════════════════════════ */
+function useUndoRedo(initial) {
+  const [history, setHistory] = useState([initial]);
+  const [index, setIndex]     = useState(0);
+
+  const current = history[index];
+
+  const set = useCallback((newVal) => {
+    setHistory(h => {
+      const trimmed = h.slice(0, index + 1);
+      // Don't push duplicate
+      if (trimmed[trimmed.length - 1] === newVal) return h;
+      const next = [...trimmed, newVal];
+      // Keep max 200 history entries
+      return next.length > 200 ? next.slice(next.length - 200) : next;
+    });
+    setIndex(i => {
+      const newIdx = Math.min(i + 1, 200);
+      return newIdx;
+    });
+  }, [index]);
+
+  const undo = useCallback(() => {
+    setIndex(i => Math.max(0, i - 1));
+  }, []);
+
+  const redo = useCallback(() => {
+    setIndex(i => Math.min(history.length - 1, i + 1));
+  }, [history.length]);
+
+  const canUndo = index > 0;
+  const canRedo = index < history.length - 1;
+
+  const reset = useCallback((val) => {
+    setHistory([val]);
+    setIndex(0);
+  }, []);
+
+  return { current, set, undo, redo, canUndo, canRedo, reset };
 }
 
 /* ═══════════════════════════════════════════════════
    CODE EDITOR
 ═══════════════════════════════════════════════════ */
-function CodeEditor({ code, onChange, lang }) {
+function CodeEditor({ code, onChange, lang, onUndo, onRedo, canUndo, canRedo }) {
   const taRef = useRef(null);
   const hiRef = useRef(null);
   const lines = (code || "").split("\n");
@@ -621,6 +640,9 @@ function CodeEditor({ code, onChange, lang }) {
 
   const onKeyDown = (e) => {
     const ta = taRef.current; if (!ta) return;
+    // Ctrl+Z / Ctrl+Y for desktop
+    if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); onUndo(); return; }
+    if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); onRedo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "a") return;
     if ((e.ctrlKey || e.metaKey) && e.key === "c") return;
     const s = ta.selectionStart, end = ta.selectionEnd, v = code;
@@ -730,7 +752,7 @@ function CodeEditor({ code, onChange, lang }) {
 }
 
 /* ═══════════════════════════════════════════════════
-   OUTPUT PANEL — FIX 3: Stop button + output throttling
+   OUTPUT PANEL
 ═══════════════════════════════════════════════════ */
 function OutputPanel({ lines, isRunning, onClose, onStop, inputPrompt, onInputSubmit, langLabel }) {
   const bottomRef = useRef(null);
@@ -789,7 +811,6 @@ function OutputPanel({ lines, isRunning, onClose, onStop, inputPrompt, onInputSu
             Running
           </span>
         )}
-        {/* STOP button — terminates while True loops */}
         {isRunning && (
           <button onClick={onStop} style={{
             background: "#ff4444", border: "none", color: "#fff",
@@ -870,15 +891,15 @@ function OutputPanel({ lines, isRunning, onClose, onStop, inputPrompt, onInputSu
 }
 
 /* ═══════════════════════════════════════════════════
-   TURTLE SCREEN
+   TURTLE SCREEN — FIXED FULLSCREEN
 ═══════════════════════════════════════════════════ */
 function TurtleScreen({ html, onClose }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#1e2127" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#1e2127", display: "flex", flexDirection: "column" }}>
       <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 46,
+        height: 46, flexShrink: 0,
         background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
-        display: "flex", alignItems: "center", padding: "0 16px", zIndex: 1,
+        display: "flex", alignItems: "center", padding: "0 16px",
       }}>
         <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 700, color: "#1e1e1e" }}>🐢 Turtle Graphics</span>
         <button onClick={onClose} style={{
@@ -890,7 +911,7 @@ function TurtleScreen({ html, onClose }) {
         title="turtle"
         srcDoc={html}
         sandbox="allow-scripts"
-        style={{ width: "100%", height: "100%", border: "none", paddingTop: 46 }}
+        style={{ flex: 1, width: "100%", border: "none" }}
       />
     </div>
   );
@@ -901,11 +922,11 @@ function TurtleScreen({ html, onClose }) {
 ═══════════════════════════════════════════════════ */
 function HTMLScreen({ html, onClose }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#fff" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#fff", display: "flex", flexDirection: "column" }}>
       <div style={{
-        position: "absolute", top: 0, left: 0, right: 0, height: 46,
+        height: 46, flexShrink: 0,
         background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
-        display: "flex", alignItems: "center", padding: "0 16px", zIndex: 1,
+        display: "flex", alignItems: "center", padding: "0 16px",
       }}>
         <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 700, color: "#1e1e1e" }}>🌐 HTML Preview</span>
         <button onClick={onClose} style={{
@@ -913,7 +934,7 @@ function HTMLScreen({ html, onClose }) {
           borderRadius: 7, padding: "6px 16px", fontFamily: "sans-serif", fontSize: 12, cursor: "pointer",
         }}>← Back</button>
       </div>
-      <iframe title="html-preview" srcDoc={html} style={{ width: "100%", height: "100%", border: "none", paddingTop: 46 }} />
+      <iframe title="html-preview" srcDoc={html} style={{ flex: 1, width: "100%", border: "none" }} />
     </div>
   );
 }
@@ -952,7 +973,6 @@ function PyLoadOverlay({ progress, msg }) {
 ═══════════════════════════════════════════════════ */
 export default function App({ setCurrentPage, initialCode }) {
   const [lang,        setLang]       = useState("python");
-  const [code,        setCode]       = useState(initialCode || TEMPLATES.python);
   const [screen,      setScreen]     = useState("editor");
   const [langOpen,    setLangOpen]   = useState(false);
   const [termLines,   setTermLines]  = useState([]);
@@ -969,30 +989,56 @@ export default function App({ setCurrentPage, initialCode }) {
   const [fixMsg,      setFixMsg]     = useState("");
   const [copyDone,    setCopyDone]   = useState(false);
 
+  // FIX 2: Undo/Redo
+  const { current: code, set: setCodeHistory, undo, redo, canUndo, canRedo, reset } = useUndoRedo(initialCode || TEMPLATES.python);
+
+  // Debounced set so every keystroke doesn't flood history
+  const debounceRef = useRef(null);
+  const handleCodeChange = useCallback((val) => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setCodeHistory(val);
+    }, 400);
+    // Immediately update via direct state trick — we track raw in a ref
+    // Actually we need immediate update for the editor display,
+    // so we use a "pending" ref approach:
+    _pendingCode.current = val;
+    _forceUpdate.current?.();
+  }, [setCodeHistory]);
+
+  // We need a live "display" code that updates immediately but history debounces
+  const _pendingCode = useRef(code);
+  const _forceRender = useState(0);
+  const _forceUpdate = useRef(() => _forceRender[1](x => x + 1));
+  const displayCode = _pendingCode.current;
+
+  // Sync pending when undo/redo happens
+  useEffect(() => {
+    _pendingCode.current = code;
+    _forceUpdate.current();
+  }, [code]);
+
+  useEffect(() => {
+    if (initialCode) { reset(initialCode); _pendingCode.current = initialCode; }
+  }, [initialCode]); // eslint-disable-line
+
   const inputResolveRef = useRef(null);
-  // FIX: Buffer lines to avoid setState flood from while True
   const lineBufferRef   = useRef([]);
   const flushTimerRef   = useRef(null);
 
-  useEffect(() => { if (initialCode) setCode(initialCode); }, [initialCode]);
-
-  // Pre-init worker on mount
   useEffect(() => {
     getWorker((pct, msg) => {
-      setPyProgress(pct);
-      setPyMsg(msg);
+      setPyProgress(pct); setPyMsg(msg);
       if (pct < 100) setPyLoading(true);
       else setPyLoading(false);
     });
   }, []);
 
-  // Batched line flusher — prevents render flood
   const flushLines = useCallback(() => {
     if (lineBufferRef.current.length === 0) return;
     const toAdd = lineBufferRef.current.splice(0);
     setTermLines(p => {
       const next = [...p, ...toAdd];
-      // Cap at 3000 lines in UI
       if (next.length > 3000) return next.slice(next.length - 3000);
       return next;
     });
@@ -1005,7 +1051,7 @@ export default function App({ setCurrentPage, initialCode }) {
       setLastError(prev => prev ? prev + "\n" + text : text);
     }
     clearTimeout(flushTimerRef.current);
-    flushTimerRef.current = setTimeout(flushLines, 50); // batch every 50ms
+    flushTimerRef.current = setTimeout(flushLines, 50);
   }, [flushLines]);
 
   const waitForInput = useCallback((prompt) => {
@@ -1019,10 +1065,8 @@ export default function App({ setCurrentPage, initialCode }) {
     inputResolveRef.current = null;
   }, [addLine]);
 
-  // STOP: Kill worker
   const handleStop = useCallback(() => {
     terminateWorker();
-    // Re-init worker for next run
     getWorker((pct, msg) => {
       setPyProgress(pct); setPyMsg(msg);
       if (pct < 100) setPyLoading(true);
@@ -1033,16 +1077,21 @@ export default function App({ setCurrentPage, initialCode }) {
   }, [addLine]);
 
   const switchLang = (k) => {
-    setLang(k); setCode(TEMPLATES[k]); setLangOpen(false);
+    setLang(k);
+    reset(TEMPLATES[k]);
+    _pendingCode.current = TEMPLATES[k];
+    setLangOpen(false);
     setHasError(false); setLastError(""); setFixMsg("");
     setScreen("editor"); setTermLines([]);
   };
 
   const handleCopy = async () => {
-    try { await navigator.clipboard?.writeText(code); setCopyDone(true); setTimeout(() => setCopyDone(false), 1500); } catch (_) {}
+    try {
+      await navigator.clipboard?.writeText(displayCode);
+      setCopyDone(true); setTimeout(() => setCopyDone(false), 1500);
+    } catch (_) {}
   };
 
-  /* ── AI FIX ── */
   const doFix = useCallback(async () => {
     if (!lastError || isFixing) return;
     setIsFixing(true); setFixMsg("AI is analyzing the error...");
@@ -1051,11 +1100,13 @@ export default function App({ setCurrentPage, initialCode }) {
       let reply = "";
       await callAI([
         { role: "system", content: `You are an expert ${langLabel} developer. Fix the buggy code. Return ONLY the corrected code inside a markdown code block (\`\`\`${lang}\n...\n\`\`\`). No explanation, no extra text.` },
-        { role: "user",   content: `${langLabel} code with error:\n\`\`\`${lang}\n${code}\n\`\`\`\n\nError message:\n${lastError}\n\nReturn only the fixed code block.` },
+        { role: "user",   content: `${langLabel} code with error:\n\`\`\`${lang}\n${displayCode}\n\`\`\`\n\nError message:\n${lastError}\n\nReturn only the fixed code block.` },
       ], (partial) => { reply = partial; });
       const match = reply.match(/```(?:\w+)?\n([\s\S]+?)```/);
       if (match) {
-        setCode(match[1].trim()); setHasError(false); setLastError("");
+        const fixed = match[1].trim();
+        reset(fixed); _pendingCode.current = fixed;
+        setHasError(false); setLastError("");
         setFixMsg("✓ Fixed! Run again to verify."); setTimeout(() => setFixMsg(""), 4000);
       } else {
         setFixMsg("Could not auto-fix. Please check manually."); setTimeout(() => setFixMsg(""), 5000);
@@ -1064,11 +1115,10 @@ export default function App({ setCurrentPage, initialCode }) {
       setFixMsg("AI unavailable: " + e.message); setTimeout(() => setFixMsg(""), 5000);
     }
     setIsFixing(false);
-  }, [lang, code, lastError, isFixing]);
+  }, [lang, displayCode, lastError, isFixing, reset]);
 
-  /* ── RUN CODE ── */
   const runCode = useCallback(async (codeToRun) => {
-    const raw = (codeToRun ?? code).trim();
+    const raw = (codeToRun ?? displayCode).trim();
     if (!raw) return;
     const runner = LANGS[lang]?.runner || "pyodide";
     setHasError(false); setLastError(""); setFixMsg("");
@@ -1113,9 +1163,7 @@ export default function App({ setCurrentPage, initialCode }) {
       setTermRunning(false); return;
     }
 
-    // PYODIDE via Web Worker
     if (runner === "pyodide") {
-      // Collect inputs first if needed
       let inputs = [];
       if (hasInput(raw)) {
         const prompts = getPrompts(raw);
@@ -1128,19 +1176,16 @@ export default function App({ setCurrentPage, initialCode }) {
 
       let gotOutput = false;
       runPythonInWorker({
-        code: raw,
-        inputs,
+        code: raw, inputs,
         onProgress: (pct, msg) => {
           setPyProgress(pct); setPyMsg(msg);
           setPyLoading(pct < 100);
         },
         onLine: (text, kind) => {
           gotOutput = true;
-          // Split multi-line text
           text.split("\n").forEach(l => addLine(l, kind));
         },
         onDone: () => {
-          // Final flush
           clearTimeout(flushTimerRef.current);
           flushLines();
           if (!gotOutput) addLine("Done (no output)", "system");
@@ -1149,7 +1194,7 @@ export default function App({ setCurrentPage, initialCode }) {
         },
       });
     }
-  }, [code, lang, addLine, waitForInput, flushLines]);
+  }, [displayCode, lang, addLine, waitForInput, flushLines]);
 
   const handleBack = () => {
     if (typeof setCurrentPage === "function") setCurrentPage("home");
@@ -1176,7 +1221,7 @@ export default function App({ setCurrentPage, initialCode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#ffffff", overflow: "hidden" }}>
 
-      {/* ROW 1: Back + Title + Lang selector + Run */}
+      {/* TOP BAR */}
       <div style={{
         height: 46, background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
         display: "flex", alignItems: "center", padding: "0 10px", gap: 8, flexShrink: 0,
@@ -1230,7 +1275,7 @@ export default function App({ setCurrentPage, initialCode }) {
           )}
         </div>
 
-        <button onClick={() => runCode(code)} className="run-btn-live" style={{
+        <button onClick={() => runCode(displayCode)} className="run-btn-live" style={{
           border: "none", color: "#fff", borderRadius: 9, padding: "7px 16px",
           fontSize: 13, fontWeight: 800, cursor: "pointer",
           fontFamily: "'Space Grotesk', sans-serif",
@@ -1271,14 +1316,60 @@ export default function App({ setCurrentPage, initialCode }) {
       )}
 
       {/* CODE EDITOR */}
-      <CodeEditor code={code} onChange={setCode} lang={lang} />
+      <CodeEditor
+        code={displayCode}
+        onChange={handleCodeChange}
+        lang={lang}
+        onUndo={undo}
+        onRedo={redo}
+        canUndo={canUndo}
+        canRedo={canRedo}
+      />
 
-      {/* BOTTOM BAR */}
+      {/* BOTTOM BAR — FIX 2: Undo/Redo mobile buttons */}
       <div style={{
         height: 44, background: "#f5f5f5", borderTop: "1px solid #e0e0e0",
         display: "flex", alignItems: "center", padding: "0 12px", gap: 6, flexShrink: 0,
       }}>
-        <button onClick={() => { setCode(""); setHasError(false); setLastError(""); setFixMsg(""); }} style={{
+        {/* UNDO */}
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          title="Undo"
+          style={{
+            background: canUndo ? "#fff" : "#fafafa",
+            border: `1px solid ${canUndo ? "#ddd" : "#ebebeb"}`,
+            color: canUndo ? "#333" : "#ccc",
+            borderRadius: 7, padding: "5px 10px", fontSize: 16,
+            cursor: canUndo ? "pointer" : "default",
+            lineHeight: 1, userSelect: "none",
+            transition: "all 0.15s",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            minWidth: 34,
+          }}
+        >↩</button>
+
+        {/* REDO */}
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          title="Redo"
+          style={{
+            background: canRedo ? "#fff" : "#fafafa",
+            border: `1px solid ${canRedo ? "#ddd" : "#ebebeb"}`,
+            color: canRedo ? "#333" : "#ccc",
+            borderRadius: 7, padding: "5px 10px", fontSize: 16,
+            cursor: canRedo ? "pointer" : "default",
+            lineHeight: 1, userSelect: "none",
+            transition: "all 0.15s",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            minWidth: 34,
+          }}
+        >↪</button>
+
+        <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 2px" }} />
+
+        <button onClick={() => { reset(""); _pendingCode.current = ""; setHasError(false); setLastError(""); setFixMsg(""); }} style={{
           background: "#fff", border: "1px solid #ddd", color: "#555",
           borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer", fontFamily: "sans-serif",
         }}>Clear</button>
@@ -1294,7 +1385,7 @@ export default function App({ setCurrentPage, initialCode }) {
         </button>
 
         {lang === "python" && (
-          <button onClick={() => setCode(TURTLE_CODE)} style={{
+          <button onClick={() => { reset(TURTLE_CODE); _pendingCode.current = TURTLE_CODE; }} style={{
             background: "#fff", border: "1px solid #ddd", color: "#008000",
             borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer", fontFamily: "sans-serif",
           }}>🐢 Turtle</button>
