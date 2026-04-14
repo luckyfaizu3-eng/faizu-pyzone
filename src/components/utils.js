@@ -3,7 +3,7 @@
 // Shared configs, utilities, and manager classes for MockTestInterface
 // ============================================================
 // SECURITY RULES (Updated):
-// ✅ Tab switch         → SEEDHA DISQUALIFY (1st switch pe)
+// ✅ Tab switch         → 3 baar = DISQUALIFY (was 1, now 3 per FIX-TAB)
 // ✅ Windows key        → 3 baar press = DISQUALIFY
 // ✅ DevTools open      → SEEDHA DISQUALIFY (no warning, no countdown)
 // ✅ Fullscreen         → tab switch pe bhi mat hatao (fullscreen stays)
@@ -24,12 +24,15 @@
 // ✅ SEC-15: CleanupManager
 // ✅ FIX-1:  touchend — button taps work on mobile
 // ✅ FIX-2:  DesktopModeEnforcer — permanent, never resets
-// ✅ FIX-3:  contextmenu event name fixed (was camelCase — silently did nothing)
+// ✅ FIX-3:  contextmenu event name fixed
 // ✅ FIX-4:  beforeprint properly blocked via window.print override
 // ✅ FIX-5:  console methods restored on SecurityManager.disable()
-// ✅ FIX-6:  calculateScore — division-by-zero guard for empty questions
+// ✅ FIX-6:  calculateScore — division-by-zero guard
 // ✅ FIX-7:  NetworkGuard.enable() — double-enable guard
 // ✅ FIX-8:  formatTime/formatShort — negative seconds guard
+// ✅ FIX-TAB: MAX_TAB_SWITCHES changed to 3
+// ✅ FIX-SUBMIT: window.onbeforeunload = null after submit so no browser dialog
+// ✅ FIX-FULLSCREEN: CleanupManager exit fullscreen properly after result shown
 // ============================================================
 
 // ==========================================
@@ -97,7 +100,6 @@ export class LeaderboardStorage {
       ({ collection, addDoc } = await import('firebase/firestore'));
       ({ db }                 = await import('../firebase'));
     } catch (importErr) {
-      // Use native console to bypass any neutering
       (window.__nativeConsoleWarn || console.warn)('[MockTest] Firebase module import failed:', importErr.message);
       return { success: false, error: importErr.message };
     }
@@ -132,17 +134,20 @@ export class LeaderboardStorage {
 
 // ==========================================
 // CONFIGURATION
+// ✅ FIX-TAB: MAX_TAB_SWITCHES = 3 (was 1)
 // ==========================================
 export const APP_CONFIG = Object.freeze({
   ADMIN_EMAIL:             'luckyfaizu3@gmail.com',
-  MAX_TAB_SWITCHES:        1,    // 1st tab switch = seedha disqualify
-  MAX_BLUR_COUNT:          999,  // blur pe sirf warning, kabhi disqualify nahi
-  MAX_WINDOWS_KEY_PRESSES: 3,    // Windows key 3 baar = disqualify
+  MAX_TAB_SWITCHES:        3,    // 3 tab switches = disqualify
+  MAX_BLUR_COUNT:          999,
+  MAX_WINDOWS_KEY_PRESSES: 3,
   WARNING_TIMEOUT:         3000,
   AUTO_SUBMIT_DELAY:       2000,
   CRITICAL_TIME_MINUTES:   5,
   INACTIVITY_PERCENT:      0.10,
   DEVTOOLS_SIZE_THRESHOLD: 160,
+  // ✅ NEW: minimum seconds to show disqualify/final warning before auto-dismiss
+  DISQUALIFY_MIN_SECONDS:  15,
 });
 
 export const THEME = Object.freeze({
@@ -217,7 +222,6 @@ export class ScreenRecordBlocker {
 
 // ==========================================
 // DESKTOP MODE ENFORCER
-// ✅ FIX-2: disable() = NO-OP, desktop mode permanent
 // ==========================================
 export class DesktopModeEnforcer {
   static _original = null;
@@ -248,7 +252,6 @@ export class TestUtils {
   static isAdmin(email) { return email === APP_CONFIG.ADMIN_EMAIL; }
 
   static formatTime(s) {
-    // FIX-8: guard against negative seconds
     const safe = Math.max(0, Math.floor(s));
     const h    = Math.floor(safe / 3600);
     const m    = Math.floor((safe % 3600) / 60);
@@ -257,7 +260,6 @@ export class TestUtils {
   }
 
   static formatShort(s) {
-    // FIX-8: guard against negative seconds
     const safe = Math.max(0, Math.floor(s));
     const m    = Math.floor(safe / 60);
     const sc   = safe % 60;
@@ -266,7 +268,6 @@ export class TestUtils {
   }
 
   static calculateScore(answers, questions, tabSwitches, isAdmin, passPercent) {
-    // FIX-6: guard against empty questions array (division by zero)
     if (!questions || questions.length === 0) {
       return {
         correct: 0, wrong: 0, total: 0,
@@ -370,8 +371,6 @@ export class FullscreenManager {
 
 // ==========================================
 // DEVTOOLS DETECTOR
-// ✅ UPDATED: Seedha disqualify — koi warning nahi, koi countdown nahi
-// Window size diff ya debugger timing se detect hote hi instant submit
 // ==========================================
 export class DevToolsDetector {
   constructor(onWarning, onAutoSubmit) {
@@ -417,13 +416,11 @@ export class DevToolsDetector {
 
       if (isOpen) {
         this.consecutiveCount++;
-        // Certain (timing/large diff) → 1 second hi kaafi, moderate → 3 seconds
         const threshold = isCertain ? 1 : 3;
 
         if (this.consecutiveCount >= threshold) {
           this.detected = true;
           this.stop();
-          // Seedha disqualify — koi warning nahi, koi countdown nahi
           this.onWarning(
             'DISQUALIFIED — Developer Tools Detected\n\nDeveloper Tools khola tha. Test FAIL submit ho raha hai.',
             'final',
@@ -444,40 +441,29 @@ export class DevToolsDetector {
 
 // ==========================================
 // SECURITY MANAGER
-// ✅ UPDATED rules:
-//   - Copy/paste/right-click → sirf warning, disqualify nahi
-//   - Windows key → 3 baar = disqualify
-//   - Pinch zoom (multi-touch) → ALLOWED on mobile
-//   - touchend → only long-press blocked, taps allowed
 // ==========================================
 export class SecurityManager {
   constructor(onWarning, handleSubmitRef) {
     this.onWarning       = onWarning;
     this.handleSubmitRef = handleSubmitRef;
     this.violationCount  = 0;
-    // Violations = sirf warning, kabhi disqualify nahi
     this.maxViolations   = 999;
 
     this._origClipboardRead  = null;
     this._origClipboardWrite = null;
 
-    // Windows key tracker
     this._windowsKeyCount   = 0;
     this._windowsKeyTimer   = null;
 
-    // Long-press detection
     this._touchStartTime     = 0;
     this._longPressThreshold = 500;
 
-    // FIX-5: store original console methods so we can restore them on disable()
     this._origConsoleMethods = {};
 
     this.handlers = {
       copy:        (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Copying is disabled during the test.'); },
       cut:         (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Cutting is disabled during the test.'); },
       paste:       (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Pasting is disabled during the test.'); },
-      // FIX-3: was 'contextMenu' (camelCase) — DOM event is 'contextmenu' (all lowercase)
-      // camelCase key caused addEventListener('contextMenu') which silently did nothing
       contextmenu: (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Right-click is disabled during the test.'); },
 
       keydown: (e) => {
@@ -486,7 +472,6 @@ export class SecurityManager {
         const isInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable;
         const isFKey  = /^f([1-9]|1[0-2])$/i.test(e.key);
 
-        // ✅ Windows key → 3 baar = disqualify
         const isWindowsKey = e.key === 'Meta' || e.key === 'OS';
         if (isWindowsKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
           e.preventDefault();
@@ -540,7 +525,6 @@ export class SecurityManager {
         }
       },
 
-      // Ctrl+Scroll zoom blocked
       wheel: (e) => {
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
@@ -553,21 +537,14 @@ export class SecurityManager {
       drop:        (e) => { e.preventDefault(); e.stopPropagation(); },
       selectstart: (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); },
 
-      // FIX-4: beforeprint e.preventDefault() does NOT stop print dialog in any browser.
-      // Real fix: override window.print directly so the dialog never opens.
-      // The @media print CSS in injectGlobalCSS() handles the visual side.
       beforeprint: (e) => {
         this.recordViolation('Printing is disabled during the test.');
       },
 
-      // ✅ touchstart: sirf start time record karo
-      // Multi-touch pinch zoom ALLOWED — koi block nahi
       touchstart: (e) => {
         this._touchStartTime = Date.now();
-        // Multi-touch (pinch zoom) = allowed on mobile, no block
       },
 
-      // ✅ touchend: sirf long-press block, normal taps + pinch zoom free
       touchend: (e) => {
         const touchDuration = Date.now() - this._touchStartTime;
         const tag = e.target.tagName;
@@ -583,11 +560,9 @@ export class SecurityManager {
           e.target.closest('[role="button"]')
         );
 
-        // Sirf long-press on non-interactive = block (context menu prevent)
         if (touchDuration >= this._longPressThreshold && !isInteractive) {
           e.preventDefault();
         }
-        // Normal taps, button taps, pinch zoom — sab free
       },
     };
   }
@@ -619,11 +594,9 @@ export class SecurityManager {
     try { sessionStorage.clear(); } catch (e) {}
   }
 
-  // ✅ Violations = sirf warning, kabhi disqualify nahi
   recordViolation(message) {
     this.violationCount++;
     this.onWarning(message, 'violation');
-    // No auto-submit, no disqualify — sirf warning
   }
 
   enable() {
@@ -637,17 +610,13 @@ export class SecurityManager {
     this._poisonClipboard();
     this._wipeStorage();
 
-    // Block window.open
     try { window.__origOpen = window.open; window.open = () => null; } catch (e) {}
 
-    // FIX-4: Override window.print to actually block print dialog
     try {
       window.__origPrint = window.print;
       window.print = () => { this.recordViolation('Printing is disabled during the test.'); };
     } catch (e) {}
 
-    // FIX-5: Save originals BEFORE neutering so we can restore on disable()
-    // Also save to window so LeaderboardStorage can use them even after neutering
     try {
       const noop = () => {};
       const methods = ['log','warn','error','info','table','dir','dirxml','group','groupEnd',
@@ -655,7 +624,7 @@ export class SecurityManager {
       methods.forEach(m => {
         try {
           this._origConsoleMethods[m] = console[m];
-          if (m === 'warn') window.__nativeConsoleWarn = console[m]; // preserve for LeaderboardStorage
+          if (m === 'warn') window.__nativeConsoleWarn = console[m];
           console[m] = noop;
         } catch (e) {}
       });
@@ -673,11 +642,7 @@ export class SecurityManager {
     this._restoreClipboard();
     if (this._windowsKeyTimer) clearTimeout(this._windowsKeyTimer);
     try { if (window.__origOpen) { window.open = window.__origOpen; delete window.__origOpen; } } catch (e) {}
-
-    // FIX-4: Restore window.print
     try { if (window.__origPrint) { window.print = window.__origPrint; delete window.__origPrint; } } catch (e) {}
-
-    // FIX-5: Restore all neutered console methods
     try {
       Object.entries(this._origConsoleMethods).forEach(([m, fn]) => {
         try { if (fn) console[m] = fn; } catch (e) {}
@@ -690,7 +655,6 @@ export class SecurityManager {
 
 // ==========================================
 // VISIBILITY MANAGER
-// ✅ SEC-12: Title scramble on tab blur
 // ==========================================
 export class VisibilityManager {
   static _origTitle   = '';
@@ -714,7 +678,6 @@ export class VisibilityManager {
 
 // ==========================================
 // NETWORK GUARD
-// ✅ SEC-14: AI/cheat domains blocked
 // ==========================================
 const BLOCKED_DOMAINS = [
   'openai.com', 'chatgpt.com', 'claude.ai', 'gemini.google.com', 'bard.google.com',
@@ -738,7 +701,6 @@ export class NetworkGuard {
   }
 
   static enable() {
-    // FIX-7: double-enable guard — don't wrap an already-wrapped fetch
     if (this._origFetch !== null) return;
 
     this._origFetch = window.fetch;
@@ -770,16 +732,27 @@ export class NetworkGuard {
 
 // ==========================================
 // CLEANUP MANAGER
-// Note: DesktopModeEnforcer.disable() = NO-OP, desktop mode permanent
+// ✅ FIX-FULLSCREEN: Fullscreen exit with small delay so result screen renders first
+// ✅ FIX-SUBMIT: beforeunload cleared so no browser "do you want to leave" dialog
 // ==========================================
 export class CleanupManager {
-  static performFullCleanup() {
-    FullscreenManager.exit();
-    DesktopModeEnforcer.disable(); // NO-OP — desktop mode permanent
+  static performFullCleanup(delayFullscreen = false) {
+    // ✅ FIX-SUBMIT: immediately clear beforeunload so browser dialog never appears
+    window.onbeforeunload = null;
+
+    DesktopModeEnforcer.disable();
     ScreenRecordBlocker.disable();
     NetworkGuard.disable();
     VisibilityManager.disable();
-    window.onbeforeunload = null;
+
+    // ✅ FIX-FULLSCREEN: delay fullscreen exit so result page renders cleanly
+    const doExit = () => FullscreenManager.exit();
+    if (delayFullscreen) {
+      setTimeout(doExit, 400);
+    } else {
+      doExit();
+    }
+
     [document.body, document.documentElement].forEach(el => {
       if (!el) return;
       ['overflow','position','margin','padding','width','height','top','left',
