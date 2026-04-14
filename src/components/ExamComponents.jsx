@@ -1,49 +1,11 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/ExamComponents.jsx
+// ✅ FIX-AUDIO: playTick, getAudioCtx, unlockAudio — sab remove kar diye
+// ✅ FIX-AUDIO: QuestionTimer + IsolatedTimer se sab audio calls hataye
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Clock, AlertTriangle } from 'lucide-react';
 import { APP_CONFIG, THEME, TestUtils } from './utils';
-
-let _audioCtx = null;
-function getAudioCtx() {
-  if (!_audioCtx) {
-    try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch { return null; }
-  }
-  return _audioCtx;
-}
-
-function playTick(urgent = false) {
-  const ctx = getAudioCtx();
-  if (!ctx) return;
-  try {
-    const osc  = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    if (urgent) {
-      osc.type = 'square';
-      osc.frequency.setValueAtTime(1100, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.04);
-      gain.gain.setValueAtTime(0.22, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.12);
-    } else {
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(660, ctx.currentTime);
-      gain.gain.setValueAtTime(0.08, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.07);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.07);
-    }
-  } catch { /* silently ignore */ }
-}
-
-function unlockAudio() {
-  const ctx = getAudioCtx();
-  if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
-}
 
 export function scrollToQuestion(questionIndex) {
   let el = document.querySelector(`[data-question-index="${questionIndex}"]`);
@@ -334,7 +296,7 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
       timerRef.current = setInterval(() => {
         setCountdown(prev => {
           const next = prev - 1;
-          if (next > 0 && next <= 5) playTick(true);
+          // ✅ FIX-AUDIO: No tick sounds here
           if (next <= 0) {
             clearInterval(timerRef.current);
             onAcknowledgeRef.current();
@@ -415,6 +377,11 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
   );
 }
 
+// ==========================================
+// QUESTION TIMER
+// ✅ FIX-AUDIO: All playTick / unlockAudio calls removed
+// ✅ FIX-TIMER: startedAt wall-clock based — survives tab switches
+// ==========================================
 export const QuestionTimer = React.memo(function QuestionTimer({
   questionIndex,
   totalQuestions,
@@ -437,15 +404,6 @@ export const QuestionTimer = React.memo(function QuestionTimer({
   const intervalRef = useRef(null);
   const onExpireRef = useRef(onExpire);
   useEffect(() => { onExpireRef.current = onExpire; }, [onExpire]);
-
-  useEffect(() => {
-    window.addEventListener('pointerdown', unlockAudio, { once: true });
-    window.addEventListener('keydown',     unlockAudio, { once: true });
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('keydown',     unlockAudio);
-    };
-  }, []);
 
   useEffect(() => {
     if (!timerStateRef.current[questionIndex]) {
@@ -481,8 +439,7 @@ export const QuestionTimer = React.memo(function QuestionTimer({
       setTimeLeft(next);
       timerStateRef.current[questionIndex].timeLeft = next;
 
-      const isUrgent = next <= 10 && next > 0;
-      if (isUrgent) playTick(true);
+      // ✅ FIX-AUDIO: No playTick call here
 
       if (next <= 0 && !firedRef.current) {
         firedRef.current = true;
@@ -563,6 +520,11 @@ export const QuestionTimer = React.memo(function QuestionTimer({
   );
 });
 
+// ==========================================
+// ISOLATED TIMER (Global exam timer)
+// ✅ FIX-AUDIO: All playTick / unlockAudio calls removed
+// ✅ FIX-TIMER: Wall-clock based startedAt — tab switch pe bhi timer accurate rahega
+// ==========================================
 export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onExpire, onTick, isAdmin }) {
   const onExpireRef  = useRef(onExpire);
   const onTickRef    = useRef(onTick);
@@ -585,15 +547,6 @@ export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onEx
   }, []);
 
   useEffect(() => {
-    window.addEventListener('pointerdown', unlockAudio, { once: true });
-    window.addEventListener('keydown',     unlockAudio, { once: true });
-    return () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('keydown',     unlockAudio);
-    };
-  }, []);
-
-  useEffect(() => {
     if (isAdmin) return;
 
     const getLeft = () => {
@@ -608,8 +561,7 @@ export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onEx
       setPct((left / totalSecs.current) * 100);
       if (onTickRef.current) onTickRef.current(left);
 
-      const isUrgent = left <= 10 && left > 0;
-      if (isUrgent) playTick(isUrgent);
+      // ✅ FIX-AUDIO: No playTick call here
 
       if (left <= 0 && !firedRef.current) {
         firedRef.current = true;
@@ -620,6 +572,7 @@ export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onEx
 
     intervalRef.current = setInterval(update, 500);
 
+    // ✅ FIX-TIMER: visibilitychange pe recalculate so tab switch pe bhi sahi time
     const onVisible = () => {
       if (!document.hidden) update();
     };

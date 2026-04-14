@@ -1,43 +1,12 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/utils.js
-// Shared configs, utilities, and manager classes for MockTestInterface
 // ============================================================
-// SECURITY RULES (Updated):
-// ✅ Tab switch         → 3 baar = DISQUALIFY (was 1, now 3 per FIX-TAB)
-// ✅ Windows key        → 3 baar press = DISQUALIFY
-// ✅ DevTools open      → SEEDHA DISQUALIFY (no warning, no countdown)
-// ✅ Fullscreen         → tab switch pe bhi mat hatao (fullscreen stays)
-// ✅ Pinch zoom mobile  → ALLOWED (multi-touch enable)
-// ✅ Blur/mouse/inactivity → sirf WARNING, disqualify nahi
-// ✅ Copy/paste etc     → sirf WARNING, disqualify nahi
-// ✅ SEC-1:  window.open blocked
-// ✅ SEC-2:  Object.freeze on APP_CONFIG
-// ✅ SEC-4:  Console methods neutered + restored on disable
-// ✅ SEC-5:  navigator.clipboard fully poisoned
-// ✅ SEC-6:  localStorage + sessionStorage wiped
-// ✅ SEC-8:  ALL F1–F12 keys blocked
-// ✅ SEC-9:  Ctrl+Scroll zoom blocked
-// ✅ SEC-11: getUserMedia screen-share blocked
-// ✅ SEC-12: document.title scrambled on visibility change
-// ✅ SEC-13: Ctrl+W / Ctrl+Q blocked
-// ✅ SEC-14: NetworkGuard — AI/cheat domains blocked
-// ✅ SEC-15: CleanupManager
-// ✅ FIX-1:  touchend — button taps work on mobile
-// ✅ FIX-2:  DesktopModeEnforcer — permanent, never resets
-// ✅ FIX-3:  contextmenu event name fixed
-// ✅ FIX-4:  beforeprint properly blocked via window.print override
-// ✅ FIX-5:  console methods restored on SecurityManager.disable()
-// ✅ FIX-6:  calculateScore — division-by-zero guard
-// ✅ FIX-7:  NetworkGuard.enable() — double-enable guard
-// ✅ FIX-8:  formatTime/formatShort — negative seconds guard
-// ✅ FIX-TAB: MAX_TAB_SWITCHES changed to 3
-// ✅ FIX-SUBMIT: window.onbeforeunload = null after submit so no browser dialog
-// ✅ FIX-FULLSCREEN: CleanupManager exit fullscreen properly after result shown
+// FIXES IN THIS VERSION:
+// ✅ FIX-DESKTOP:   DesktopModeEnforcer.disable() now restores viewport properly
+// ✅ FIX-DELAY:     CleanupManager fullscreen exit delay 400ms → 800ms
+// ✅ FIX-AUDIO:     AudioManager playTick/playAlarm removed (silent)
 // ============================================================
 
-// ==========================================
-// GLOBAL CSS
-// ==========================================
 export function injectGlobalCSS() {
   if (typeof document === 'undefined') return;
   if (document.getElementById('mock-test-global-css')) return;
@@ -134,11 +103,10 @@ export class LeaderboardStorage {
 
 // ==========================================
 // CONFIGURATION
-// ✅ FIX-TAB: MAX_TAB_SWITCHES = 3 (was 1)
 // ==========================================
 export const APP_CONFIG = Object.freeze({
   ADMIN_EMAIL:             'luckyfaizu3@gmail.com',
-  MAX_TAB_SWITCHES:        3,    // 3 tab switches = disqualify
+  MAX_TAB_SWITCHES:        3,
   MAX_BLUR_COUNT:          999,
   MAX_WINDOWS_KEY_PRESSES: 3,
   WARNING_TIMEOUT:         3000,
@@ -146,7 +114,6 @@ export const APP_CONFIG = Object.freeze({
   CRITICAL_TIME_MINUTES:   5,
   INACTIVITY_PERCENT:      0.10,
   DEVTOOLS_SIZE_THRESHOLD: 160,
-  // ✅ NEW: minimum seconds to show disqualify/final warning before auto-dismiss
   DISQUALIFY_MIN_SECONDS:  15,
 });
 
@@ -222,6 +189,7 @@ export class ScreenRecordBlocker {
 
 // ==========================================
 // DESKTOP MODE ENFORCER
+// ✅ FIX-DESKTOP: disable() now actually restores viewport
 // ==========================================
 export class DesktopModeEnforcer {
   static _original = null;
@@ -241,8 +209,21 @@ export class DesktopModeEnforcer {
     }
   }
 
-  // NO-OP intentionally — desktop mode hamesha on rahe
-  static disable() {}
+  // ✅ FIXED: Properly restores viewport after exam ends
+  static disable() {
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (meta) {
+      if (this._original !== null) {
+        meta.setAttribute('content', this._original);
+        this._original = null;
+      } else if (this._created) {
+        this._created.remove();
+        this._created = null;
+      } else {
+        meta.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes');
+      }
+    }
+  }
 }
 
 // ==========================================
@@ -297,40 +278,14 @@ export class TestUtils {
 
 // ==========================================
 // AUDIO MANAGER
+// ✅ FIX-AUDIO: All tick/alarm sounds removed — completely silent
 // ==========================================
 export class AudioManager {
   constructor() { this.context = null; }
-  init() {
-    if (!this.context) {
-      try { this.context = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
-    }
-  }
-  playTick(isEven) {
-    if (!this.context) return;
-    try {
-      const osc  = this.context.createOscillator();
-      const gain = this.context.createGain();
-      osc.connect(gain); gain.connect(this.context.destination);
-      osc.frequency.value = isEven ? 1000 : 800; osc.type = 'sine';
-      const now = this.context.currentTime;
-      gain.gain.setValueAtTime(0, now);
-      gain.gain.linearRampToValueAtTime(0.08, now + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
-      osc.start(now); osc.stop(now + 0.08);
-    } catch (e) {}
-  }
-  playAlarm() {
-    if (!this.context) return;
-    try {
-      const osc  = this.context.createOscillator();
-      const gain = this.context.createGain();
-      osc.connect(gain); gain.connect(this.context.destination);
-      osc.frequency.value = 880; osc.type = 'square';
-      const now = this.context.currentTime;
-      gain.gain.setValueAtTime(0.2, now); osc.start(now); osc.stop(now + 1);
-    } catch (e) {}
-  }
-  destroy() {
+  init()      { /* silent */ }
+  playTick()  { /* removed — no tick sounds */ }
+  playAlarm() { /* removed — no alarm sounds */ }
+  destroy()   {
     if (this.context) { try { this.context.close(); } catch (e) {} this.context = null; }
   }
 }
@@ -413,11 +368,9 @@ export class DevToolsDetector {
     this.interval = setInterval(() => {
       if (this.detected) return;
       const { isOpen, isCertain } = this._isOpen();
-
       if (isOpen) {
         this.consecutiveCount++;
         const threshold = isCertain ? 1 : 3;
-
         if (this.consecutiveCount >= threshold) {
           this.detected = true;
           this.stop();
@@ -536,30 +489,21 @@ export class SecurityManager {
       dragstart:   (e) => { e.preventDefault(); e.stopPropagation(); },
       drop:        (e) => { e.preventDefault(); e.stopPropagation(); },
       selectstart: (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); },
+      beforeprint: (e) => { this.recordViolation('Printing is disabled during the test.'); },
 
-      beforeprint: (e) => {
-        this.recordViolation('Printing is disabled during the test.');
-      },
-
-      touchstart: (e) => {
-        this._touchStartTime = Date.now();
-      },
+      touchstart: (e) => { this._touchStartTime = Date.now(); },
 
       touchend: (e) => {
         const touchDuration = Date.now() - this._touchStartTime;
         const tag = e.target.tagName;
         const isInteractive = (
-          tag === 'BUTTON'   ||
-          tag === 'INPUT'    ||
-          tag === 'SELECT'   ||
-          tag === 'TEXTAREA' ||
-          tag === 'A'        ||
-          e.target.isContentEditable      ||
-          e.target.closest('button')      ||
-          e.target.closest('a')           ||
+          tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' ||
+          tag === 'TEXTAREA' || tag === 'A' ||
+          e.target.isContentEditable ||
+          e.target.closest('button') ||
+          e.target.closest('a') ||
           e.target.closest('[role="button"]')
         );
-
         if (touchDuration >= this._longPressThreshold && !isInteractive) {
           e.preventDefault();
         }
@@ -609,14 +553,11 @@ export class SecurityManager {
     ScreenRecordBlocker.enable();
     this._poisonClipboard();
     this._wipeStorage();
-
     try { window.__origOpen = window.open; window.open = () => null; } catch (e) {}
-
     try {
       window.__origPrint = window.print;
       window.print = () => { this.recordViolation('Printing is disabled during the test.'); };
     } catch (e) {}
-
     try {
       const noop = () => {};
       const methods = ['log','warn','error','info','table','dir','dirxml','group','groupEnd',
@@ -641,7 +582,7 @@ export class SecurityManager {
     ScreenRecordBlocker.disable();
     this._restoreClipboard();
     if (this._windowsKeyTimer) clearTimeout(this._windowsKeyTimer);
-    try { if (window.__origOpen) { window.open = window.__origOpen; delete window.__origOpen; } } catch (e) {}
+    try { if (window.__origOpen)  { window.open  = window.__origOpen;  delete window.__origOpen;  } } catch (e) {}
     try { if (window.__origPrint) { window.print = window.__origPrint; delete window.__origPrint; } } catch (e) {}
     try {
       Object.entries(this._origConsoleMethods).forEach(([m, fn]) => {
@@ -702,7 +643,6 @@ export class NetworkGuard {
 
   static enable() {
     if (this._origFetch !== null) return;
-
     this._origFetch = window.fetch;
     window.fetch = (...args) => {
       const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
@@ -711,7 +651,6 @@ export class NetworkGuard {
       }
       return NetworkGuard._origFetch.apply(window, args);
     };
-
     this._origXHR = window.XMLHttpRequest;
     const Guard   = this;
     window.XMLHttpRequest = class extends Guard._origXHR {
@@ -732,12 +671,11 @@ export class NetworkGuard {
 
 // ==========================================
 // CLEANUP MANAGER
-// ✅ FIX-FULLSCREEN: Fullscreen exit with small delay so result screen renders first
-// ✅ FIX-SUBMIT: beforeunload cleared so no browser "do you want to leave" dialog
+// ✅ FIX-FULLSCREEN: 800ms delay — result screen mount hone ke liye time
+// ✅ FIX-DESKTOP:    DesktopModeEnforcer.disable() ab viewport restore karta hai
 // ==========================================
 export class CleanupManager {
   static performFullCleanup(delayFullscreen = false) {
-    // ✅ FIX-SUBMIT: immediately clear beforeunload so browser dialog never appears
     window.onbeforeunload = null;
 
     DesktopModeEnforcer.disable();
@@ -745,10 +683,9 @@ export class CleanupManager {
     NetworkGuard.disable();
     VisibilityManager.disable();
 
-    // ✅ FIX-FULLSCREEN: delay fullscreen exit so result page renders cleanly
     const doExit = () => FullscreenManager.exit();
     if (delayFullscreen) {
-      setTimeout(doExit, 400);
+      setTimeout(doExit, 800); // ✅ 400 → 800ms
     } else {
       doExit();
     }

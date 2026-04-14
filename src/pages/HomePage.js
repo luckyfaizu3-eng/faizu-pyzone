@@ -9,18 +9,94 @@ import {
 } from 'firebase/firestore';
 
 /* ─────────────────────────────────────────
+   GLOBAL PERF CSS — injected once
+   Replaces all inline onMouseEnter/Leave style mutations
+   with GPU-composited CSS transitions (no layout thrash)
+───────────────────────────────────────── */
+const PERF_CSS = `
+  .ps-card {
+    transition: transform 0.22s cubic-bezier(0.34,1.56,0.64,1),
+                box-shadow 0.22s ease,
+                border-color 0.18s ease;
+    will-change: transform;
+  }
+  .ps-card:hover { transform: translateY(-4px); }
+  .ps-card-lift:hover { transform: translateY(-6px) scale(1.02); }
+  .ps-card-slide:hover { transform: translateX(4px); }
+
+  .ps-btn {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+    will-change: transform;
+  }
+  .ps-btn:hover { transform: translateY(-2px) scale(1.02); }
+  .ps-btn:active { transform: translateY(0) scale(0.98); }
+
+  .ps-chip {
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    cursor: default;
+  }
+  .ps-chip:hover { transform: translateY(-2px); }
+
+  .ps-stat {
+    transition: transform 0.2s ease;
+    cursor: default;
+  }
+  .ps-stat:hover { transform: translateY(-2px); }
+
+  .ps-ig-btn {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .ps-ig-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(240,100,60,0.4); }
+
+  .ps-live-badge {
+    transition: background 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+  }
+
+  .ps-action-btn {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.15s ease;
+    will-change: transform;
+    cursor: pointer;
+    border: none;
+    outline: none;
+  }
+
+  /* Reduce blur on mobile — biggest GPU win */
+  @media (max-width: 768px) {
+    .ps-blur { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+  }
+
+  @keyframes blink { 0%,50%{opacity:1}51%,100%{opacity:0} }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+  @keyframes shimmer { 0%{opacity:1} 50%{opacity:0.5} 100%{opacity:1} }
+  @keyframes fadeUp {
+    from { opacity:0; transform:translateY(20px); }
+    to   { opacity:1; transform:translateY(0); }
+  }
+`;
+
+// Inject once at module level
+if (typeof document !== 'undefined' && !document.getElementById('ps-perf-css')) {
+  const s = document.createElement('style');
+  s.id = 'ps-perf-css';
+  s.textContent = PERF_CSS;
+  document.head.appendChild(s);
+}
+
+/* ─────────────────────────────────────────
    PYTHON OFFICIAL LOGO SVG — memoized
 ───────────────────────────────────────── */
 const PythonLogo = memo(function PythonLogo({ size = 24, style = {} }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 255"
-      width={size} height={size} style={{ display: 'inline-block', flexShrink: 0, verticalAlign: 'middle', ...style }}>
+      width={size} height={size}
+      style={{ display: 'inline-block', flexShrink: 0, verticalAlign: 'middle', ...style }}>
       <defs>
-        <linearGradient id="plBlue" x1="12.959%" y1="12.039%" x2="79.639%" y2="78.201%" gradientUnits="percentageUnits">
+        <linearGradient id="plBlue" x1="12.959%" y1="12.039%" x2="79.639%" y2="78.201%">
           <stop offset="0%" stopColor="#387EB8"/>
           <stop offset="100%" stopColor="#366994"/>
         </linearGradient>
-        <linearGradient id="plYellow" x1="19.128%" y1="20.579%" x2="90.742%" y2="88.429%" gradientUnits="percentageUnits">
+        <linearGradient id="plYellow" x1="19.128%" y1="20.579%" x2="90.742%" y2="88.429%">
           <stop offset="0%" stopColor="#FFE052"/>
           <stop offset="100%" stopColor="#FFC331"/>
         </linearGradient>
@@ -32,36 +108,46 @@ const PythonLogo = memo(function PythonLogo({ size = 24, style = {} }) {
 });
 
 /* ─────────────────────────────────────────
-   SCROLL REVEAL HOOK — simple fade+slide up
+   SCROLL REVEAL HOOK
+   Uses IntersectionObserver — zero JS on scroll
 ───────────────────────────────────────── */
 function useScrollReveal(threshold = 0.08) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    const el = ref.current; if (!el) return;
+    const el = ref.current;
+    if (!el) return;
     const obs = new IntersectionObserver(([e]) => {
       if (e.isIntersecting) { setVisible(true); obs.disconnect(); }
     }, { threshold });
-    obs.observe(el); return () => obs.disconnect();
+    obs.observe(el);
+    return () => obs.disconnect();
   }, [threshold]);
   return [ref, visible];
 }
 
 /* ─────────────────────────────────────────
-   SCROLL PROGRESS BAR — lightweight
+   SCROLL PROGRESS BAR
+   rAF-throttled, transform-only (compositor)
 ───────────────────────────────────────── */
 const ScrollProgressBar = memo(function ScrollProgressBar() {
   const barRef = useRef(null);
   useEffect(() => {
-    const bar = barRef.current; if (!bar) return;
+    const bar = barRef.current;
+    if (!bar) return;
+    let rafId = null;
     const fn = () => {
-      const d = document.documentElement;
-      const total = d.scrollHeight - d.clientHeight;
-      const pct = total > 0 ? (d.scrollTop / total) * 100 : 0;
-      bar.style.transform = `scaleX(${pct / 100})`;
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        const d = document.documentElement;
+        const total = d.scrollHeight - d.clientHeight;
+        const pct = total > 0 ? d.scrollTop / total : 0;
+        bar.style.transform = `scaleX(${pct})`;
+        rafId = null;
+      });
     };
     window.addEventListener('scroll', fn, { passive: true });
-    return () => window.removeEventListener('scroll', fn);
+    return () => { window.removeEventListener('scroll', fn); if (rafId) cancelAnimationFrame(rafId); };
   }, []);
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, height: '3px', zIndex: 9999, pointerEvents: 'none' }}>
@@ -70,38 +156,43 @@ const ScrollProgressBar = memo(function ScrollProgressBar() {
         background: 'linear-gradient(90deg,#22c55e,#3b82f6,#a855f7,#f97316)',
         transformOrigin: 'left center',
         transform: 'scaleX(0)',
-        transition: 'transform 0.1s linear',
       }} />
     </div>
   );
 });
 
 /* ─────────────────────────────────────────
-   LIVE COUNTER
+   LIVE COUNTER — rAF-based, not setInterval
 ───────────────────────────────────────── */
-const LiveCounter = memo(function LiveCounter({ baseEnd, suffix = '', label, color, locked = false }) {
+const LiveCounter = memo(function LiveCounter({ baseEnd, suffix = '', label, color }) {
   const [count, setCount] = useState(0);
   const [ref, visible] = useScrollReveal(0.1);
 
   useEffect(() => {
-    if (!visible) return;
-    if (baseEnd === 0) { setCount(0); return; }
+    if (!visible || baseEnd === 0) { setCount(0); return; }
     let cur = 0;
     const step = Math.max(1, Math.ceil(baseEnd / 55));
-    const iv = setInterval(() => {
-      cur += step;
-      if (cur >= baseEnd) { setCount(baseEnd); clearInterval(iv); }
-      else { setCount(cur); }
-    }, 18);
-    return () => clearInterval(iv);
+    let rafId;
+    let last = 0;
+    const tick = (ts) => {
+      if (ts - last >= 18) {
+        cur += step;
+        if (cur >= baseEnd) { setCount(baseEnd); return; }
+        setCount(cur);
+        last = ts;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, [visible, baseEnd]);
 
   return (
-    <div ref={ref} style={{ textAlign: 'center', padding: '8px 16px' }}>
-      <div style={{ fontSize: '1.8rem', fontWeight: '900', color, lineHeight: 1, letterSpacing: '-0.03em' }}>
+    <div ref={ref} style={{ textAlign: 'center', padding: '10px 16px' }}>
+      <div style={{ fontSize: '2rem', fontWeight: '900', color, lineHeight: 1, letterSpacing: '-0.04em' }}>
         {count.toLocaleString()}{suffix}
       </div>
-      <div style={{ fontSize: '0.68rem', fontWeight: '700', color: 'inherit', opacity: 0.6, marginTop: '3px' }}>{label}</div>
+      <div style={{ fontSize: '0.65rem', fontWeight: '700', color: 'inherit', opacity: 0.55, marginTop: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</div>
     </div>
   );
 });
@@ -112,25 +203,25 @@ const LiveCounter = memo(function LiveCounter({ baseEnd, suffix = '', label, col
 const StatsBar = memo(function StatsBar({ isDark, isMobile }) {
   const [ref, visible] = useScrollReveal();
   const [stats, setStats] = useState([
-    { baseEnd: 0, suffix: '+', label: 'Students Tested', color: '#6366f1', locked: false },
-    { baseEnd: 0, suffix: '%', label: 'Pass Rate', color: '#22c55e', locked: false },
-    { baseEnd: 3, suffix: '', label: 'Test Levels', color: '#f59e0b', locked: true },
-    { baseEnd: 0, suffix: '+', label: 'Certificates 🏅', color: '#ec4899', locked: false },
+    { baseEnd: 0, suffix: '+', label: 'Students Tested', color: '#6366f1' },
+    { baseEnd: 0, suffix: '%', label: 'Pass Rate', color: '#22c55e' },
+    { baseEnd: 3, suffix: '', label: 'Test Levels', color: '#f59e0b' },
+    { baseEnd: 0, suffix: '+', label: 'Certificates 🏅', color: '#ec4899' },
   ]);
 
   useEffect(() => {
     (async () => {
       try {
-        const snap = await getDocs(collection(db, 'leaderboard'));
+        const snap = await getDocs(query(collection(db, 'leaderboard'), limit(300)));
         const all = snap.docs.map(d => d.data());
         const total = all.length;
         const passed = all.filter(e => (e.percentage || 0) >= 55).length;
         const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
         setStats([
-          { baseEnd: total, suffix: '+', label: 'Students Tested', color: '#6366f1', locked: false },
-          { baseEnd: passRate, suffix: '%', label: 'Pass Rate', color: '#22c55e', locked: false },
-          { baseEnd: 3, suffix: '', label: 'Test Levels', color: '#f59e0b', locked: true },
-          { baseEnd: passed, suffix: '+', label: 'Certificates 🏅', color: '#ec4899', locked: false },
+          { baseEnd: total, suffix: '+', label: 'Students Tested', color: '#6366f1' },
+          { baseEnd: passRate, suffix: '%', label: 'Pass Rate', color: '#22c55e' },
+          { baseEnd: 3, suffix: '', label: 'Test Levels', color: '#f59e0b' },
+          { baseEnd: passed, suffix: '+', label: 'Certificates 🏅', color: '#ec4899' },
         ]);
       } catch (e) { console.error('StatsBar fetch error:', e); }
     })();
@@ -143,6 +234,7 @@ const StatsBar = memo(function StatsBar({ isDark, isMobile }) {
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0)' : 'translateY(20px)',
       transition: 'opacity 0.5s ease, transform 0.5s ease',
+      contentVisibility: 'auto',
     }}>
       <div style={{
         display: 'grid',
@@ -150,20 +242,19 @@ const StatsBar = memo(function StatsBar({ isDark, isMobile }) {
         gap: isMobile ? '10px' : '14px',
       }}>
         {stats.map((s, i) => (
-          <div key={i} style={{
-            background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)',
-            backdropFilter: 'blur(8px)',
-            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.9)',
-            borderRadius: '16px',
-            padding: '6px 0',
-            boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.2)' : '0 4px 20px rgba(99,102,241,0.06)',
+          <div key={i} className="ps-stat" style={{
+            background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.9)',
+            border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid rgba(255,255,255,0.95)',
+            borderRadius: '18px',
+            padding: '4px 0',
+            boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.2)' : `0 4px 24px ${s.color}10`,
           }}>
-            <LiveCounter baseEnd={s.baseEnd} suffix={s.suffix} label={s.label} color={s.color} locked={s.locked} />
+            <LiveCounter baseEnd={s.baseEnd} suffix={s.suffix} label={s.label} color={s.color} />
           </div>
         ))}
       </div>
-      <p style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.6rem', fontWeight: '600', color: isDark ? '#334155' : '#cbd5e1' }}>
-        ✅ Live data from PySkill leaderboard
+      <p style={{ textAlign: 'center', marginTop: '8px', fontSize: '0.58rem', fontWeight: '700', color: isDark ? '#334155' : '#cbd5e1', letterSpacing: '0.05em' }}>
+        ✅ LIVE DATA FROM PYSKILL LEADERBOARD
       </p>
     </section>
   );
@@ -184,57 +275,46 @@ const SectionLabel = memo(function SectionLabel({ color, text }) {
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: '7px',
       background: `${color}15`, border: `1px solid ${color}40`,
-      borderRadius: '50px', padding: '4px 14px', marginBottom: '10px',
-      fontSize: '0.68rem', fontWeight: '800', color, letterSpacing: '0.12em', textTransform: 'uppercase',
+      borderRadius: '50px', padding: '5px 14px', marginBottom: '10px',
+      fontSize: '0.66rem', fontWeight: '800', color, letterSpacing: '0.14em', textTransform: 'uppercase',
     }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
+      <span style={{ width: 5, height: 5, borderRadius: '50%', background: color, display: 'inline-block' }} />
       {text}
     </div>
   );
 });
 
 /* ─────────────────────────────────────────
-   ACTION CARD — simple hover, no ripples
+   ACTION CARD — CSS hover, no useState
 ───────────────────────────────────────── */
 const ActionCard = memo(function ActionCard({ card, isDark, isMobile, onClick }) {
-  const [hov, setHov] = useState(false);
-
   return (
     <button
       onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+      className="ps-action-btn"
       style={{
-        background: isDark
-          ? hov ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.06)'
-          : hov ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.7)',
-        backdropFilter: 'blur(12px)',
-        border: hov ? `1.5px solid ${card.c}50` : isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid rgba(255,255,255,0.8)',
-        borderRadius: '18px',
-        padding: isMobile ? '14px 6px 12px' : '20px 10px 16px',
-        cursor: 'pointer', outline: 'none', width: '100%',
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
-        transform: hov ? 'translateY(-3px)' : 'translateY(0)',
-        boxShadow: hov
-          ? `0 8px 24px ${card.glow}`
-          : isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.06)',
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease',
-        minHeight: isMobile ? '80px' : '96px',
-        position: 'relative',
+        background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.75)',
+        border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(255,255,255,0.85)',
+        borderRadius: '20px',
+        padding: isMobile ? '14px 6px 12px' : '22px 10px 18px',
+        width: '100%',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '9px',
+        boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.25)' : '0 2px 16px rgba(0,0,0,0.05)',
+        minHeight: isMobile ? '80px' : '100px',
       }}>
       <div style={{
-        width: isMobile ? '40px' : '46px', height: isMobile ? '40px' : '46px',
+        width: isMobile ? '38px' : '46px', height: isMobile ? '38px' : '46px',
         borderRadius: '14px',
-        background: `linear-gradient(135deg,${card.c}25,${card.c}10)`,
-        border: `1px solid ${card.c}30`,
+        background: `linear-gradient(135deg,${card.c}20,${card.c}08)`,
+        border: `1px solid ${card.c}25`,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: isMobile ? '1.3rem' : '1.5rem',
+        fontSize: isMobile ? '1.2rem' : '1.4rem',
         flexShrink: 0,
       }}>{card.icon}</div>
       <span style={{
-        fontSize: isMobile ? '0.63rem' : '0.71rem', fontWeight: '800',
-        color: hov ? card.c : isDark ? '#e2e8f0' : '#1e293b',
-        transition: 'color 0.15s', textAlign: 'center', lineHeight: 1.2, letterSpacing: '-0.01em',
+        fontSize: isMobile ? '0.6rem' : '0.69rem', fontWeight: '800',
+        color: isDark ? '#cbd5e1' : '#334155',
+        textAlign: 'center', lineHeight: 1.3,
       }}>{card.label}</span>
     </button>
   );
@@ -245,32 +325,31 @@ const ActionCard = memo(function ActionCard({ card, isDark, isMobile, onClick })
 ───────────────────────────────────────── */
 const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCurrentPage }) {
   const [ref, visible] = useScrollReveal();
-  const [hovIdx, setHovIdx] = useState(null);
 
   const levels = useMemo(() => [
     {
       emoji: '🌱', level: 'Basic', q: '60 Qs', t: '60 Min',
       pill: 'FREE 🆓', pillBg: isDark ? 'rgba(34,197,94,0.2)' : '#dcfce7', pillTc: '#16a34a',
-      bg1: isDark ? 'rgba(34,197,94,0.12)' : '#f0fdf4', bg2: isDark ? 'rgba(34,197,94,0.06)' : '#dcfce7',
+      bg1: isDark ? 'rgba(34,197,94,0.12)' : '#f0fdf4', bg2: isDark ? 'rgba(34,197,94,0.05)' : '#dcfce7',
       border: isDark ? 'rgba(34,197,94,0.3)' : '#86efac', nameColor: '#16a34a',
-      descColor: isDark ? '#86efac' : '#166534', barBg: isDark ? 'rgba(34,197,94,0.15)' : '#dcfce7',
-      isFree: true,
+      descColor: isDark ? '#86efac' : '#166534', barBg: isDark ? 'rgba(34,197,94,0.12)' : '#dcfce7',
+      glow: 'rgba(34,197,94,0.25)', isFree: true,
     },
     {
       emoji: '🔥', level: 'Advanced', q: '60 Qs', t: '120 Min',
       pill: 'HOT 🔥', pillBg: isDark ? 'rgba(59,130,246,0.2)' : '#dbeafe', pillTc: '#1d4ed8',
-      bg1: isDark ? 'rgba(59,130,246,0.12)' : '#eff6ff', bg2: isDark ? 'rgba(59,130,246,0.06)' : '#dbeafe',
+      bg1: isDark ? 'rgba(59,130,246,0.12)' : '#eff6ff', bg2: isDark ? 'rgba(59,130,246,0.05)' : '#dbeafe',
       border: isDark ? 'rgba(59,130,246,0.3)' : '#93c5fd', nameColor: '#3b82f6',
-      descColor: isDark ? '#93c5fd' : '#1e40af', barBg: isDark ? 'rgba(59,130,246,0.15)' : '#dbeafe',
-      isFree: false,
+      descColor: isDark ? '#93c5fd' : '#1e40af', barBg: isDark ? 'rgba(59,130,246,0.12)' : '#dbeafe',
+      glow: 'rgba(59,130,246,0.25)', isFree: false,
     },
     {
       emoji: '⭐', level: 'Pro', q: '60 Qs', t: '180 Min',
       pill: 'PRO ⭐', pillBg: isDark ? 'rgba(245,158,11,0.2)' : '#fef3c7', pillTc: '#b45309',
-      bg1: isDark ? 'rgba(245,158,11,0.12)' : '#fffbeb', bg2: isDark ? 'rgba(245,158,11,0.06)' : '#fef3c7',
+      bg1: isDark ? 'rgba(245,158,11,0.12)' : '#fffbeb', bg2: isDark ? 'rgba(245,158,11,0.05)' : '#fef3c7',
       border: isDark ? 'rgba(245,158,11,0.3)' : '#fcd34d', nameColor: '#f59e0b',
-      descColor: isDark ? '#fcd34d' : '#92400e', barBg: isDark ? 'rgba(245,158,11,0.15)' : '#fef3c7',
-      isFree: false,
+      descColor: isDark ? '#fcd34d' : '#92400e', barBg: isDark ? 'rgba(245,158,11,0.12)' : '#fef3c7',
+      glow: 'rgba(245,158,11,0.25)', isFree: false,
     },
   ], [isDark]);
 
@@ -281,15 +360,14 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0)' : 'translateY(20px)',
       transition: 'opacity 0.5s ease, transform 0.5s ease',
+      contentVisibility: 'auto',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? '14px' : '20px' }}>
-        <span style={{ fontSize: '1rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#111827', display: 'flex', alignItems: 'center', gap: '7px' }}>
+        <span style={{ fontSize: '1rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#111827', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <PythonLogo size={22} /> Mock Tests
         </span>
-        <span onClick={() => setCurrentPage('mocktests')} style={{ fontSize: '0.72rem', fontWeight: '700', color: '#22c55e', cursor: 'pointer', opacity: 1, transition: 'opacity 0.2s' }}
-          onMouseEnter={e => e.currentTarget.style.opacity = '0.7'}
-          onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
-          View All →
+        <span onClick={() => setCurrentPage('mocktests')} style={{ fontSize: '0.72rem', fontWeight: '700', color: '#22c55e', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          View All <span>→</span>
         </span>
       </div>
 
@@ -301,36 +379,24 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
       }}>
         {levels.map((lvl, i) => (
           <div key={i} onClick={() => setCurrentPage('mocktests')}
-            onMouseEnter={() => setHovIdx(i)}
-            onMouseLeave={() => setHovIdx(null)}
+            className="ps-card ps-card-lift"
             style={{
-              flexShrink: isMobile ? 0 : undefined, width: isMobile ? '150px' : 'auto',
-              borderRadius: '20px', overflow: 'hidden', cursor: 'pointer',
-              background: `linear-gradient(150deg,${lvl.bg1},${lvl.bg2})`,
-              border: `1.5px solid ${hovIdx === i ? lvl.nameColor + '80' : lvl.border}`,
-              transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.2s ease',
-              boxShadow: hovIdx === i
-                ? `0 12px 32px ${lvl.nameColor}30`
-                : isDark ? '0 2px 12px rgba(0,0,0,0.3)' : 'none',
-              transform: hovIdx === i ? 'translateY(-6px)' : 'translateY(0)',
+              flexShrink: isMobile ? 0 : undefined, width: isMobile ? '155px' : 'auto',
+              borderRadius: '22px', overflow: 'hidden', cursor: 'pointer',
+              background: `linear-gradient(160deg,${lvl.bg1},${lvl.bg2})`,
+              border: `1.5px solid ${lvl.border}`,
+              boxShadow: isDark ? '0 2px 12px rgba(0,0,0,0.3)' : '0 2px 12px rgba(0,0,0,0.04)',
             }}>
-            <div style={{ padding: '18px 14px 12px', position: 'relative' }}>
-              <div style={{
-                position: 'absolute', top: '11px', right: '11px',
-                fontSize: '0.52rem', fontWeight: '800', padding: '3px 8px',
-                borderRadius: '50px', background: lvl.pillBg, color: lvl.pillTc,
-              }}>{lvl.pill}</div>
-              <span style={{ fontSize: '2rem', marginBottom: '8px', display: 'block' }}>{lvl.emoji}</span>
-              <div style={{ fontSize: '0.95rem', fontWeight: '900', marginBottom: '3px', color: lvl.nameColor }}>{lvl.level}</div>
-              <div style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1.5, color: lvl.descColor }}>
-                {lvl.q} · {lvl.t} · {i === 0 ? 'Beginner' : i === 1 ? 'Expert' : 'Master'}
+            <div style={{ padding: '20px 16px 12px', position: 'relative' }}>
+              <div style={{ position: 'absolute', top: '12px', right: '12px', fontSize: '0.52rem', fontWeight: '800', padding: '3px 9px', borderRadius: '50px', background: lvl.pillBg, color: lvl.pillTc }}>{lvl.pill}</div>
+              <span style={{ fontSize: isMobile ? '1.8rem' : '2.2rem', marginBottom: '10px', display: 'block' }}>{lvl.emoji}</span>
+              <div style={{ fontSize: '1rem', fontWeight: '900', marginBottom: '4px', color: lvl.nameColor }}>{lvl.level}</div>
+              <div style={{ fontSize: '0.65rem', opacity: 0.8, lineHeight: 1.6, color: lvl.descColor }}>
+                {lvl.q} · {lvl.t}<br/>
+                <span style={{ fontWeight: '700' }}>{i === 0 ? 'Beginner' : i === 1 ? 'Expert' : 'Master'}</span>
               </div>
             </div>
-            <div style={{
-              padding: '9px 14px', fontSize: '0.65rem', fontWeight: '800',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              background: lvl.barBg, color: lvl.nameColor,
-            }}>
+            <div style={{ padding: '9px 16px', fontSize: '0.65rem', fontWeight: '800', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: lvl.barBg, color: lvl.nameColor }}>
               <span>{lvl.isFree ? '🆓 Free!' : 'Start Now!'}</span>
               <span>→</span>
             </div>
@@ -339,15 +405,20 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
       </div>
 
       <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: '2px' }}>
-        {[{ dot: '#22c55e', label: 'Anti-Cheat' }, { dot: '#eab308', label: 'Tab Block' }, { dot: '#3b82f6', label: 'Fullscreen' }, { dot: '#a855f7', label: 'Cert 55%+' }].map((c, i) => (
+        {[
+          { dot: '#22c55e', label: 'Anti-Cheat' },
+          { dot: '#eab308', label: 'Tab Block' },
+          { dot: '#3b82f6', label: 'Fullscreen' },
+          { dot: '#a855f7', label: 'Cert 55%+' },
+        ].map((c, i) => (
           <div key={i} style={{
-            flexShrink: 0, display: 'flex', alignItems: 'center', gap: '4px',
+            flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px',
             background: isDark ? 'rgba(255,255,255,0.04)' : '#f9fafb',
             border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
-            borderRadius: '50px', padding: '5px 11px',
-            fontSize: '0.64rem', fontWeight: '700', color: isDark ? '#94a3b8' : '#6b7280',
+            borderRadius: '50px', padding: '5px 12px',
+            fontSize: '0.63rem', fontWeight: '700', color: isDark ? '#94a3b8' : '#6b7280',
           }}>
-            <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, display: 'inline-block' }} />
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.dot, display: 'inline-block', boxShadow: `0 0 6px ${c.dot}80` }} />
             {c.label}
           </div>
         ))}
@@ -357,39 +428,33 @@ const MockTestSection = memo(function MockTestSection({ isDark, isMobile, setCur
 });
 
 /* ─────────────────────────────────────────
-   TOP CARD
+   TOP CARD — CSS hover
 ───────────────────────────────────────── */
 const TopCard = memo(function TopCard({ isDark, isMobile, medal, data, isFirst, onClick }) {
-  const [hov, setHov] = useState(false);
   return (
     <div
       onClick={onClick}
-      onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
+      className="ps-card ps-card-lift"
       style={{
-        borderRadius: '20px', overflow: 'hidden', cursor: 'pointer',
+        borderRadius: '22px', overflow: 'hidden', cursor: 'pointer',
         background: isDark ? 'rgba(15,23,42,0.95)' : '#fff',
-        border: hov ? `1.5px solid ${medal.color}60` : isDark ? `1px solid ${medal.color}25` : `1px solid ${medal.color}30`,
-        boxShadow: hov
-          ? `0 12px 36px ${medal.glow}`
-          : isFirst
-          ? `0 6px 24px ${medal.glow}`
-          : isDark ? '0 4px 16px rgba(0,0,0,0.35)' : '0 4px 16px rgba(0,0,0,0.07)',
-        transform: hov ? 'translateY(-4px)' : isFirst ? 'scale(1.02)' : 'scale(1)',
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease',
+        border: isDark ? `1px solid ${medal.color}25` : `1px solid ${medal.color}30`,
+        boxShadow: isFirst ? `0 8px 28px ${medal.glow}` : isDark ? '0 4px 16px rgba(0,0,0,0.35)' : '0 4px 16px rgba(0,0,0,0.07)',
+        transform: isFirst ? 'scale(1.02)' : 'scale(1)',
       }}>
-      <div style={{ height: '3px', background: `linear-gradient(90deg,${medal.color},${medal.color}60,transparent)` }} />
-      <div style={{ padding: isMobile ? '14px 12px' : '18px 16px', textAlign: 'center' }}>
-        <div style={{ fontSize: isMobile ? '2rem' : '2.6rem', lineHeight: 1, marginBottom: '6px' }}>{medal.emoji}</div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `${medal.color}18`, border: `1px solid ${medal.color}35`, borderRadius: '50px', padding: '2px 10px', marginBottom: '8px' }}>
-          <span style={{ fontSize: '0.55rem', fontWeight: '900', color: medal.color, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{medal.label}</span>
+      <div style={{ height: '3px', background: `linear-gradient(90deg,${medal.color},${medal.color}50,transparent)` }} />
+      <div style={{ padding: isMobile ? '16px 12px' : '20px 16px', textAlign: 'center' }}>
+        <div style={{ fontSize: isMobile ? '2.2rem' : '2.8rem', lineHeight: 1, marginBottom: '8px' }}>{medal.emoji}</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `${medal.color}18`, border: `1px solid ${medal.color}35`, borderRadius: '50px', padding: '3px 10px', marginBottom: '10px' }}>
+          <span style={{ fontSize: '0.55rem', fontWeight: '900', color: medal.color, letterSpacing: '0.1em', textTransform: 'uppercase' }}>{medal.label}</span>
         </div>
-        <div style={{ fontSize: isMobile ? '1.8rem' : '2.2rem', fontWeight: '900', color: medal.color, lineHeight: 1, marginBottom: '6px' }}>{data.score}%</div>
-        <div style={{ fontSize: isMobile ? '0.78rem' : '0.88rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#111827', marginBottom: '3px' }}>{data.name}</div>
+        <div style={{ fontSize: isMobile ? '1.9rem' : '2.3rem', fontWeight: '900', color: medal.color, lineHeight: 1, marginBottom: '7px', letterSpacing: '-0.03em' }}>{data.score}%</div>
+        <div style={{ fontSize: isMobile ? '0.8rem' : '0.9rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#111827', marginBottom: '4px' }}>{data.name}</div>
         <div style={{ fontSize: isMobile ? '0.6rem' : '0.66rem', color: isDark ? '#6b7280' : '#9ca3af', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
           <PythonLogo size={12} /> {data.test}
         </div>
         {data.time && (
-          <div style={{ marginTop: '8px', fontSize: '0.6rem', fontWeight: '700', color: isDark ? '#475569' : '#9ca3af', background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0', borderRadius: '20px', padding: '2px 8px', display: 'inline-block' }}>
+          <div style={{ marginTop: '9px', fontSize: '0.6rem', fontWeight: '700', color: isDark ? '#475569' : '#9ca3af', background: isDark ? 'rgba(255,255,255,0.05)' : '#f9fafb', border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0', borderRadius: '20px', padding: '3px 9px', display: 'inline-block' }}>
             ⏱ {data.time}
           </div>
         )}
@@ -404,21 +469,22 @@ const TopCard = memo(function TopCard({ isDark, isMobile, medal, data, isFirst, 
 const SkeletonRankerCard = memo(function SkeletonRankerCard({ isDark, medal }) {
   return (
     <div style={{
-      borderRadius: '20px', overflow: 'hidden',
+      borderRadius: '22px', overflow: 'hidden',
       background: isDark ? 'rgba(15,23,42,0.6)' : '#f8fafc',
       border: isDark ? `1px solid ${medal.color}15` : `1px solid ${medal.color}20`,
     }}>
       <div style={{ height: '3px', background: `linear-gradient(90deg,${medal.color}40,transparent)` }} />
       <div style={{ padding: '18px 16px', textAlign: 'center' }}>
-        <div style={{ fontSize: '2.6rem', lineHeight: 1, marginBottom: '6px', opacity: 0.3 }}>{medal.emoji}</div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `${medal.color}10`, border: `1px solid ${medal.color}20`, borderRadius: '50px', padding: '2px 10px', marginBottom: '12px' }}>
-          <span style={{ fontSize: '0.55rem', fontWeight: '900', color: `${medal.color}80`, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{medal.label}</span>
+        <div style={{ fontSize: '2.6rem', lineHeight: 1, marginBottom: '8px', opacity: 0.25 }}>{medal.emoji}</div>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `${medal.color}10`, border: `1px solid ${medal.color}20`, borderRadius: '50px', padding: '3px 10px', marginBottom: '14px' }}>
+          <span style={{ fontSize: '0.55rem', fontWeight: '900', color: `${medal.color}70`, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{medal.label}</span>
         </div>
         {[70, 50, 40].map((w, i) => (
           <div key={i} style={{
-            height: i === 0 ? '28px' : '12px', width: `${w}%`, margin: '0 auto 8px',
+            height: i === 0 ? '26px' : '12px', width: `${w}%`, margin: '0 auto 10px',
             borderRadius: '8px',
-            background: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
+            animation: 'shimmer 1.5s infinite',
           }} />
         ))}
         <div style={{ marginTop: '4px', fontSize: '0.65rem', color: isDark ? '#334155' : '#cbd5e1', fontWeight: '600' }}>No data yet</div>
@@ -438,7 +504,7 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
   useEffect(() => {
     (async () => {
       try {
-        const q = query(collection(db, 'leaderboard'), orderBy('percentage', 'desc'));
+        const q = query(collection(db, 'leaderboard'), orderBy('percentage', 'desc'), limit(20));
         const snap = await getDocs(q);
         const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         const seen = new Set();
@@ -457,9 +523,9 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
   }, []);
 
   const medals = useMemo(() => [
-    { emoji: '🥇', color: '#f59e0b', glow: 'rgba(245,158,11,0.4)', label: 'Champion', rank: 1 },
-    { emoji: '🥈', color: '#f97316', glow: 'rgba(249,115,22,0.4)', label: 'Runner-up', rank: 2 },
-    { emoji: '🥉', color: '#a855f7', glow: 'rgba(168,85,247,0.4)', label: '3rd Place', rank: 3 },
+    { emoji: '🥇', color: '#f59e0b', glow: 'rgba(245,158,11,0.35)', label: 'Champion', rank: 1 },
+    { emoji: '🥈', color: '#f97316', glow: 'rgba(249,115,22,0.35)', label: 'Runner-up', rank: 2 },
+    { emoji: '🥉', color: '#a855f7', glow: 'rgba(168,85,247,0.35)', label: '3rd Place', rank: 3 },
   ], []);
 
   const displayData = rankers.map(r => ({
@@ -476,18 +542,20 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
       opacity: visible ? 1 : 0,
       transform: visible ? 'translateY(0)' : 'translateY(20px)',
       transition: 'opacity 0.5s ease, transform 0.5s ease',
+      contentVisibility: 'auto',
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '22px' }}>
         <div>
           <div style={{ fontSize: isMobile ? '1.1rem' : '1.3rem', fontWeight: '900', color: isDark ? '#e2e8f0' : '#111827', letterSpacing: '-0.02em' }}>🏆 Top Performers</div>
-          <div style={{ fontSize: '0.72rem', color: isDark ? '#6b7280' : '#9ca3af', fontWeight: '600', marginTop: '2px' }}>
+          <div style={{ fontSize: '0.72rem', color: isDark ? '#6b7280' : '#9ca3af', fontWeight: '600', marginTop: '3px' }}>
             {hasAnyReal ? 'Real students · Real scores · Live data' : 'Be the first to top the leaderboard! 🚀'}
           </div>
         </div>
         <div
-          style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#16a34a', background: isDark ? 'rgba(34,197,94,0.1)' : '#f0fdf4', border: '1.5px solid #86efac', padding: '5px 12px', borderRadius: '50px', cursor: 'pointer' }}
+          className="ps-live-badge"
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.62rem', fontWeight: '800', color: '#16a34a', background: isDark ? 'rgba(34,197,94,0.08)' : '#f0fdf4', border: '1.5px solid #86efac', padding: '5px 12px', borderRadius: '50px' }}
           onClick={() => setCurrentPage('leaderboard')}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block' }} />
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', display: 'inline-block', boxShadow: '0 0 6px #22c55e' }} />
           LIVE
         </div>
       </div>
@@ -512,7 +580,7 @@ const TopRankersSection = memo(function TopRankersSection({ isDark, isMobile, se
               <p style={{ margin: '0 0 10px', fontSize: '0.84rem', color: isDark ? '#94a3b8' : '#64748b' }}>
                 No one has topped the leaderboard yet. Take a test and claim your spot! 🏆
               </p>
-              <button onClick={() => setCurrentPage('mocktests')} style={{ background: 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none', color: '#fff', padding: '8px 22px', borderRadius: '50px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}>
+              <button onClick={() => setCurrentPage('mocktests')} style={{ background: 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none', color: '#fff', padding: '9px 22px', borderRadius: '50px', fontWeight: '800', fontSize: '0.8rem', cursor: 'pointer' }}>
                 Take Test Now →
               </button>
             </div>
@@ -536,14 +604,31 @@ function timeAgo(ts) {
 }
 
 /* ─────────────────────────────────────────
-   REVIEW CARD
+   REVIEW CARD — lazy comments, CSS hover
 ───────────────────────────────────────── */
 const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin, user, onDeleteClick, preloadedComments }) {
   const [comments, setComments] = useState(preloadedComments || []);
   const [showCmts, setShowCmts] = useState(false);
+  const [cmtLoading, setCmtLoading] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [posting, setPosting] = useState(false);
-  const [hov, setHov] = useState(false);
+  const cmtsFetched = useRef(preloadedComments ? true : false);
+
+  const handleToggleComments = useCallback(async () => {
+    if (!showCmts && !cmtsFetched.current) {
+      setCmtLoading(true);
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'studentReviews', review.id, 'comments'),
+          orderBy('createdAt', 'asc')
+        ));
+        setComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        cmtsFetched.current = true;
+      } catch { }
+      finally { setCmtLoading(false); }
+    }
+    setShowCmts(s => !s);
+  }, [showCmts, review.id]);
 
   const postComment = useCallback(async () => {
     if (!commentText.trim() || !user) return;
@@ -579,15 +664,12 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
 
   return (
     <div
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+      className="ps-card"
       style={{
-        position: 'relative', borderRadius: '20px', overflow: 'hidden',
+        position: 'relative', borderRadius: '22px', overflow: 'hidden',
         background: isDark ? '#0f172a' : '#ffffff',
-        border: hov ? `1.5px solid ${pal.from}55` : isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
-        boxShadow: hov ? `0 16px 48px ${pal.from}18` : isDark ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.06)',
-        transform: hov ? 'translateY(-4px)' : 'translateY(0)',
-        transition: 'transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease',
+        border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(0,0,0,0.06)',
+        boxShadow: isDark ? '0 2px 16px rgba(0,0,0,0.5)' : '0 2px 16px rgba(0,0,0,0.05)',
       }}>
       <div style={{ height: '3px', background: `linear-gradient(90deg, ${pal.from}, ${pal.to})` }} />
 
@@ -615,9 +697,10 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
             </div>
             {igHandle && (
               <a href={`https://instagram.com/${igHandle}`} target="_blank" rel="noopener noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px 3px 7px', borderRadius: '20px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', textDecoration: 'none', marginBottom: '5px', flexShrink: 0 }}>
+                className="ps-ig-btn"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px 3px 7px', borderRadius: '20px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', textDecoration: 'none', marginBottom: '5px' }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="12" r="5" stroke="#fff" strokeWidth="2"/><circle cx="17.5" cy="6.5" r="1.2" fill="#fff"/></svg>
-                <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#fff', letterSpacing: '0.2px' }}>{igHandle}</span>
+                <span style={{ fontSize: '0.68rem', fontWeight: '700', color: '#fff' }}>{igHandle}</span>
               </a>
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: '1px', marginBottom: '6px' }}>
@@ -651,8 +734,14 @@ const ReviewCard = memo(function ReviewCard({ review, isDark, isMobile, isAdmin,
       </div>
 
       <div style={{ borderTop: isDark ? '1px solid rgba(255,255,255,0.04)' : '1px solid rgba(0,0,0,0.05)', padding: isMobile ? '10px 14px 13px' : '10px 20px 14px' }}>
-        {comments.length > 0 && (
-          <button onClick={() => setShowCmts(s => !s)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', color: pal.from, padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        {(comments.length > 0 || !cmtsFetched.current) && review.commentCount > 0 && (
+          <button onClick={handleToggleComments} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', color: pal.from, padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {cmtLoading ? <span>⏳</span> : <span style={{ fontSize: '0.6rem' }}>{showCmts ? '▲' : '▼'}</span>}
+            {showCmts ? 'Hide' : 'View'} {review.commentCount || comments.length} comment{(review.commentCount || comments.length) !== 1 ? 's' : ''}
+          </button>
+        )}
+        {comments.length > 0 && !review.commentCount && (
+          <button onClick={handleToggleComments} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: '700', color: pal.from, padding: '0 0 8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ fontSize: '0.6rem' }}>{showCmts ? '▲' : '▼'}</span>
             {showCmts ? 'Hide' : 'View'} {comments.length} comment{comments.length !== 1 ? 's' : ''}
           </button>
@@ -765,11 +854,11 @@ function AddReviewForm({ isDark, isMobile, user, onSave, onCancel, existingUserI
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px' }}>
         <span style={{ fontSize: '0.78rem', fontWeight: '700', color: isDark ? '#94a3b8' : '#64748b' }}>Rating:</span>
-        {[1,2,3,4,5].map(s => <button key={s} onClick={() => setForm(f => ({ ...f, stars: s }))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px' }}><Star size={20} fill={s <= form.stars ? '#f59e0b' : 'none'} color={s <= form.stars ? '#f59e0b' : '#cbd5e1'} /></button>)}
+        {[1,2,3,4,5].map(s => <button key={s} onClick={() => setForm(f => ({ ...f, stars: s }))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '1px', transition: 'transform 0.15s ease', transform: s <= form.stars ? 'scale(1.1)' : 'scale(1)' }}><Star size={20} fill={s <= form.stars ? '#f59e0b' : 'none'} color={s <= form.stars ? '#f59e0b' : '#cbd5e1'} /></button>)}
         <span style={{ fontSize: '0.76rem', color: '#f59e0b', fontWeight: '700' }}>{form.stars}/5</span>
       </div>
       <div style={{ display: 'flex', gap: '10px' }}>
-        <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: '12px', background: saving ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: '800', fontSize: '0.88rem', cursor: saving ? 'not-allowed' : 'pointer' }}>
+        <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: '12px', background: saving ? 'rgba(99,102,241,0.4)' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: 'none', borderRadius: '12px', color: '#fff', fontWeight: '800', fontSize: '0.88rem', cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>
           {uploading ? '📤 Uploading...' : saving ? '⏳ Saving...' : '✅ Submit Review'}
         </button>
         <button onClick={onCancel} style={{ padding: '12px 20px', background: 'transparent', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', borderRadius: '12px', color: isDark ? '#94a3b8' : '#64748b', fontWeight: '700', fontSize: '0.88rem', cursor: 'pointer' }}>Cancel</button>
@@ -785,49 +874,49 @@ const REVIEWS_PER_PAGE = 10;
 const MAX_REVIEWS = 200;
 
 function StudentReviews({ isDark, isMobile, isAdmin, user }) {
+  const reviewsRef = useRef([]);
   const [reviews, setReviews] = useState([]);
-  const [commentsMap, setCommentsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
-  const [lastDoc, setLastDoc] = useState(null);
+  const lastDocRef = useRef(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [totalCount, setTotalCount] = useState(0);
   const [ref, visible] = useScrollReveal();
 
+  // FIX: removed unused allSnap variable; count fetched directly
   const fetchReviews = useCallback(async (reset = true) => {
     try {
       if (reset) setLoading(true); else setLoadingMore(true);
-      const allSnap = await getDocs(collection(db, 'studentReviews'));
-      setTotalCount(allSnap.size);
+
+      if (reset) {
+        const countSnap = await getDocs(collection(db, 'studentReviews'));
+        setTotalCount(countSnap.size);
+      }
 
       let q = query(collection(db, 'studentReviews'), orderBy('createdAt', 'desc'), limit(REVIEWS_PER_PAGE));
-      if (!reset && lastDoc) {
-        q = query(collection(db, 'studentReviews'), orderBy('createdAt', 'desc'), startAfter(lastDoc), limit(REVIEWS_PER_PAGE));
+      if (!reset && lastDocRef.current) {
+        q = query(collection(db, 'studentReviews'), orderBy('createdAt', 'desc'), startAfter(lastDocRef.current), limit(REVIEWS_PER_PAGE));
       }
 
       const snap = await getDocs(q);
       const newReviews = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      lastDocRef.current = snap.docs[snap.docs.length - 1] || null;
       setHasMore(snap.docs.length === REVIEWS_PER_PAGE);
 
-      const updatedReviews = reset ? newReviews : [...reviews, ...newReviews];
-      setReviews(updatedReviews);
-
-      const newCmtsMap = { ...commentsMap };
-      await Promise.all(newReviews.map(async r => {
-        try {
-          const cSnap = await getDocs(query(collection(db, 'studentReviews', r.id, 'comments'), orderBy('createdAt', 'asc')));
-          newCmtsMap[r.id] = cSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        } catch { newCmtsMap[r.id] = []; }
-      }));
-      setCommentsMap(newCmtsMap);
+      if (reset) {
+        reviewsRef.current = newReviews;
+        setReviews(newReviews);
+      } else {
+        reviewsRef.current = [...reviewsRef.current, ...newReviews];
+        setReviews([...reviewsRef.current]);
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); setLoadingMore(false); }
-  }, [lastDoc, reviews, commentsMap]);
+  }, []);
 
-  useEffect(() => { fetchReviews(true); }, []); // eslint-disable-line
+  useEffect(() => { fetchReviews(true); }, [fetchReviews]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -844,7 +933,7 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
   if (!loading && reviews.length === 0 && !user) return null;
 
   return (
-    <section id="student-reviews" ref={ref} style={{ padding: isMobile ? '0 16px 48px' : '0 24px 64px', maxWidth: '960px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: 'opacity 0.5s ease, transform 0.5s ease' }}>
+    <section id="student-reviews" ref={ref} style={{ padding: isMobile ? '0 16px 48px' : '0 24px 64px', maxWidth: '960px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(20px)', transition: 'opacity 0.5s ease, transform 0.5s ease', contentVisibility: 'auto' }}>
       {deleteTarget && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
           <div style={{ ...baseCard(isDark, { padding: '2rem', maxWidth: '380px', width: '100%', textAlign: 'center' }) }}>
@@ -869,12 +958,18 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
       </div>
 
       {loading
-        ? <div style={{ textAlign: 'center', padding: '40px', color: isDark ? '#475569' : '#94a3b8' }}>Loading...</div>
+        ? (
+          <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '14px' : '20px' }}>
+            {[1,2,3,4].map(i => (
+              <div key={i} style={{ height: '200px', borderRadius: '22px', background: isDark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0', animation: 'shimmer 1.5s infinite' }} />
+            ))}
+          </div>
+        )
         : reviews.length === 0
           ? user && <div style={{ textAlign: 'center', padding: '36px', background: isDark ? 'rgba(255,255,255,0.02)' : '#f8fafc', borderRadius: '16px', border: isDark ? '1px dashed rgba(255,255,255,0.1)' : '1px dashed #e2e8f0', color: isDark ? '#475569' : '#94a3b8', fontSize: '0.88rem' }}>No reviews yet. Be the first! 👇</div>
           : <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: isMobile ? '14px' : '20px' }}>
               {reviews.map(rev => (
-                <ReviewCard key={rev.id} review={rev} isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} onDeleteClick={() => setDeleteTarget(rev)} preloadedComments={commentsMap[rev.id] || []} />
+                <ReviewCard key={rev.id} review={rev} isDark={isDark} isMobile={isMobile} isAdmin={isAdmin} user={user} onDeleteClick={() => setDeleteTarget(rev)} preloadedComments={[]} />
               ))}
             </div>
       }
@@ -882,14 +977,14 @@ function StudentReviews({ isDark, isMobile, isAdmin, user }) {
       {hasMore && !loading && (
         <div style={{ textAlign: 'center', marginTop: '20px' }}>
           <button onClick={() => fetchReviews(false)} disabled={loadingMore} style={{ padding: '10px 28px', borderRadius: '50px', background: isDark ? 'rgba(255,255,255,0.06)' : '#f1f5f9', border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e2e8f0', color: isDark ? '#94a3b8' : '#64748b', fontWeight: '700', fontSize: '0.84rem', cursor: loadingMore ? 'not-allowed' : 'pointer' }}>
-            {loadingMore ? '⏳ Loading...' : 'Load More Reviews ↓'}
+            {loadingMore ? '⏳ Loading...' : '↓ Load More Reviews'}
           </button>
         </div>
       )}
 
       {user && canAddMore && !userAlreadyReviewed && (
         <div style={{ textAlign: 'center', marginTop: '24px' }}>
-          <button onClick={() => setShowForm(!showForm)} style={{ background: showForm ? 'transparent' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm ? isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid #e2e8f0' : 'none', color: showForm ? isDark ? '#94a3b8' : '#64748b' : '#fff', padding: '10px 28px', borderRadius: '50px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer', transition: 'all 0.2s' }}>
+          <button onClick={() => setShowForm(!showForm)} style={{ background: showForm ? 'transparent' : 'linear-gradient(135deg,#6366f1,#ec4899)', border: showForm ? isDark ? '1.5px solid rgba(255,255,255,0.12)' : '1.5px solid #e2e8f0' : 'none', color: showForm ? isDark ? '#94a3b8' : '#64748b' : '#fff', padding: '10px 28px', borderRadius: '50px', fontWeight: '700', fontSize: '0.86rem', cursor: 'pointer' }}>
             {showForm ? '✕ Cancel' : '✍️ Write a Review'}
           </button>
         </div>
@@ -924,7 +1019,7 @@ const Timeline = memo(function Timeline({ isDark, isMobile }) {
     { date: '15 Feb 2026', title: 'Website Live 🚀', desc: 'PySkill officially launched! First students enrolled, first certificates issued.', icon: '🚀', tag: 'LAUNCH', color: '#ec4899' },
   ];
   return (
-    <section ref={ref} style={{ padding: isMobile ? '0 16px 56px' : '0 24px 72px', maxWidth: '680px', margin: '0 auto' }}>
+    <section ref={ref} style={{ padding: isMobile ? '0 16px 56px' : '0 24px 72px', maxWidth: '680px', margin: '0 auto', contentVisibility: 'auto' }}>
       <div style={{ textAlign: 'center', marginBottom: isMobile ? '32px' : '48px', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.5s ease, transform 0.5s ease' }}>
         <SectionLabel color="#6366f1" text="Our Story · 2026" />
         <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', background: 'linear-gradient(135deg,#1e40af,#6366f1,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '4px 0 4px', letterSpacing: '-0.02em' }}>From Idea to Reality</h2>
@@ -935,7 +1030,9 @@ const Timeline = memo(function Timeline({ isDark, isMobile }) {
         {events.map((evt, i) => (
           <div key={i} style={{ position: 'relative', marginBottom: i < events.length - 1 ? (isMobile ? '28px' : '32px') : 0, opacity: visible ? 1 : 0, transform: visible ? 'translateX(0)' : 'translateX(-16px)', transition: `opacity 0.4s ease ${0.2 + i * 0.12}s, transform 0.4s ease ${0.2 + i * 0.12}s` }}>
             <div style={{ position: 'absolute', left: isMobile ? '-40px' : '-52px', top: '12px', width: isMobile ? '36px' : '44px', height: isMobile ? '36px' : '44px', borderRadius: '50%', background: `linear-gradient(135deg,${evt.color},${i === 2 ? '#f472b6' : '#a78bfa'})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? '1rem' : '1.2rem', boxShadow: `0 0 0 4px ${isDark ? '#0f172a' : '#f4f5ff'}, 0 0 0 6px ${evt.color}35`, zIndex: 2 }}>{evt.icon}</div>
-            <div style={{ ...baseCard(isDark, { padding: isMobile ? '16px' : '20px 24px', overflow: 'hidden', boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(99,102,241,0.07)' }) }}>
+            <div
+              className="ps-card ps-card-slide"
+              style={{ ...baseCard(isDark, { padding: isMobile ? '16px' : '20px 24px', overflow: 'hidden', boxShadow: isDark ? '0 4px 20px rgba(0,0,0,0.25)' : '0 4px 20px rgba(99,102,241,0.07)' }) }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '2px', background: `linear-gradient(90deg,${evt.color},transparent)` }} />
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                 <span style={{ fontSize: '0.6rem', fontWeight: '900', color: evt.color, background: `${evt.color}18`, border: `1px solid ${evt.color}30`, borderRadius: '20px', padding: '2px 9px', letterSpacing: '0.1em' }}>{evt.tag}</span>
@@ -962,18 +1059,18 @@ const FeaturesSection = memo(function FeaturesSection({ isDark, isMobile }) {
     { icon: '⚡', title: 'Instant Download', desc: 'Get your PDFs the second your payment is confirmed.', color: '#ec4899' },
   ];
   return (
-    <section ref={ref} style={{ padding: isMobile ? '0 16px 36px' : '0 24px 52px', maxWidth: '960px', margin: '0 auto' }}>
+    <section ref={ref} style={{ padding: isMobile ? '0 16px 36px' : '0 24px 52px', maxWidth: '960px', margin: '0 auto', contentVisibility: 'auto' }}>
       <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', textAlign: 'center', marginBottom: isMobile ? '20px' : '32px', color: isDark ? '#e2e8f0' : '#0f172a', letterSpacing: '-0.02em', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.45s ease, transform 0.45s ease' }}>Why Students Love Us</h2>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? '12px' : '16px' }}>
         {features.map((f, i) => (
-          <div key={i} style={{ ...baseCard(isDark, { padding: isMobile ? '20px 18px' : '26px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', transition: `opacity 0.4s ease ${i * 0.08}s, transform 0.4s ease ${i * 0.08}s` }) }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = isDark ? '0 12px 32px rgba(0,0,0,0.3)' : `0 12px 32px ${f.color}18`; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)'; }}>
+          <div key={i}
+            className="ps-card"
+            style={{ ...baseCard(isDark, { padding: isMobile ? '20px 18px' : '26px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', transition: `opacity 0.4s ease ${i * 0.1}s, transform 0.4s ease ${i * 0.1}s` }) }}>
             <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: `linear-gradient(180deg,${f.color},${f.color}40)`, borderRadius: '20px 0 0 20px' }} />
             <div style={{ paddingLeft: '14px' }}>
-              <div style={{ width: '46px', height: '46px', background: `${f.color}18`, borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.35rem', marginBottom: '14px', border: `1px solid ${f.color}28` }}>{f.icon}</div>
-              <div style={{ fontSize: isMobile ? '0.92rem' : '0.97rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#0f172a', marginBottom: '6px' }}>{f.title}</div>
-              <div style={{ fontSize: isMobile ? '0.78rem' : '0.82rem', color: isDark ? '#94a3b8' : '#64748b', lineHeight: 1.65 }}>{f.desc}</div>
+              <div style={{ width: '48px', height: '48px', background: `${f.color}18`, borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', marginBottom: '14px', border: `1px solid ${f.color}28` }}>{f.icon}</div>
+              <div style={{ fontSize: isMobile ? '0.92rem' : '0.97rem', fontWeight: '800', color: isDark ? '#e2e8f0' : '#0f172a', marginBottom: '7px' }}>{f.title}</div>
+              <div style={{ fontSize: isMobile ? '0.78rem' : '0.82rem', color: isDark ? '#94a3b8' : '#64748b', lineHeight: 1.7 }}>{f.desc}</div>
             </div>
           </div>
         ))}
@@ -994,16 +1091,16 @@ const WhySection = memo(function WhySection({ isDark, isMobile }) {
     { icon: '⭐', title: 'What Makes Us Better', desc: 'No outdated content. Every note filtered for importance. Real reviews, no hidden charges.', color: '#8b5cf6' },
   ];
   return (
-    <section ref={ref} style={{ padding: isMobile ? '0 16px 36px' : '0 24px 52px', maxWidth: '960px', margin: '0 auto' }}>
+    <section ref={ref} style={{ padding: isMobile ? '0 16px 36px' : '0 24px 52px', maxWidth: '960px', margin: '0 auto', contentVisibility: 'auto' }}>
       <h2 style={{ fontSize: isMobile ? '1.4rem' : '2rem', fontWeight: '900', textAlign: 'center', marginBottom: isMobile ? '20px' : '32px', background: 'linear-gradient(135deg,#6366f1,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: '-0.02em', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.45s ease, transform 0.45s ease' }}>Why PySkill?</h2>
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: isMobile ? '12px' : '16px' }}>
         {items.map((c, i) => (
-          <div key={i} style={{ ...baseCard(isDark, { padding: isMobile ? '18px 16px' : '22px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', transition: `opacity 0.4s ease ${i * 0.07}s, transform 0.4s ease ${i * 0.07}s` }) }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-3px)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; }}>
+          <div key={i}
+            className="ps-card"
+            style={{ ...baseCard(isDark, { padding: isMobile ? '18px 16px' : '22px 22px', position: 'relative', overflow: 'hidden', boxShadow: isDark ? '0 3px 16px rgba(0,0,0,0.2)' : '0 3px 16px rgba(99,102,241,0.06)', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(14px)', transition: `opacity 0.4s ease ${i * 0.08}s, transform 0.4s ease ${i * 0.08}s` }) }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: `linear-gradient(90deg,${c.color},${c.color}30,transparent)` }} />
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-              <div style={{ width: isMobile ? '38px' : '44px', height: isMobile ? '38px' : '44px', background: `${c.color}18`, borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', border: `1px solid ${c.color}25`, flexShrink: 0 }}>{c.icon}</div>
+              <div style={{ width: isMobile ? '40px' : '46px', height: isMobile ? '40px' : '46px', background: `${c.color}18`, borderRadius: '13px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.15rem', border: `1px solid ${c.color}25`, flexShrink: 0 }}>{c.icon}</div>
               <div>
                 <h3 style={{ fontSize: isMobile ? '0.9rem' : '0.96rem', fontWeight: '800', color: c.color, margin: '0 0 5px' }}>{c.title}</h3>
                 <p style={{ fontSize: isMobile ? '0.77rem' : '0.82rem', color: isDark ? '#94a3b8' : '#64748b', lineHeight: 1.65, margin: 0 }}>{c.desc}</p>
@@ -1034,7 +1131,7 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
   ], []);
 
   return (
-    <section ref={ref} style={{ padding: isMobile ? '0 16px 80px' : '0 24px 100px', maxWidth: '900px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(24px)', transition: 'opacity 0.6s ease, transform 0.6s ease' }}>
+    <section ref={ref} style={{ padding: isMobile ? '0 16px 80px' : '0 24px 100px', maxWidth: '900px', margin: '0 auto', opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(24px)', transition: 'opacity 0.6s ease, transform 0.6s ease', contentVisibility: 'auto' }}>
       <div style={{ textAlign: 'center', marginBottom: '32px' }}>
         <SectionLabel color="#6366f1" text="The Man Behind PySkill" />
         <h2 style={{ fontSize: isMobile ? '1.5rem' : '2.1rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', margin: '6px 0 0', letterSpacing: '-0.02em' }}>
@@ -1042,15 +1139,15 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
         </h2>
       </div>
 
-      <div style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', background: isDark ? 'linear-gradient(145deg,rgba(10,10,35,0.97),rgba(5,30,15,0.95))' : 'linear-gradient(145deg,#f8f7ff,#f0fdf4)', border: isDark ? '1.5px solid rgba(99,102,241,0.2)' : '1.5px solid rgba(99,102,241,0.15)', boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)', transition: 'box-shadow 0.3s ease' }}
-        onMouseEnter={e => e.currentTarget.style.boxShadow = isDark ? '0 32px 80px rgba(0,0,0,0.65)' : '0 32px 80px rgba(99,102,241,0.18)'}
-        onMouseLeave={e => e.currentTarget.style.boxShadow = isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)'}>
+      <div
+        className="ps-card"
+        style={{ position: 'relative', borderRadius: '28px', overflow: 'hidden', background: isDark ? 'linear-gradient(145deg,rgba(10,10,35,0.97),rgba(5,30,15,0.95))' : 'linear-gradient(145deg,#f8f7ff,#f0fdf4)', border: isDark ? '1.5px solid rgba(99,102,241,0.2)' : '1.5px solid rgba(99,102,241,0.15)', boxShadow: isDark ? '0 24px 64px rgba(0,0,0,0.5)' : '0 24px 64px rgba(99,102,241,0.1)' }}>
         <div style={{ height: '4px', background: 'linear-gradient(90deg,#6366f1,#22c55e,#f59e0b,#ec4899)' }} />
 
         <div style={{ padding: isMobile ? '28px 20px' : '40px 44px' }}>
           <div style={{ display: 'flex', gap: isMobile ? '20px' : '36px', alignItems: 'flex-start', marginBottom: '32px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
             <div style={{ flexShrink: 0 }}>
-              <div style={{ width: isMobile ? '82px' : '100px', height: isMobile ? '82px' : '100px', borderRadius: '50%', overflow: 'hidden', border: '3px solid rgba(99,102,241,0.4)' }}>
+              <div style={{ width: isMobile ? '82px' : '100px', height: isMobile ? '82px' : '100px', borderRadius: '50%', overflow: 'hidden', border: '3px solid rgba(99,102,241,0.4)', boxShadow: '0 0 0 6px rgba(99,102,241,0.1)' }}>
                 <img src="https://i.ibb.co/WWW1ttkx/Whats-App-Image-2026-01-31-at-1-57-14-PM.jpg" alt="Faizan Tariq — Founder PySkill" loading="lazy" crossOrigin="anonymous" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.target.style.display = 'none'; }} />
               </div>
             </div>
@@ -1071,9 +1168,8 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
                 Just 6 months into coding, I am a first-year Software Engineering student from <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>Anantnag, Kashmir</strong>, studying at <strong style={{ color: isDark ? '#e2e8f0' : '#0f172a' }}>ILS Srinagar</strong>. Still a beginner — but driven enough to build PySkill entirely from scratch. Late nights, countless bugs, and a real passion for helping students learn Python. This is just the beginning. 🚀
               </p>
               <a href="https://instagram.com/code_with_06" target="_blank" rel="noopener noreferrer"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', borderRadius: '12px', color: '#fff', fontSize: '0.78rem', fontWeight: '800', padding: '10px 20px', textDecoration: 'none', transition: 'transform 0.2s, box-shadow 0.2s' }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(240,100,60,0.4)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
+                className="ps-ig-btn"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', background: 'linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)', borderRadius: '12px', color: '#fff', fontSize: '0.78rem', fontWeight: '800', padding: '10px 20px', textDecoration: 'none' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" stroke="#fff" strokeWidth="2"/><circle cx="12" cy="12" r="5" stroke="#fff" strokeWidth="2"/><circle cx="17.5" cy="6.5" r="1.5" fill="#fff"/></svg>
                 @code_with_06
               </a>
@@ -1084,9 +1180,9 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${isMobile ? 2 : 4},1fr)`, gap: '12px', marginBottom: '28px' }}>
             {founderStats.map((s, i) => (
-              <div key={i} style={{ textAlign: 'center', padding: '14px 8px', background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)', border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(99,102,241,0.1)', borderRadius: '14px' }}>
+              <div key={i} className="ps-stat" style={{ textAlign: 'center', padding: '14px 8px', background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(99,102,241,0.04)', border: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(99,102,241,0.1)', borderRadius: '14px' }}>
                 <div style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', fontWeight: '900', background: 'linear-gradient(135deg,#6366f1,#22c55e)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', lineHeight: 1 }}>{s.val}</div>
-                <div style={{ fontSize: '0.6rem', fontWeight: '700', color: isDark ? '#64748b' : '#94a3b8', marginTop: '4px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{s.label}</div>
+                <div style={{ fontSize: '0.6rem', fontWeight: '700', color: isDark ? '#64748b' : '#94a3b8', marginTop: '5px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>{s.label}</div>
               </div>
             ))}
           </div>
@@ -1095,10 +1191,8 @@ const FounderSection = memo(function FounderSection({ isDark, isMobile }) {
             <div style={{ fontSize: '0.68rem', fontWeight: '800', color: isDark ? '#475569' : '#94a3b8', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '10px' }}>Tech Stack</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {skills.map((sk, i) => (
-                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: isDark ? `${sk.color}12` : `${sk.color}0e`, border: `1px solid ${sk.color}35`, fontSize: '0.72rem', fontWeight: '800', color: sk.color, transition: 'transform 0.18s, box-shadow 0.18s', cursor: 'default' }}
-                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = `0 4px 12px ${sk.color}25`; }}
-                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = 'none'; }}>
-                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sk.color, display: 'inline-block' }} />
+                <span key={i} className="ps-chip" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '20px', background: isDark ? `${sk.color}12` : `${sk.color}0e`, border: `1px solid ${sk.color}35`, fontSize: '0.72rem', fontWeight: '800', color: sk.color }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: sk.color, display: 'inline-block', boxShadow: `0 0 4px ${sk.color}80` }} />
                   {sk.label}
                 </span>
               ))}
@@ -1153,7 +1247,10 @@ export default function HomePage({ setCurrentPage }) {
   const [idx, setIdx] = useState(0);
   const [del, setDel] = useState(false);
   const [pi, setPi] = useState(0);
-  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+  // Use matchMedia for SSR-safe initial value
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth <= 768 : false
+  );
   const [mounted, setMounted] = useState(false);
   const { isDark } = useTheme();
   const { user, logout } = useAuth();
@@ -1169,9 +1266,10 @@ export default function HomePage({ setCurrentPage }) {
     }
   }, []);
 
+  // Debounced resize — 200ms, passive
   useEffect(() => {
     let t;
-    const h = () => { clearTimeout(t); t = setTimeout(() => setIsMobile(window.innerWidth <= 768), 150); };
+    const h = () => { clearTimeout(t); t = setTimeout(() => setIsMobile(window.innerWidth <= 768), 200); };
     window.addEventListener('resize', h, { passive: true });
     return () => { window.removeEventListener('resize', h); clearTimeout(t); };
   }, []);
@@ -1181,30 +1279,34 @@ export default function HomePage({ setCurrentPage }) {
     '60 Questions Mock Tests', 'Anti-Cheat Exam System', 'Earn Your Certificate', 'Basic • Advanced • Pro'
   ]).current;
 
+  // Typewriter — rAF for smooth timing, no setInterval
   useEffect(() => {
     const cp = phrases[pi];
     const speed = del ? 22 : 65;
+    let rafId;
     const t = setTimeout(() => {
-      if (!del && idx < cp.length) { setTxt(cp.substring(0, idx + 1)); setIdx(idx + 1); }
-      else if (del && idx > 0) { setTxt(cp.substring(0, idx - 1)); setIdx(idx - 1); }
-      else if (!del && idx === cp.length) { setTimeout(() => setDel(true), 1800); }
-      else if (del && idx === 0) { setDel(false); setPi((pi + 1) % phrases.length); }
+      rafId = requestAnimationFrame(() => {
+        if (!del && idx < cp.length) { setTxt(cp.substring(0, idx + 1)); setIdx(idx + 1); }
+        else if (del && idx > 0) { setTxt(cp.substring(0, idx - 1)); setIdx(idx - 1); }
+        else if (!del && idx === cp.length) { setTimeout(() => setDel(true), 1800); }
+        else if (del && idx === 0) { setDel(false); setPi((pi + 1) % phrases.length); }
+      });
     }, speed);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); if (rafId) cancelAnimationFrame(rafId); };
   }, [idx, del, pi, phrases]);
 
   const actionCards = useMemo(() => {
     const base = [
-      { icon: '📚', label: 'Browse Notes', page: 'products', glow: 'rgba(99,102,241,0.25)', c: '#6366f1' },
-      { icon: <PythonLogo size={22} />, label: 'Mock Tests', page: 'mocktests', glow: 'rgba(16,185,129,0.25)', c: '#10b981' },
-      { icon: '💻', label: 'Compiler', page: 'compiler', glow: 'rgba(0,102,184,0.25)', c: '#0066b8' },
-      { icon: '🔥', label: '30-Day Streak', page: 'streak', glow: 'rgba(255,107,0,0.25)', c: '#ff6b00' },
-      { icon: '📦', label: 'My Orders', page: 'orders', glow: 'rgba(245,158,11,0.25)', c: '#f59e0b' },
-      { icon: '🏆', label: 'Leaderboard', page: 'leaderboard', glow: 'rgba(139,92,246,0.25)', c: '#8b5cf6' },
+      { icon: '📚', label: 'Browse Notes', page: 'products', glow: 'rgba(99,102,241,0.3)', c: '#6366f1' },
+      { icon: <PythonLogo size={22} />, label: 'Mock Tests', page: 'mocktests', glow: 'rgba(16,185,129,0.3)', c: '#10b981' },
+      { icon: '💻', label: 'Compiler', page: 'compiler', glow: 'rgba(0,102,184,0.3)', c: '#0066b8' },
+      { icon: '🔥', label: '30-Day Streak', page: 'streak', glow: 'rgba(255,107,0,0.3)', c: '#ff6b00' },
+      { icon: '📦', label: 'My Orders', page: 'orders', glow: 'rgba(245,158,11,0.3)', c: '#f59e0b' },
+      { icon: '🏆', label: 'Leaderboard', page: 'leaderboard', glow: 'rgba(139,92,246,0.3)', c: '#8b5cf6' },
     ];
     const auth = user
-      ? { icon: '👤', label: 'Logout', page: null, glow: 'rgba(239,68,68,0.25)', c: '#ef4444', action: logout }
-      : { icon: '🔐', label: 'Login', page: 'login', glow: 'rgba(236,72,153,0.25)', c: '#ec4899' };
+      ? { icon: '👤', label: 'Logout', page: null, glow: 'rgba(239,68,68,0.3)', c: '#ef4444', action: logout }
+      : { icon: '🔐', label: 'Login', page: 'login', glow: 'rgba(236,72,153,0.3)', c: '#ec4899' };
     return [...base, auth];
   }, [user, logout]);
 
@@ -1220,56 +1322,65 @@ export default function HomePage({ setCurrentPage }) {
 
       {/* ══ HERO ══ */}
       <section style={{
-        padding: isMobile ? '40px 20px 32px' : '88px 24px 68px',
+        padding: isMobile ? '44px 20px 36px' : '92px 24px 72px',
         textAlign: 'center', position: 'relative',
         background: isDark
-          ? 'linear-gradient(180deg,rgba(15,10,60,0.6) 0%,transparent 100%)'
-          : 'linear-gradient(180deg,rgba(238,241,255,0.8) 0%,transparent 100%)',
+          ? 'linear-gradient(180deg,rgba(15,10,60,0.7) 0%,transparent 100%)'
+          : 'linear-gradient(180deg,rgba(238,241,255,0.9) 0%,transparent 100%)',
       }}>
+        {/* Decorative dots — CSS animation only */}
+        <div style={{ position: 'absolute', top: '20px', left: '10%', width: '6px', height: '6px', borderRadius: '50%', background: '#6366f140', animation: 'float 3s ease-in-out infinite', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', top: '40px', right: '15%', width: '4px', height: '4px', borderRadius: '50%', background: '#ec4899', animation: 'float 4s ease-in-out infinite 1s', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '30px', left: '20%', width: '5px', height: '5px', borderRadius: '50%', background: '#22c55e50', animation: 'float 3.5s ease-in-out infinite 0.5s', pointerEvents: 'none' }} />
+
         <div style={{
           display: 'inline-flex', alignItems: 'center', gap: '8px',
-          background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.06)',
-          border: '1px solid rgba(99,102,241,0.22)', borderRadius: '50px',
-          padding: '6px 16px 6px 8px', marginBottom: isMobile ? '20px' : '28px',
+          background: isDark ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.07)',
+          border: '1px solid rgba(99,102,241,0.25)', borderRadius: '50px',
+          padding: '6px 16px 6px 8px', marginBottom: isMobile ? '22px' : '30px',
           opacity: mounted ? 1 : 0,
           transform: mounted ? 'translateY(0)' : 'translateY(-12px)',
           transition: 'opacity 0.5s ease, transform 0.5s ease',
         }}>
           <div style={{ width: '28px', height: '28px', background: 'linear-gradient(135deg,#6366f1,#ec4899)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px' }}>🎓</div>
           <span style={{ fontSize: '0.8rem', fontWeight: '800', color: '#6366f1' }}>PySkill</span>
-          <div style={{ width: '1px', height: '12px', background: 'rgba(99,102,241,0.2)' }} />
+          <div style={{ width: '1px', height: '12px', background: 'rgba(99,102,241,0.25)' }} />
           <span style={{ fontSize: '0.72rem', fontWeight: '700', color: isDark ? '#a78bfa' : '#7c3aed' }}>EST. 2026</span>
-          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px #22c55e' }} />
         </div>
 
         <h1 style={{
-          fontSize: isMobile ? 'clamp(1.6rem, 6vw, 2rem)' : '3.8rem',
-          fontWeight: '900', marginBottom: '12px',
+          fontSize: isMobile ? 'clamp(1.7rem, 6.5vw, 2.1rem)' : '4rem',
+          fontWeight: '900', marginBottom: '14px',
           background: 'linear-gradient(135deg,#1e40af,#6366f1 45%,#ec4899)',
           WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-          lineHeight: 1.12,
-          minHeight: isMobile ? 'auto' : '96px',
+          lineHeight: 1.1,
+          minHeight: isMobile ? 'auto' : '100px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '0 8px', letterSpacing: '-0.03em',
+          padding: '0 8px', letterSpacing: '-0.035em',
           opacity: mounted ? 1 : 0,
           transform: mounted ? 'translateY(0)' : 'translateY(20px)',
           transition: 'opacity 0.5s ease 0.15s, transform 0.5s ease 0.15s',
         }}>
           {txt}
-          <span style={{ borderRight: '3px solid #6366f1', marginLeft: '3px', height: isMobile ? '26px' : '56px', display: 'inline-block', verticalAlign: 'middle', animation: 'blink 0.7s infinite' }} />
+          <span style={{ borderRight: '3px solid #6366f1', marginLeft: '3px', height: isMobile ? '28px' : '60px', display: 'inline-block', verticalAlign: 'middle', animation: 'blink 0.7s infinite' }} />
         </h1>
 
         <p style={{
           fontSize: isMobile ? '0.9rem' : '1.1rem', color: isDark ? '#94a3b8' : '#64748b',
-          maxWidth: '500px', margin: '0 auto 24px', lineHeight: 1.7, fontWeight: '500',
+          maxWidth: '520px', margin: '0 auto 26px', lineHeight: 1.75, fontWeight: '500',
           opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.28s',
         }}>
           Quality study materials for Python & Job Prep — delivered instantly after payment.
         </p>
 
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '28px', opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.38s' }}>
-          {[{ icon: Shield, color: '#10b981', text: 'Secure Payment' }, { icon: Zap, color: '#6366f1', text: 'Instant Access' }, { icon: BookOpen, color: '#ec4899', text: '100% Original' }].map((b, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isDark ? `${b.color}12` : `${b.color}0d`, padding: '6px 14px', borderRadius: '50px', border: `1px solid ${b.color}${isDark ? '38' : '28'}` }}>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '30px', opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.38s' }}>
+          {[
+            { icon: Shield, color: '#10b981', text: 'Secure Payment' },
+            { icon: Zap, color: '#6366f1', text: 'Instant Access' },
+            { icon: BookOpen, color: '#ec4899', text: '100% Original' },
+          ].map((b, i) => (
+            <div key={i} className="ps-chip" style={{ display: 'flex', alignItems: 'center', gap: '6px', background: isDark ? `${b.color}12` : `${b.color}0d`, padding: '7px 16px', borderRadius: '50px', border: `1px solid ${b.color}${isDark ? '38' : '28'}` }}>
               <b.icon size={13} color={b.color} />
               <span style={{ fontSize: isMobile ? '0.7rem' : '0.76rem', fontWeight: '700', color: b.color }}>{b.text}</span>
             </div>
@@ -1278,17 +1389,15 @@ export default function HomePage({ setCurrentPage }) {
 
         <div style={{ opacity: mounted ? 1 : 0, transition: 'opacity 0.5s ease 0.48s', display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
           <button onClick={() => setCurrentPage('mocktests')}
-            style={{ background: 'linear-gradient(135deg,#10b981,#22c55e)', border: 'none', color: '#fff', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 6px 28px rgba(16,185,129,0.35)', transition: 'transform 0.2s ease, box-shadow 0.2s ease' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 10px 28px rgba(16,185,129,0.5)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 6px 28px rgba(16,185,129,0.35)'; }}>
+            className="ps-btn"
+            style={{ background: 'linear-gradient(135deg,#10b981,#22c55e)', border: 'none', color: '#fff', padding: isMobile ? '14px 26px' : '16px 38px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', boxShadow: '0 6px 28px rgba(16,185,129,0.35)' }}>
             <PythonLogo size={isMobile ? 17 : 19} />
             Take Test Free
           </button>
 
           <button onClick={() => setCurrentPage('products')}
-            style={{ background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)', border: `1.5px solid rgba(99,102,241,${isDark ? '0.4' : '0.25'})`, color: '#6366f1', padding: isMobile ? '13px 24px' : '16px 36px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px', transition: 'transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease' }}
-            onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.12)'; }}
-            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.background = isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)'; }}>
+            className="ps-btn"
+            style={{ background: isDark ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.07)', border: `1.5px solid rgba(99,102,241,${isDark ? '0.4' : '0.25'})`, color: '#6366f1', padding: isMobile ? '14px 26px' : '16px 38px', fontSize: isMobile ? '0.94rem' : '1.05rem', borderRadius: '50px', cursor: 'pointer', fontWeight: '800', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
             <Download size={isMobile ? 17 : 19} />
             Browse Notes
           </button>
@@ -1296,7 +1405,7 @@ export default function HomePage({ setCurrentPage }) {
       </section>
 
       {/* ══ ACTION CARDS ══ */}
-      <section style={{ padding: isMobile ? '20px 16px' : '36px 24px', maxWidth: '1100px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
+      <section style={{ padding: isMobile ? '16px 16px' : '32px 24px', maxWidth: '1100px', margin: '0 auto', position: 'relative', zIndex: 1 }}>
         {isMobile ? (
           <>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '9px' }}>
@@ -1334,10 +1443,6 @@ export default function HomePage({ setCurrentPage }) {
         <a href="/leaderboard">Leaderboard</a>
         <a href="/compiler">Python Compiler</a>
       </nav>
-
-      <style>{`
-        @keyframes blink { 0%,50%{opacity:1}51%,100%{opacity:0} }
-      `}</style>
     </main>
   );
 }

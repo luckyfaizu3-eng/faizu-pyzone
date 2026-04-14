@@ -1,5 +1,7 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/ExamScreens.jsx
+// ✅ FIX-SUBMIT:  handleSubmit — onComplete pehle, CleanupManager 800ms baad
+// ✅ FIX-AUDIO:   handleTimerTick / handleTimerExpire se audio calls hataye
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRight, CheckCircle, Shield, BookOpen, EyeOff } from 'lucide-react';
@@ -183,12 +185,13 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
   const handleAcknowledge = useCallback(() => setShowWarning(false), []);
 
-  const handleTimerTick = useCallback((left) => {
-    try { audioRef.current.playTick(left % 2 === 0); } catch (e) {}
+  // ✅ FIX-AUDIO: handleTimerTick — audio removed, only used for external callbacks
+  const handleTimerTick = useCallback((_left) => {
+    // No audio — tick sounds removed
   }, []);
 
+  // ✅ FIX-AUDIO: handleTimerExpire — no alarm, just show warning and submit
   const handleTimerExpire = useCallback(() => {
-    try { audioRef.current.playAlarm(); } catch (e) {}
     showWarningMessage('TIME IS UP!\n\nYour test is being submitted automatically.', 'final', true);
     if (handleSubmitRef.current) handleSubmitRef.current(false, 'time-up');
   }, [showWarningMessage]);
@@ -209,16 +212,21 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     setAnswers(prev => ({ ...prev, [qIndex]: optIdx }));
   }, [resetActivity]);
 
+  // ✅ FIX-SUBMIT: Correct order — security stop → onComplete → cleanup 800ms baad
   const handleSubmit = useCallback((penalized = false, reason = '') => {
     if (hasSubmittedRef.current) return;
     window.onbeforeunload = null;
-    const currentAnswers = answersRef.current;
     hasSubmittedRef.current = true;
+
+    const currentAnswers = answersRef.current;
     const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
     const score     = TestUtils.calculateScore(currentAnswers, questions, tabSwitchRef.current, isAdmin, passPercent);
-    CleanupManager.performFullCleanup(true);
+
+    // Step 1: Stop security monitors first
     if (devToolsRef.current) devToolsRef.current.stop();
     if (securityRef.current) securityRef.current.disable();
+
+    // Step 2: Show result screen immediately
     onComplete({
       ...score,
       timeTaken: `${Math.floor(timeTaken/60)}m ${timeTaken%60}s`,
@@ -227,6 +235,12 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       disqualificationReason: reason,
       studentInfo,
     });
+
+    // Step 3: Cleanup AFTER result screen is mounted (800ms delay)
+    setTimeout(() => {
+      CleanupManager.performFullCleanup(false);
+    }, 800);
+
   }, [questions, isAdmin, studentInfo, onComplete, passPercent]);
 
   useEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
