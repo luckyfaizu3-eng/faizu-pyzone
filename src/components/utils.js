@@ -375,7 +375,7 @@ export class DevToolsDetector {
           this.detected = true;
           this.stop();
           this.onWarning(
-            'DISQUALIFIED — Developer Tools Detected\n\nDeveloper Tools khola tha. Test FAIL submit ho raha hai.',
+            'DISQUALIFIED — Developer Tools Detected\n\nDeveloper Tools were open. Test is being submitted as FAIL.',
             'final',
             true
           );
@@ -437,7 +437,7 @@ export class SecurityManager {
           if (this._windowsKeyCount >= APP_CONFIG.MAX_WINDOWS_KEY_PRESSES) {
             this._windowsKeyCount = 0;
             this.onWarning(
-              `DISQUALIFIED — Windows Key ${APP_CONFIG.MAX_WINDOWS_KEY_PRESSES} Baar Pressed!\n\nTest FAIL submit ho raha hai.`,
+              `DISQUALIFIED — Windows Key Pressed ${APP_CONFIG.MAX_WINDOWS_KEY_PRESSES} Times!\n\nTest is being submitted as FAIL.`,
               'final',
               true
             );
@@ -447,7 +447,7 @@ export class SecurityManager {
           } else {
             const remaining = APP_CONFIG.MAX_WINDOWS_KEY_PRESSES - this._windowsKeyCount;
             this.onWarning(
-              `⚠️ Windows Key Blocked! (${this._windowsKeyCount}/${APP_CONFIG.MAX_WINDOWS_KEY_PRESSES})\n\nAur ${remaining} baar press kiya toh DISQUALIFY ho jaoge!`,
+              `⚠️ Windows Key Blocked! (${this._windowsKeyCount}/${APP_CONFIG.MAX_WINDOWS_KEY_PRESSES})\n\nPress it ${remaining} more time${remaining === 1 ? '' : 's'} and you will be DISQUALIFIED!`,
               'critical',
               true
             );

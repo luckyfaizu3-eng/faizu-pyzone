@@ -396,7 +396,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       } else {
         const remaining = APP_CONFIG.MAX_TAB_SWITCHES - n;
         showWarningMessage(
-          `⚠️ Tab Switch Detected! (${n}/${APP_CONFIG.MAX_TAB_SWITCHES})\n\nYou switched away from the exam.\n\nAur ${remaining} baar kiya toh DISQUALIFY ho jaoge!`,
+          `⚠️ Tab Switch Detected! (${n}/${APP_CONFIG.MAX_TAB_SWITCHES})\n\nYou switched away from the exam.\n\nSwitch ${remaining} more time${remaining === 1 ? '' : 's'} and you will be DISQUALIFIED!`,
           'critical', true
         );
       }
