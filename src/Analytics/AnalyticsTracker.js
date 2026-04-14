@@ -32,7 +32,7 @@ class AnalyticsTracker {
     }
   }
 
-  // ✅ Get IP and Location data — reuses geoPrice cache to avoid double ipapi.co calls
+  // ✅ Get IP and Location data — reuses geoPrice cache to avoid double API calls
   async getIpData() {
     if (this.ipData) return this.ipData;
 
@@ -48,11 +48,11 @@ class AnalyticsTracker {
             country:     parsed.countryName || parsed.country || 'Unknown',
             countryCode: parsed.country     || 'XX',
             city:        parsed.city        || 'Unknown',
-            region:      'Unknown',
-            timezone:    'Unknown',
-            latitude:    null,
-            longitude:   null,
-            isp:         'Unknown',
+            region:      parsed.region      || 'Unknown',
+            timezone:    parsed.timezone    || 'Unknown',
+            latitude:    parsed.lat         || null,
+            longitude:   parsed.lon         || null,
+            isp:         parsed.isp         || 'Unknown',
           };
           console.log('✅ IP fetched from geo cache:', this.ipData.ip);
           console.log('✅ Location data fetched:', this.ipData.city);
@@ -78,28 +78,42 @@ class AnalyticsTracker {
       try {
         const locController = new AbortController();
         const locTimeoutId = setTimeout(() => locController.abort(), 5000);
-        const locationResponse = await fetch(`https://ipapi.co/${ip}/json/`, {
-          signal: locController.signal
-        });
+
+        // ✅ FIXED: Using ip-api.com instead of ipapi.co (supports CORS from browser/localhost)
+        const locationResponse = await fetch(
+          `http://ip-api.com/json/${ip}?fields=status,country,countryCode,city,regionName,timezone,lat,lon,isp`,
+          { signal: locController.signal }
+        );
         clearTimeout(locTimeoutId);
         const locationData = await locationResponse.json();
 
-        if (locationData.error || locationData.reason === 'RateLimited') {
-          console.warn('⚠️ IP API rate limited or error, using IP only');
-          throw new Error('Rate limited');
+        if (locationData.status === 'fail') {
+          console.warn('⚠️ Geo lookup failed, using IP only');
+          throw new Error('Geo lookup failed');
         }
 
         this.ipData = {
           ip:          ip,
-          country:     locationData.country_name  || 'Unknown',
-          countryCode: locationData.country_code  || 'XX',
-          city:        locationData.city          || 'Unknown',
-          region:      locationData.region        || 'Unknown',
-          timezone:    locationData.timezone      || 'Unknown',
-          latitude:    locationData.latitude      || null,
-          longitude:   locationData.longitude     || null,
-          isp:         locationData.org           || 'Unknown',
+          country:     locationData.country     || 'Unknown',
+          countryCode: locationData.countryCode || 'XX',
+          city:        locationData.city        || 'Unknown',
+          region:      locationData.regionName  || 'Unknown',
+          timezone:    locationData.timezone    || 'Unknown',
+          latitude:    locationData.lat         || null,
+          longitude:   locationData.lon         || null,
+          isp:         locationData.isp         || 'Unknown',
         };
+
+        // ✅ Save to cache for geoPrice.js to reuse
+        try {
+          localStorage.setItem('geo_data', JSON.stringify({
+            ...this.ipData,
+            timestamp: Date.now(),
+          }));
+        } catch (e) {
+          // localStorage not available, skip cache
+        }
+
         console.log('✅ Location data fetched:', this.ipData.city);
         return this.ipData;
 

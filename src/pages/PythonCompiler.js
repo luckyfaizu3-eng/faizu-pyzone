@@ -35,13 +35,13 @@ async function callAI(messages, onChunk) {
 }
 
 const LANGS = {
-  python:     { label: "Python",     ext: "py",   badge: "PY", color: "#3b82f6", runner: "pyodide" },
-  javascript: { label: "JavaScript", ext: "js",   badge: "JS", color: "#f59e0b", runner: "eval"   },
-  typescript: { label: "TypeScript", ext: "ts",   badge: "TS", color: "#0ea5e9", runner: "ai"     },
-  html:       { label: "HTML/CSS",   ext: "html", badge: "HT", color: "#f97316", runner: "html"   },
-  cpp:        { label: "C++",        ext: "cpp",  badge: "C+", color: "#8b5cf6", runner: "ai"     },
-  csharp:     { label: "C#",         ext: "cs",   badge: "C#", color: "#ec4899", runner: "ai"     },
-  java:       { label: "Java",       ext: "java", badge: "JV", color: "#ef4444", runner: "ai"     },
+  python:     { label: "Python",     short: "PY",  ext: "py",   badge: "PY", color: "#3b82f6", runner: "pyodide" },
+  javascript: { label: "JavaScript", short: "JS",  ext: "js",   badge: "JS", color: "#f59e0b", runner: "eval"   },
+  typescript: { label: "TypeScript", short: "TS",  ext: "ts",   badge: "TS", color: "#0ea5e9", runner: "ai"     },
+  html:       { label: "HTML/CSS",   short: "HTML",ext: "html", badge: "HT", color: "#f97316", runner: "html"   },
+  cpp:        { label: "C++",        short: "C++", ext: "cpp",  badge: "C+", color: "#8b5cf6", runner: "ai"     },
+  csharp:     { label: "C#",         short: "C#",  ext: "cs",   badge: "C#", color: "#ec4899", runner: "ai"     },
+  java:       { label: "Java",       short: "Java",ext: "java", badge: "JV", color: "#ef4444", runner: "ai"     },
 };
 
 const TEMPLATES = {
@@ -255,10 +255,21 @@ function hlCode(lang, code) {
 }
 
 /* ═══════════════════════════════════════════════════
-   FIX 1: TURTLE HTML — Fullscreen + Fast CDN
+   TURTLE HTML — White background, single centered canvas
 ═══════════════════════════════════════════════════ */
 function makeTurtleHTML(code) {
-  const escaped = code.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
+  // Remove bgcolor calls — they create extra blank canvases in Skulpt
+  const cleaned = code
+    .replace(/screen\.bgcolor\s*\([^)]*\)/g, "pass")
+    .replace(/turtle\.bgcolor\s*\([^)]*\)/g, "pass")
+    .replace(/wn\.bgcolor\s*\([^)]*\)/g, "pass")
+    .replace(/t\.screen\.bgcolor\s*\([^)]*\)/g, "pass");
+
+  const escaped = cleaned
+    .replace(/\\/g, "\\\\")
+    .replace(/`/g, "\\`")
+    .replace(/\$/g, "\\$");
+
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -267,7 +278,7 @@ function makeTurtleHTML(code) {
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
     width:100%; height:100%;
-    background:#1e2127;
+    background:#f2f2f2;
     overflow:hidden;
   }
   body {
@@ -275,47 +286,52 @@ function makeTurtleHTML(code) {
     flex-direction:column;
     align-items:center;
     justify-content:center;
-    gap:10px;
+    height:100vh;
     font-family:'Segoe UI',sans-serif;
+    gap:10px;
   }
   #turtle-canvas-container {
     display:flex;
     align-items:center;
     justify-content:center;
-    width:100vw;
+    width:100%;
     flex:1;
+    min-height:0;
+  }
+  /* Force ONLY the first canvas to show — hide any extra ones Skulpt makes */
+  #turtle-canvas-container canvas:not(:first-child) {
+    display: none !important;
   }
   #turtle-canvas-container canvas {
-    border-radius:10px;
-    box-shadow:0 4px 24px rgba(0,0,0,0.5);
-    max-width:98vw;
-    max-height:calc(100vh - 60px);
-    width:auto !important;
-    height:auto !important;
-    object-fit:contain;
+    border-radius:14px;
+    box-shadow:0 4px 24px rgba(0,0,0,0.10);
+    background:#ffffff !important;
+    max-width:95vw;
+    max-height:calc(100vh - 70px);
+    display:block;
   }
   #st {
-    color:#98c379;font-size:13px;font-weight:600;
-    padding:4px 14px;background:rgba(152,195,121,0.1);
-    border-radius:20px;border:1px solid rgba(152,195,121,0.3);
+    color:#2d7a2d; font-size:13px; font-weight:600;
+    padding:4px 16px; background:rgba(45,122,45,0.08);
+    border-radius:20px; border:1px solid rgba(45,122,45,0.2);
     flex-shrink:0;
   }
   #er {
-    color:#e06c75;font-size:12px;max-width:90vw;
-    word-break:break-word;text-align:center;
-    padding:8px 16px;background:rgba(224,108,117,0.1);
-    border-radius:8px;border:1px solid rgba(224,108,117,0.3);
+    color:#cc0000; font-size:12px; max-width:90vw;
+    word-break:break-word; text-align:center;
+    padding:8px 16px; background:rgba(204,0,0,0.06);
+    border-radius:8px; border:1px solid rgba(204,0,0,0.18);
     display:none; flex-shrink:0;
   }
   .loader {
-    width:12px;height:12px;
-    border:2px solid rgba(97,175,239,0.2);
-    border-top-color:#61afef;
+    width:11px; height:11px;
+    border:2px solid rgba(45,122,45,0.15);
+    border-top-color:#2d7a2d;
     border-radius:50%;
     animation:spin 0.8s linear infinite;
-    display:inline-block;vertical-align:middle;margin-right:6px;
+    display:inline-block; vertical-align:middle; margin-right:6px;
   }
-  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes spin { to { transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -345,8 +361,8 @@ window.addEventListener('load', function() {
       document.getElementById('ld').style.display = 'none';
       document.getElementById('st').textContent = 'Running...';
       var container = document.getElementById('turtle-canvas-container');
-      var vw = Math.min(window.innerWidth - 16, 600);
-      var vh = Math.min(window.innerHeight - 80, 500);
+      var vw = Math.min(window.innerWidth - 20, 580);
+      var vh = Math.min(window.innerHeight - 80, 520);
       var sz = Math.min(vw, vh);
       Sk.configure({
         output: function() {},
@@ -575,7 +591,7 @@ function terminateWorker() {
 }
 
 /* ═══════════════════════════════════════════════════
-   FIX 2: UNDO/REDO HISTORY HOOK
+   UNDO/REDO HISTORY HOOK
 ═══════════════════════════════════════════════════ */
 function useUndoRedo(initial) {
   const [history, setHistory] = useState([initial]);
@@ -586,10 +602,8 @@ function useUndoRedo(initial) {
   const set = useCallback((newVal) => {
     setHistory(h => {
       const trimmed = h.slice(0, index + 1);
-      // Don't push duplicate
       if (trimmed[trimmed.length - 1] === newVal) return h;
       const next = [...trimmed, newVal];
-      // Keep max 200 history entries
       return next.length > 200 ? next.slice(next.length - 200) : next;
     });
     setIndex(i => {
@@ -598,21 +612,13 @@ function useUndoRedo(initial) {
     });
   }, [index]);
 
-  const undo = useCallback(() => {
-    setIndex(i => Math.max(0, i - 1));
-  }, []);
-
-  const redo = useCallback(() => {
-    setIndex(i => Math.min(history.length - 1, i + 1));
-  }, [history.length]);
+  const undo = useCallback(() => { setIndex(i => Math.max(0, i - 1)); }, []);
+  const redo = useCallback(() => { setIndex(i => Math.min(history.length - 1, i + 1)); }, [history.length]);
 
   const canUndo = index > 0;
   const canRedo = index < history.length - 1;
 
-  const reset = useCallback((val) => {
-    setHistory([val]);
-    setIndex(0);
-  }, []);
+  const reset = useCallback((val) => { setHistory([val]); setIndex(0); }, []);
 
   return { current, set, undo, redo, canUndo, canRedo, reset };
 }
@@ -640,7 +646,6 @@ function CodeEditor({ code, onChange, lang, onUndo, onRedo, canUndo, canRedo }) 
 
   const onKeyDown = (e) => {
     const ta = taRef.current; if (!ta) return;
-    // Ctrl+Z / Ctrl+Y for desktop
     if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); onUndo(); return; }
     if ((e.ctrlKey || e.metaKey) && (e.key === "y" || (e.key === "z" && e.shiftKey))) { e.preventDefault(); onRedo(); return; }
     if ((e.ctrlKey || e.metaKey) && e.key === "a") return;
@@ -891,11 +896,11 @@ function OutputPanel({ lines, isRunning, onClose, onStop, inputPrompt, onInputSu
 }
 
 /* ═══════════════════════════════════════════════════
-   TURTLE SCREEN — FIXED FULLSCREEN
+   TURTLE SCREEN
 ═══════════════════════════════════════════════════ */
 function TurtleScreen({ html, onClose }) {
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#1e2127", display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#f2f2f2", display: "flex", flexDirection: "column" }}>
       <div style={{
         height: 46, flexShrink: 0,
         background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
@@ -911,7 +916,7 @@ function TurtleScreen({ html, onClose }) {
         title="turtle"
         srcDoc={html}
         sandbox="allow-scripts"
-        style={{ flex: 1, width: "100%", border: "none" }}
+        style={{ flex: 1, width: "100%", border: "none", background: "#f2f2f2" }}
       />
     </div>
   );
@@ -989,30 +994,21 @@ export default function App({ setCurrentPage, initialCode }) {
   const [fixMsg,      setFixMsg]     = useState("");
   const [copyDone,    setCopyDone]   = useState(false);
 
-  // FIX 2: Undo/Redo
   const { current: code, set: setCodeHistory, undo, redo, canUndo, canRedo, reset } = useUndoRedo(initialCode || TEMPLATES.python);
 
-  // Debounced set so every keystroke doesn't flood history
   const debounceRef = useRef(null);
   const handleCodeChange = useCallback((val) => {
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      setCodeHistory(val);
-    }, 400);
-    // Immediately update via direct state trick — we track raw in a ref
-    // Actually we need immediate update for the editor display,
-    // so we use a "pending" ref approach:
+    debounceRef.current = setTimeout(() => { setCodeHistory(val); }, 400);
     _pendingCode.current = val;
     _forceUpdate.current?.();
   }, [setCodeHistory]);
 
-  // We need a live "display" code that updates immediately but history debounces
   const _pendingCode = useRef(code);
   const _forceRender = useState(0);
   const _forceUpdate = useRef(() => _forceRender[1](x => x + 1));
   const displayCode = _pendingCode.current;
 
-  // Sync pending when undo/redo happens
   useEffect(() => {
     _pendingCode.current = code;
     _forceUpdate.current();
@@ -1217,7 +1213,7 @@ export default function App({ setCurrentPage, initialCode }) {
     </>
   );
 
-  /* EDITOR SCREEN */
+  /* ── EDITOR SCREEN ── */
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#ffffff", overflow: "hidden" }}>
 
@@ -1226,6 +1222,7 @@ export default function App({ setCurrentPage, initialCode }) {
         height: 46, background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
         display: "flex", alignItems: "center", padding: "0 10px", gap: 8, flexShrink: 0,
       }}>
+        {/* Back button */}
         <button onClick={handleBack} style={{
           background: "#fff", border: "1px solid #ddd", color: "#555", borderRadius: 8,
           padding: "5px 10px", fontSize: 12, cursor: "pointer",
@@ -1233,6 +1230,7 @@ export default function App({ setCurrentPage, initialCode }) {
           display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
         }}>← Back</button>
 
+        {/* Logo */}
         <span style={{
           fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 800,
           letterSpacing: "-0.4px", flexShrink: 0, color: "#1e1e1e", whiteSpace: "nowrap",
@@ -1246,19 +1244,31 @@ export default function App({ setCurrentPage, initialCode }) {
 
         <div style={{ flex: 1 }} />
 
-        {/* Language selector */}
+        {/* Language selector — shows SHORT name in button, full name in dropdown */}
         <div style={{ position: "relative" }}>
           <button onClick={() => setLangOpen(o => !o)} style={{
-            display: "flex", alignItems: "center", gap: 6, background: "#fff", border: "1px solid #ddd",
+            display: "flex", alignItems: "center", gap: 5, background: "#fff", border: "1px solid #ddd",
             borderRadius: 8, padding: "5px 8px", fontFamily: "'JetBrains Mono',monospace",
             fontSize: 11, fontWeight: 700, color: "#333", cursor: "pointer", flexShrink: 0,
           }}>
-            <span style={{ width: 20, height: 20, borderRadius: 4, background: cl.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff" }}>{cl.badge}</span>
-            {cl.label}
+            {/* Colored badge icon */}
+            <span style={{
+              width: 20, height: 20, borderRadius: 4, background: cl.color,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0,
+            }}>{cl.badge}</span>
+            {/* SHORT name only — no layout shift */}
+            <span style={{ minWidth: 28, textAlign: "left" }}>{cl.short}</span>
             <span style={{ fontSize: 9, color: "#aaa" }}>▾</span>
           </button>
+
           {langOpen && (
-            <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: "#fff", borderRadius: 10, border: "1px solid #e0e0e0", boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100, overflow: "hidden", minWidth: 165 }}>
+            <div style={{
+              position: "absolute", right: 0, top: "calc(100% + 4px)",
+              background: "#fff", borderRadius: 10, border: "1px solid #e0e0e0",
+              boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100,
+              overflow: "hidden", minWidth: 165,
+            }}>
               {Object.entries(LANGS).map(([k, v]) => (
                 <button key={k} onClick={() => switchLang(k)} style={{
                   width: "100%", padding: "10px 14px", background: lang === k ? "#f5f5f5" : "transparent",
@@ -1266,7 +1276,12 @@ export default function App({ setCurrentPage, initialCode }) {
                   fontFamily: "sans-serif", fontSize: 13, fontWeight: lang === k ? 700 : 400,
                   color: lang === k ? "#1e1e1e" : "#555", textAlign: "left",
                 }}>
-                  <span style={{ width: 22, height: 22, borderRadius: 5, background: v.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 800, color: "#fff" }}>{v.badge}</span>
+                  <span style={{
+                    width: 22, height: 22, borderRadius: 5, background: v.color,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: 9, fontWeight: 800, color: "#fff",
+                  }}>{v.badge}</span>
+                  {/* Full name in dropdown */}
                   {v.label}
                   {lang === k && <span style={{ marginLeft: "auto", color: v.color }}>✓</span>}
                 </button>
@@ -1275,6 +1290,7 @@ export default function App({ setCurrentPage, initialCode }) {
           )}
         </div>
 
+        {/* Run button */}
         <button onClick={() => runCode(displayCode)} className="run-btn-live" style={{
           border: "none", color: "#fff", borderRadius: 9, padding: "7px 16px",
           fontSize: 13, fontWeight: 800, cursor: "pointer",
@@ -1299,7 +1315,11 @@ export default function App({ setCurrentPage, initialCode }) {
             {fixMsg || `${cl.label} error detected`}
           </span>
           {hasError && !isFixing && (
-            <button onClick={doFix} style={{ background: "#ff0000", border: "none", color: "#fff", borderRadius: 7, padding: "5px 13px", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={doFix} style={{
+              background: "#ff0000", border: "none", color: "#fff",
+              borderRadius: 7, padding: "5px 13px", fontSize: 12, fontWeight: 700,
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+            }}>
               🔧 AI Fix
             </button>
           )}
@@ -1326,46 +1346,32 @@ export default function App({ setCurrentPage, initialCode }) {
         canRedo={canRedo}
       />
 
-      {/* BOTTOM BAR — FIX 2: Undo/Redo mobile buttons */}
+      {/* BOTTOM BAR */}
       <div style={{
         height: 44, background: "#f5f5f5", borderTop: "1px solid #e0e0e0",
         display: "flex", alignItems: "center", padding: "0 12px", gap: 6, flexShrink: 0,
       }}>
-        {/* UNDO */}
-        <button
-          onClick={undo}
-          disabled={!canUndo}
-          title="Undo"
-          style={{
-            background: canUndo ? "#fff" : "#fafafa",
-            border: `1px solid ${canUndo ? "#ddd" : "#ebebeb"}`,
-            color: canUndo ? "#333" : "#ccc",
-            borderRadius: 7, padding: "5px 10px", fontSize: 16,
-            cursor: canUndo ? "pointer" : "default",
-            lineHeight: 1, userSelect: "none",
-            transition: "all 0.15s",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            minWidth: 34,
-          }}
-        >↩</button>
+        {/* Undo */}
+        <button onClick={undo} disabled={!canUndo} title="Undo" style={{
+          background: canUndo ? "#fff" : "#fafafa",
+          border: `1px solid ${canUndo ? "#ddd" : "#ebebeb"}`,
+          color: canUndo ? "#333" : "#ccc",
+          borderRadius: 7, padding: "5px 10px", fontSize: 16,
+          cursor: canUndo ? "pointer" : "default",
+          lineHeight: 1, userSelect: "none", transition: "all 0.15s",
+          display: "flex", alignItems: "center", justifyContent: "center", minWidth: 34,
+        }}>↩</button>
 
-        {/* REDO */}
-        <button
-          onClick={redo}
-          disabled={!canRedo}
-          title="Redo"
-          style={{
-            background: canRedo ? "#fff" : "#fafafa",
-            border: `1px solid ${canRedo ? "#ddd" : "#ebebeb"}`,
-            color: canRedo ? "#333" : "#ccc",
-            borderRadius: 7, padding: "5px 10px", fontSize: 16,
-            cursor: canRedo ? "pointer" : "default",
-            lineHeight: 1, userSelect: "none",
-            transition: "all 0.15s",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            minWidth: 34,
-          }}
-        >↪</button>
+        {/* Redo */}
+        <button onClick={redo} disabled={!canRedo} title="Redo" style={{
+          background: canRedo ? "#fff" : "#fafafa",
+          border: `1px solid ${canRedo ? "#ddd" : "#ebebeb"}`,
+          color: canRedo ? "#333" : "#ccc",
+          borderRadius: 7, padding: "5px 10px", fontSize: 16,
+          cursor: canRedo ? "pointer" : "default",
+          lineHeight: 1, userSelect: "none", transition: "all 0.15s",
+          display: "flex", alignItems: "center", justifyContent: "center", minWidth: 34,
+        }}>↪</button>
 
         <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 2px" }} />
 
