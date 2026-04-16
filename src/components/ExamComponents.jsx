@@ -1,7 +1,8 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/ExamComponents.jsx
-// ✅ FIX-AUDIO: playTick, getAudioCtx, unlockAudio — sab remove kar diye
-// ✅ FIX-AUDIO: QuestionTimer + IsolatedTimer se sab audio calls hataye
+// ✅ FIX-AUDIO:  playTick, getAudioCtx, unlockAudio — sab remove kar diye
+// ✅ FIX-AUDIO:  QuestionTimer + IsolatedTimer se sab audio calls hataye
+// ✅ FIX-TIMER:  Wall-clock based startedAt — tab switch ke baad bhi accurate
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Clock, AlertTriangle } from 'lucide-react';
@@ -296,7 +297,6 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
       timerRef.current = setInterval(() => {
         setCountdown(prev => {
           const next = prev - 1;
-          // ✅ FIX-AUDIO: No tick sounds here
           if (next <= 0) {
             clearInterval(timerRef.current);
             onAcknowledgeRef.current();
@@ -344,7 +344,7 @@ export function WarningModal({ show, message, type, tabSwitches, onAcknowledge, 
         <div style={{ fontSize:'clamp(0.82rem,3.5vw,1rem)', fontWeight:'600', color:s.color, lineHeight:1.7, whiteSpace:'pre-line', marginBottom:'1rem', textAlign:'left', wordBreak:'break-word' }}>{message}</div>
         {tabSwitches > 0 && (type === 'critical' || type === 'final') && (
           <div style={{ fontSize:'0.85rem', fontWeight:'900', color:s.iconColor, padding:'0.5rem 1rem', background:'rgba(0,0,0,0.3)', borderRadius:'8px', marginBottom:'1rem', border:`2px solid ${s.iconColor}40`, display:'inline-block' }}>
-            Tab Switches: {tabSwitches} / {APP_CONFIG.MAX_TAB_SWITCHES}
+            Violations: {tabSwitches} / {APP_CONFIG.MAX_TAB_SWITCHES}
           </div>
         )}
         {needsOk && (
@@ -439,8 +439,6 @@ export const QuestionTimer = React.memo(function QuestionTimer({
       setTimeLeft(next);
       timerStateRef.current[questionIndex].timeLeft = next;
 
-      // ✅ FIX-AUDIO: No playTick call here
-
       if (next <= 0 && !firedRef.current) {
         firedRef.current = true;
         timerStateRef.current[questionIndex].expired = true;
@@ -523,7 +521,7 @@ export const QuestionTimer = React.memo(function QuestionTimer({
 // ==========================================
 // ISOLATED TIMER (Global exam timer)
 // ✅ FIX-AUDIO: All playTick / unlockAudio calls removed
-// ✅ FIX-TIMER: Wall-clock based startedAt — tab switch pe bhi timer accurate rahega
+// ✅ FIX-TIMER: Wall-clock based startedAt — tab switch pe bhi timer accurate
 // ==========================================
 export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onExpire, onTick, isAdmin }) {
   const onExpireRef  = useRef(onExpire);
@@ -561,8 +559,6 @@ export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onEx
       setPct((left / totalSecs.current) * 100);
       if (onTickRef.current) onTickRef.current(left);
 
-      // ✅ FIX-AUDIO: No playTick call here
-
       if (left <= 0 && !firedRef.current) {
         firedRef.current = true;
         clearInterval(intervalRef.current);
@@ -572,7 +568,6 @@ export const IsolatedTimer = React.memo(function IsolatedTimer({ timeLimit, onEx
 
     intervalRef.current = setInterval(update, 500);
 
-    // ✅ FIX-TIMER: visibilitychange pe recalculate so tab switch pe bhi sahi time
     const onVisible = () => {
       if (!document.hidden) update();
     };

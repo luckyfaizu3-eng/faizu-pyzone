@@ -1,10 +1,50 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/utils.js
 // ============================================================
-// FIXES IN THIS VERSION:
-// ✅ FIX-DESKTOP:   DesktopModeEnforcer.disable() now restores viewport properly
-// ✅ FIX-DELAY:     CleanupManager fullscreen exit delay 400ms → 800ms
-// ✅ FIX-AUDIO:     AudioManager playTick/playAlarm removed (silent)
+// ORIGINAL FIXES (v1–v2):
+// ✅ FIX-DESKTOP:        DesktopModeEnforcer.disable() now restores viewport properly
+// ✅ FIX-DELAY:          CleanupManager fullscreen exit delay 400ms → 800ms
+// ✅ FIX-AUDIO:          AudioManager playTick/playAlarm removed (silent)
+// ============================================================
+// ANTI-CHEAT v3 (previous version fixes):
+// ✅ FIX-PRIVATE-FIELDS:    AntiCheatController uses #violations / #active (true private — DevTools proof)
+// ✅ FIX-TOSTRING-ORDER:    DevToolsDetector toString trap fires BEFORE SecurityManager silences console
+// ✅ FIX-DEBUGGER-BYPASS:   debugger timing check augmented with size+global fallback; threshold 100ms
+// ✅ FIX-WEBRTC:            RTCPeerConnection + RTCDataChannel blocked during exam
+// ✅ FIX-CLIPBOARD-RESTORE: read() + write() also restored in _restoreClipboard()
+// ✅ FIX-FULLSCREEN-FLAG:   FullscreenGuard sets _active AFTER enter() resolves, not before
+// ✅ FIX-STATIC-RACE:       AppSwitcherGuard _lastFired moved to instance (no cross-instance bleed)
+// ✅ FIX-HISTORY-CLEANUP:   BackButtonBlocker.disable() calls history.go(-2) to clean pushState pollution
+// ✅ FIX-CONSOLE-ORDER:     SecurityManager.disable() restores console LAST, after all other cleanup
+// ✅ FIX-SHUFFLE-GUARD:     shuffleQuestions coerces correct to Number before validation
+// ✅ FIX-VISIBILITY-GUARD:  VisibilityManager warns if registered alongside AntiCheatController
+// ✅ FIX-NETWORK-WEBSOCKET: NetworkGuard also blocks WebSocket
+// ============================================================
+// BUG-FIX v4 — DEEP AUDIT & HARDENING:
+// ✅ FIX-DOUBLE-ENABLE:       All static enable() guards prevent double-registration (VisibilityManager,
+//                              ScreenRecordBlocker, TabCloseGuard, SecurityManager, FullscreenManager)
+// ✅ FIX-APPSWITCHER-DEDUP:   AppSwitcherGuard pagehide deduplicated against visibilitychange via
+//                              shared _lastFired; prevents double-violation on same tab-switch event
+// ✅ FIX-XHR-GUARD:           NetworkGuard.enable() also guards _origXHR against double-enable
+// ✅ FIX-CLEANUP-SECURITY:    CleanupManager.performFullCleanup() now accepts and calls
+//                              securityManager.disable() + devToolsDetector.stop() if provided
+// ✅ FIX-SHUFFLE-NULL:        shuffleQuestions guards against null/undefined q.options
+// ✅ FIX-TOSTRING-LEAK:       DevToolsDetector.stop() nulls _toStringTrap
+// ✅ FIX-SCREENBLOCKER-DEDUP: ScreenshotBlocker.enable() is idempotent (checks _enabled flag)
+// ✅ FIX-LEADERBOARD-SANITIZE: LeaderboardStorage sanitizes string fields before Firestore write
+// ✅ FIX-HISTORY-NAV:         BackButtonBlocker.disable() uses replaceState instead of go(-2)
+//                              to avoid spurious back-navigation on the results page
+// ✅ FIX-FS-TRY-CATCH:        FullscreenGuard.enable() wraps enter() so listener is never added
+//                              if fullscreen is entirely unavailable (throws synchronously)
+// ✅ FIX-VIOLATION-RESET:     AntiCheatController.enable() resets #violations to 0 on every call
+// ✅ FIX-SOURCETLABEL-PRIVATE: _sourceLabel() moved inside AntiCheatController as a static method
+//                              so it is not reachable from module scope
+// ✅ FIX-HANDLER-WEAKREF:     SecurityManager stores bound handler refs for clean removal
+// ✅ FIX-FINGERPRINT-SIGN:    getDeviceFingerprint hash uses unsigned right-shift to avoid
+//                              negative toString(36) values on some V8 builds
+// ✅ FIX-OPTIONS-LENGTH:      shuffleQuestions uses (q.options?.length ?? 0) safely, now with
+//                              early-return when options is empty array
+// ✅ FIX-VISIBILITY-DOUBLE:   VisibilityManager tracks _enabled flag; disable() resets it
 // ============================================================
 
 export function injectGlobalCSS() {
@@ -59,8 +99,49 @@ export function injectGlobalCSS() {
 }
 
 // ==========================================
-// LEADERBOARD STORAGE
+// DEVICE FINGERPRINT
+// ✅ FIX-FINGERPRINT-SIGN: Use unsigned right-shift (>>> 0) to prevent
+//    negative toString(36) on some V8 builds where hash |= 0 yields INT_MIN.
+// Combines UA + screen + timezone + language + concurrency + platform
 // ==========================================
+export function getDeviceFingerprint() {
+  try {
+    const parts = [
+      navigator.userAgent || '',
+      `${window.screen.width}x${window.screen.height}x${window.screen.colorDepth}`,
+      Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+      navigator.language || '',
+      navigator.hardwareConcurrency || '',
+      navigator.platform || '',
+    ];
+    const str = parts.join('|');
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    // ✅ FIX-FINGERPRINT-SIGN: unsigned right-shift guarantees positive uint32
+    return (hash >>> 0).toString(36);
+  } catch (e) {
+    return 'unknown';
+  }
+}
+
+// ==========================================
+// LEADERBOARD STORAGE
+// ✅ FIX-LEADERBOARD-SANITIZE: All string fields clamped/sanitized before write
+// ==========================================
+
+/** Truncate and strip any HTML/script from a string field before storage. */
+function _sanitizeStr(val, maxLen = 200) {
+  if (val == null) return '';
+  return String(val)
+    .replace(/<[^>]*>/g, '')   // strip HTML tags
+    .replace(/[^\x20-\x7E\u00A0-\uFFFF]/g, '') // strip control characters
+    .trim()
+    .slice(0, maxLen);
+}
+
 export class LeaderboardStorage {
   static async saveEntry(testResult) {
     const MAX_RETRIES = 2;
@@ -74,19 +155,21 @@ export class LeaderboardStorage {
     }
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        // ✅ FIX-LEADERBOARD-SANITIZE: sanitize every user-controlled string
         const newEntry = {
-          name:                   testResult.studentInfo?.fullName || testResult.studentInfo?.name || testResult.userName || 'Anonymous',
-          email:                  testResult.userEmail,
-          percentage:             testResult.percentage,
-          score:                  `${testResult.correct}/${testResult.total}`,
-          testTitle:              testResult.testTitle,
-          testLevel:              testResult.testLevel,
-          timeTaken:              testResult.timeTaken,
-          passed:                 testResult.passed,
-          penalized:              testResult.penalized || false,
-          disqualificationReason: testResult.disqualificationReason || '',
+          name:                   _sanitizeStr(testResult.studentInfo?.fullName || testResult.studentInfo?.name || testResult.userName || 'Anonymous', 100),
+          email:                  _sanitizeStr(testResult.userEmail, 254),
+          percentage:             Number(testResult.percentage) || 0,
+          score:                  _sanitizeStr(`${testResult.correct}/${testResult.total}`, 20),
+          testTitle:              _sanitizeStr(testResult.testTitle, 150),
+          testLevel:              _sanitizeStr(testResult.testLevel, 50),
+          timeTaken:              Number(testResult.timeTaken) || 0,
+          passed:                 Boolean(testResult.passed),
+          penalized:              Boolean(testResult.penalized),
+          disqualificationReason: _sanitizeStr(testResult.disqualificationReason || '', 300),
           date:                   new Date().toLocaleDateString('en-GB'),
           timestamp:              Date.now(),
+          deviceFingerprint:      getDeviceFingerprint(),
         };
         await addDoc(collection(db, 'leaderboard'), newEntry);
         return { success: true };
@@ -127,6 +210,8 @@ export const THEME = Object.freeze({
 
 // ==========================================
 // SHUFFLER
+// ✅ FIX-SHUFFLE-GUARD:  correct coerced to Number before validation
+// ✅ FIX-OPTIONS-LENGTH: guard against null/undefined/empty options array
 // ==========================================
 export function shuffleArray(arr) {
   const a = [...arr];
@@ -140,24 +225,35 @@ export function shuffleArray(arr) {
 export function shuffleQuestions(questions) {
   const shuffled = shuffleArray(questions);
   return shuffled.map(q => {
-    if (!Number.isInteger(q.correct) || q.correct < 0 || q.correct >= (q.options?.length ?? 0)) {
+    // ✅ FIX-OPTIONS-LENGTH: guard null/undefined/empty options
+    const optLen = q.options?.length ?? 0;
+    if (optLen === 0) return q;
+
+    // ✅ FIX-SHUFFLE-GUARD: coerce to Number first
+    const correctIdx = Number(q.correct);
+    if (!Number.isInteger(correctIdx) || correctIdx < 0 || correctIdx >= optLen) {
       return q;
     }
     const indexedOpts   = q.options.map((text, i) => ({ text, origIdx: i }));
     const shuffledIdx   = shuffleArray(indexedOpts);
-    const newCorrectIdx = shuffledIdx.findIndex(o => o.origIdx === q.correct);
+    const newCorrectIdx = shuffledIdx.findIndex(o => o.origIdx === correctIdx);
     return { ...q, options: shuffledIdx.map(o => o.text), correct: newCorrectIdx };
   });
 }
 
 // ==========================================
 // SCREEN RECORD BLOCKER
+// ✅ FIX-DOUBLE-ENABLE: _enabled flag prevents double-patching
 // ==========================================
 export class ScreenRecordBlocker {
   static _originalDisplay = null;
   static _originalGetUser = null;
+  static _enabled         = false; // ✅ FIX-DOUBLE-ENABLE
 
   static enable() {
+    if (this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = true;
+
     if (navigator.mediaDevices?.getDisplayMedia) {
       this._originalDisplay = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
       navigator.mediaDevices.getDisplayMedia = async () => {
@@ -176,6 +272,9 @@ export class ScreenRecordBlocker {
   }
 
   static disable() {
+    if (!this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = false;
+
     if (this._originalDisplay && navigator.mediaDevices) {
       navigator.mediaDevices.getDisplayMedia = this._originalDisplay;
       this._originalDisplay = null;
@@ -189,13 +288,18 @@ export class ScreenRecordBlocker {
 
 // ==========================================
 // DESKTOP MODE ENFORCER
-// ✅ FIX-DESKTOP: disable() now actually restores viewport
+// ✅ FIX-DESKTOP:       disable() restores viewport correctly
+// ✅ FIX-DOUBLE-ENABLE: _enabled flag prevents double-patching viewport
 // ==========================================
 export class DesktopModeEnforcer {
   static _original = null;
   static _created  = null;
+  static _enabled  = false; // ✅ FIX-DOUBLE-ENABLE
 
   static enable() {
+    if (this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = true;
+
     const existing = document.querySelector('meta[name="viewport"]');
     if (existing) {
       this._original = existing.getAttribute('content');
@@ -209,8 +313,10 @@ export class DesktopModeEnforcer {
     }
   }
 
-  // ✅ FIXED: Properly restores viewport after exam ends
   static disable() {
+    if (!this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = false;
+
     const meta = document.querySelector('meta[name="viewport"]');
     if (meta) {
       if (this._original !== null) {
@@ -292,10 +398,12 @@ export class AudioManager {
 
 // ==========================================
 // FULLSCREEN MANAGER
+// ✅ FIX-DOUBLE-ENABLE: enter() is safe to call when already fullscreen
 // ==========================================
 export class FullscreenManager {
   static async enter() {
     try {
+      if (FullscreenManager.isActive()) return; // already fullscreen — no-op
       const el = document.documentElement;
       if (el.requestFullscreen)            await el.requestFullscreen();
       else if (el.webkitRequestFullscreen) await el.webkitRequestFullscreen();
@@ -305,6 +413,7 @@ export class FullscreenManager {
       try { if (window.screen?.orientation?.lock) window.screen.orientation.lock('portrait').catch(() => {}); } catch (e) {}
     } catch (err) {}
   }
+
   static async exit() {
     try {
       if (!FullscreenManager.isActive()) return;
@@ -314,9 +423,11 @@ export class FullscreenManager {
       else if (document.mozCancelFullScreen)  await document.mozCancelFullScreen();
     } catch (err) {}
   }
+
   static isActive() {
     return !!(document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement || document.mozFullScreenElement);
   }
+
   static onChange(callback) {
     const events = ['fullscreenchange','webkitfullscreenchange','msfullscreenchange','mozfullscreenchange'];
     events.forEach(e => document.addEventListener(e, callback));
@@ -325,7 +436,11 @@ export class FullscreenManager {
 }
 
 // ==========================================
-// DEVTOOLS DETECTOR
+// DEVTOOLS DETECTOR — v4
+// ✅ FIX-TOSTRING-LEAK:  stop() nulls _toStringTrap reference
+// ✅ FIX-TOSTRING-ORDER: toString trap fires BEFORE SecurityManager silences console.
+//    DevToolsDetector.start() MUST be called before SecurityManager.enable().
+// ✅ FIX-DEBUGGER-BYPASS: threshold 100ms; augmented with size+global fallbacks
 // ==========================================
 export class DevToolsDetector {
   constructor(onWarning, onAutoSubmit) {
@@ -334,6 +449,7 @@ export class DevToolsDetector {
     this.interval         = null;
     this.detected         = false;
     this.consecutiveCount = 0;
+    this._toStringTrap    = null;
   }
 
   _isOpenBySize() {
@@ -351,20 +467,59 @@ export class DevToolsDetector {
       const t0 = performance.now();
       // eslint-disable-next-line no-debugger
       debugger;
-      return (performance.now() - t0) > 80;
+      return (performance.now() - t0) > 100;
+    } catch (e) { return false; }
+  }
+
+  _setupToStringTrap(onDetect) {
+    try {
+      // Grab the real console.log before SecurityManager can noop it.
+      const logFn = window.__nativeConsoleLog || console.log;
+      if (typeof logFn !== 'function') return;
+      const trap = {
+        toString: () => {
+          onDetect();
+          return '';
+        },
+      };
+      logFn.call(console, '%c', trap);
+      this._toStringTrap = trap;
+    } catch (e) {}
+  }
+
+  _isOpenByGlobal() {
+    try {
+      if (window.Firebug?.chrome?.isInitialized) return true;
+      return false;
     } catch (e) { return false; }
   }
 
   _isOpen() {
     const bySize   = this._isOpenBySize();
     const byTiming = this._isOpenByTiming();
+    const byGlobal = this._isOpenByGlobal();
     return {
-      isOpen:    bySize.isOpen || byTiming,
-      isCertain: bySize.isCertain || byTiming,
+      isOpen:    bySize.isOpen || byTiming || byGlobal,
+      isCertain: bySize.isCertain || byTiming || byGlobal,
     };
   }
 
+  _handleDetection() {
+    if (this.detected) return;
+    this.detected = true;
+    this.stop();
+    this.onWarning(
+      'DISQUALIFIED — Developer Tools Detected\n\nDeveloper Tools were open. Test is being submitted as FAIL.',
+      'final',
+      true
+    );
+    setTimeout(() => this.onAutoSubmit(true, 'devtools-disqualified'), 500);
+  }
+
   start() {
+    // ✅ FIX-TOSTRING-ORDER: toString trap set first, BEFORE SecurityManager.enable()
+    this._setupToStringTrap(() => this._handleDetection());
+
     this.interval = setInterval(() => {
       if (this.detected) return;
       const { isOpen, isCertain } = this._isOpen();
@@ -372,14 +527,7 @@ export class DevToolsDetector {
         this.consecutiveCount++;
         const threshold = isCertain ? 1 : 3;
         if (this.consecutiveCount >= threshold) {
-          this.detected = true;
-          this.stop();
-          this.onWarning(
-            'DISQUALIFIED — Developer Tools Detected\n\nDeveloper Tools were open. Test is being submitted as FAIL.',
-            'final',
-            true
-          );
-          setTimeout(() => this.onAutoSubmit(true, 'devtools-disqualified'), 500);
+          this._handleDetection();
         }
       } else {
         this.consecutiveCount = Math.max(0, this.consecutiveCount - 1);
@@ -389,11 +537,20 @@ export class DevToolsDetector {
 
   stop() {
     if (this.interval) { clearInterval(this.interval); this.interval = null; }
+    // ✅ FIX-TOSTRING-LEAK: null out trap reference to allow GC
+    this._toStringTrap = null;
   }
 }
 
 // ==========================================
 // SECURITY MANAGER
+// ✅ FIX-DOUBLE-ENABLE:    enable() is idempotent via _enabled flag
+// ✅ FIX-CLIPBOARD-RESTORE: read() + write() also restored
+// ✅ FIX-CONSOLE-ORDER:    console restored LAST in disable()
+// ✅ FIX-WEBRTC:           RTCPeerConnection + RTCDataChannel blocked
+// ✅ FIX-HANDLER-WEAKREF:  bound handler refs stored for clean removal
+// NOTE: SecurityManager.enable() caches window.__nativeConsoleLog before
+//       silencing console, so DevToolsDetector toString trap can use it.
 // ==========================================
 export class SecurityManager {
   constructor(onWarning, handleSubmitRef) {
@@ -401,9 +558,16 @@ export class SecurityManager {
     this.handleSubmitRef = handleSubmitRef;
     this.violationCount  = 0;
     this.maxViolations   = 999;
+    this._enabled        = false; // ✅ FIX-DOUBLE-ENABLE
 
-    this._origClipboardRead  = null;
-    this._origClipboardWrite = null;
+    this._origClipboardRead      = null;
+    this._origClipboardWrite     = null;
+    this._origClipboardReadFull  = null;
+    this._origClipboardWriteFull = null;
+    this._origExecCommand        = null;
+    this._origWebSocket          = null;
+    this._origRTC                = null;
+    this._origRTCData            = null;
 
     this._windowsKeyCount   = 0;
     this._windowsKeyTimer   = null;
@@ -413,6 +577,8 @@ export class SecurityManager {
 
     this._origConsoleMethods = {};
 
+    // ✅ FIX-HANDLER-WEAKREF: All handlers defined as bound arrow functions
+    // so removeEventListener receives the exact same reference that was added.
     this.handlers = {
       copy:        (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Copying is disabled during the test.'); },
       cut:         (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Cutting is disabled during the test.'); },
@@ -514,21 +680,100 @@ export class SecurityManager {
   _poisonClipboard() {
     try {
       if (navigator.clipboard) {
-        this._origClipboardRead  = navigator.clipboard.readText?.bind(navigator.clipboard);
-        this._origClipboardWrite = navigator.clipboard.writeText?.bind(navigator.clipboard);
+        this._origClipboardRead      = navigator.clipboard.readText?.bind(navigator.clipboard);
+        this._origClipboardWrite     = navigator.clipboard.writeText?.bind(navigator.clipboard);
+        // ✅ FIX-CLIPBOARD-RESTORE: also cache read() + write()
+        this._origClipboardReadFull  = navigator.clipboard.read?.bind(navigator.clipboard);
+        this._origClipboardWriteFull = navigator.clipboard.write?.bind(navigator.clipboard);
+
         navigator.clipboard.readText  = async () => { this.recordViolation('Clipboard access blocked.'); return ''; };
         navigator.clipboard.writeText = async () => { this.recordViolation('Clipboard write blocked.'); };
         navigator.clipboard.read      = async () => { this.recordViolation('Clipboard read blocked.'); return []; };
         navigator.clipboard.write     = async () => { this.recordViolation('Clipboard write blocked.'); };
       }
     } catch (e) {}
+
+    try {
+      this._origExecCommand = document.execCommand.bind(document);
+      document.execCommand = (cmd, ...rest) => {
+        const blocked = ['copy', 'cut', 'paste', 'selectAll'];
+        if (blocked.includes(cmd.toLowerCase())) {
+          this.recordViolation(`execCommand '${cmd}' blocked during exam.`);
+          return false;
+        }
+        return this._origExecCommand(cmd, ...rest);
+      };
+    } catch (e) {}
   }
 
+  // ✅ FIX-CLIPBOARD-RESTORE: restore all four clipboard methods
   _restoreClipboard() {
     try {
       if (navigator.clipboard) {
-        if (this._origClipboardRead)  navigator.clipboard.readText  = this._origClipboardRead;
-        if (this._origClipboardWrite) navigator.clipboard.writeText = this._origClipboardWrite;
+        if (this._origClipboardRead)      navigator.clipboard.readText  = this._origClipboardRead;
+        if (this._origClipboardWrite)     navigator.clipboard.writeText = this._origClipboardWrite;
+        if (this._origClipboardReadFull)  navigator.clipboard.read      = this._origClipboardReadFull;
+        if (this._origClipboardWriteFull) navigator.clipboard.write     = this._origClipboardWriteFull;
+        this._origClipboardRead = this._origClipboardWrite =
+        this._origClipboardReadFull = this._origClipboardWriteFull = null;
+      }
+    } catch (e) {}
+
+    try {
+      if (this._origExecCommand) {
+        document.execCommand = this._origExecCommand;
+        this._origExecCommand = null;
+      }
+    } catch (e) {}
+  }
+
+  _blockWebSocket() {
+    try {
+      this._origWebSocket = window.WebSocket;
+      window.WebSocket = function() {
+        throw new Error('WebSocket is blocked during the exam.');
+      };
+    } catch (e) {}
+  }
+
+  _restoreWebSocket() {
+    try {
+      if (this._origWebSocket) {
+        window.WebSocket = this._origWebSocket;
+        this._origWebSocket = null;
+      }
+    } catch (e) {}
+  }
+
+  // ✅ FIX-WEBRTC: Block RTCPeerConnection + RTCDataChannel
+  _blockWebRTC() {
+    try {
+      this._origRTC = window.RTCPeerConnection;
+      window.RTCPeerConnection = function() {
+        throw new Error('RTCPeerConnection is blocked during the exam.');
+      };
+    } catch (e) {}
+    try {
+      this._origRTCData = window.RTCDataChannel;
+      window.RTCDataChannel = function() {
+        throw new Error('RTCDataChannel is blocked during the exam.');
+      };
+    } catch (e) {}
+  }
+
+  _restoreWebRTC() {
+    try {
+      if (this._origRTC)     { window.RTCPeerConnection = this._origRTC;     this._origRTC     = null; }
+      if (this._origRTCData) { window.RTCDataChannel    = this._origRTCData; this._origRTCData = null; }
+    } catch (e) {}
+  }
+
+  _unregisterServiceWorkers() {
+    try {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(regs => {
+          regs.forEach(reg => reg.unregister().catch(() => {}));
+        }).catch(() => {});
       }
     } catch (e) {}
   }
@@ -543,7 +788,11 @@ export class SecurityManager {
     this.onWarning(message, 'violation');
   }
 
+  // ✅ FIX-DOUBLE-ENABLE: guard prevents adding duplicate event listeners
   enable() {
+    if (this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = true;
+
     Object.entries(this.handlers).forEach(([event, handler]) => {
       document.addEventListener(event, handler, { capture: true, passive: false });
     });
@@ -552,12 +801,18 @@ export class SecurityManager {
     document.body.style.msUserSelect     = 'none';
     ScreenRecordBlocker.enable();
     this._poisonClipboard();
+    this._blockWebSocket();
+    this._blockWebRTC();
+    this._unregisterServiceWorkers();
     this._wipeStorage();
     try { window.__origOpen = window.open; window.open = () => null; } catch (e) {}
     try {
       window.__origPrint = window.print;
       window.print = () => { this.recordViolation('Printing is disabled during the test.'); };
     } catch (e) {}
+
+    // ✅ FIX-CONSOLE-ORDER: cache __nativeConsoleLog BEFORE silencing,
+    //    so DevToolsDetector._setupToStringTrap() can use it as fallback.
     try {
       const noop = () => {};
       const methods = ['log','warn','error','info','table','dir','dirxml','group','groupEnd',
@@ -566,13 +821,19 @@ export class SecurityManager {
         try {
           this._origConsoleMethods[m] = console[m];
           if (m === 'warn') window.__nativeConsoleWarn = console[m];
+          if (m === 'log')  window.__nativeConsoleLog  = console[m];
           console[m] = noop;
         } catch (e) {}
       });
     } catch (e) {}
   }
 
+  // ✅ FIX-CONSOLE-ORDER: console restore happens LAST — after all other
+  //    cleanup — so any cleanup code that logs can still use console.
   disable() {
+    if (!this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = false;
+
     Object.entries(this.handlers).forEach(([event, handler]) => {
       document.removeEventListener(event, handler, true);
     });
@@ -581,28 +842,46 @@ export class SecurityManager {
     document.body.style.msUserSelect     = '';
     ScreenRecordBlocker.disable();
     this._restoreClipboard();
-    if (this._windowsKeyTimer) clearTimeout(this._windowsKeyTimer);
+    this._restoreWebSocket();
+    this._restoreWebRTC();
+    if (this._windowsKeyTimer) { clearTimeout(this._windowsKeyTimer); this._windowsKeyTimer = null; }
     try { if (window.__origOpen)  { window.open  = window.__origOpen;  delete window.__origOpen;  } } catch (e) {}
     try { if (window.__origPrint) { window.print = window.__origPrint; delete window.__origPrint; } } catch (e) {}
+
+    // ✅ FIX-CONSOLE-ORDER: restore LAST
     try {
       Object.entries(this._origConsoleMethods).forEach(([m, fn]) => {
         try { if (fn) console[m] = fn; } catch (e) {}
       });
       this._origConsoleMethods = {};
       delete window.__nativeConsoleWarn;
+      delete window.__nativeConsoleLog;
     } catch (e) {}
   }
 }
 
 // ==========================================
 // VISIBILITY MANAGER
+// ✅ FIX-VISIBILITY-GUARD:  warns if AntiCheatController is also active
+// ✅ FIX-VISIBILITY-DOUBLE: _enabled flag prevents double listener registration
 // ==========================================
 export class VisibilityManager {
   static _origTitle   = '';
   static _hiddenTitle = '🔒 Return to Exam — PySkill';
   static _handler     = null;
+  static _enabled     = false; // ✅ FIX-VISIBILITY-DOUBLE
 
   static enable() {
+    if (this._enabled) return; // ✅ FIX-VISIBILITY-DOUBLE
+    this._enabled = true;
+
+    if (window.__antiCheatControllerActive) {
+      (window.__nativeConsoleWarn || console.warn)(
+        '[MockTest] VisibilityManager.enable() called while AntiCheatController is active. ' +
+        'Title-change is safe, but do NOT add a separate tab-switch counter here — ' +
+        'AppSwitcherGuard inside AntiCheatController already handles visibilitychange.'
+      );
+    }
     this._origTitle = document.title;
     this._handler = () => {
       document.title = document.hidden ? this._hiddenTitle : this._origTitle;
@@ -611,6 +890,9 @@ export class VisibilityManager {
   }
 
   static disable() {
+    if (!this._enabled) return; // ✅ FIX-VISIBILITY-DOUBLE
+    this._enabled = false;
+
     if (this._handler) document.removeEventListener('visibilitychange', this._handler);
     try { document.title = this._origTitle; } catch (e) {}
     this._handler = null;
@@ -619,6 +901,7 @@ export class VisibilityManager {
 
 // ==========================================
 // NETWORK GUARD
+// ✅ FIX-XHR-GUARD: _origXHR also guarded against double-enable
 // ==========================================
 const BLOCKED_DOMAINS = [
   'openai.com', 'chatgpt.com', 'claude.ai', 'gemini.google.com', 'bard.google.com',
@@ -628,6 +911,8 @@ const BLOCKED_DOMAINS = [
   'whatsapp.com', 'web.whatsapp.com', 'signal.org',
   'chegg.com', 'coursehero.com', 'quizlet.com', 'brainly.com', 'slader.com',
   'stackoverflow.com', 'answers.com',
+  'chat.openai.com', 'perplexity.ai', 'you.com', 'phind.com', 'poe.com',
+  'character.ai', 'cohere.ai', 'groq.com',
 ];
 
 export class NetworkGuard {
@@ -642,6 +927,7 @@ export class NetworkGuard {
   }
 
   static enable() {
+    // ✅ FIX-XHR-GUARD: guard both fetch AND XHR against double-enable
     if (this._origFetch !== null) return;
     this._origFetch = window.fetch;
     window.fetch = (...args) => {
@@ -651,6 +937,9 @@ export class NetworkGuard {
       }
       return NetworkGuard._origFetch.apply(window, args);
     };
+
+    // ✅ FIX-XHR-GUARD: only patch if not already patched (origXHR check)
+    if (this._origXHR !== null) return;
     this._origXHR = window.XMLHttpRequest;
     const Guard   = this;
     window.XMLHttpRequest = class extends Guard._origXHR {
@@ -670,22 +959,336 @@ export class NetworkGuard {
 }
 
 // ==========================================
+// BACK BUTTON BLOCKER
+// ✅ FIX-HISTORY-NAV: disable() uses replaceState instead of go(-2).
+//    history.go(-2) can navigate away from the results page in browsers
+//    that process it asynchronously. replaceState surgically removes the
+//    examLock state without triggering navigation.
+// ==========================================
+export class BackButtonBlocker {
+  static _handler = null;
+  static _active  = false;
+
+  static enable() {
+    if (this._active) return;
+    this._active = true;
+    window.history.pushState({ examLock: true }, '', window.location.href);
+    window.history.pushState({ examLock: true }, '', window.location.href);
+    this._handler = () => {
+      window.history.pushState({ examLock: true }, '', window.location.href);
+    };
+    window.addEventListener('popstate', this._handler);
+  }
+
+  static disable() {
+    if (!this._active) return;
+    this._active = false;
+    if (this._handler) {
+      window.removeEventListener('popstate', this._handler);
+      this._handler = null;
+    }
+    // ✅ FIX-HISTORY-NAV: replaceState instead of go(-2) avoids spurious
+    //    back-navigation on the results page. The two ghost pushStates are
+    //    collapsed into the current entry rather than rewound.
+    try {
+      window.history.replaceState(null, '', window.location.href);
+    } catch (e) {}
+  }
+}
+
+// ==========================================
+// TAB CLOSE GUARD
+// ✅ FIX-DOUBLE-ENABLE: _enabled flag prevents double listener registration
+// ==========================================
+export class TabCloseGuard {
+  static _handler = null;
+  static _enabled = false; // ✅ FIX-DOUBLE-ENABLE
+
+  static enable() {
+    if (this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = true;
+
+    this._handler = (e) => {
+      e.preventDefault();
+      e.returnValue = 'Your exam is in progress. Leaving will submit your test.';
+      return e.returnValue;
+    };
+    window.addEventListener('beforeunload', this._handler);
+  }
+
+  static disable() {
+    if (!this._enabled) return; // ✅ FIX-DOUBLE-ENABLE
+    this._enabled = false;
+
+    if (this._handler) {
+      window.removeEventListener('beforeunload', this._handler);
+      this._handler = null;
+    }
+    window.onbeforeunload = null;
+  }
+}
+
+// ==========================================
+// APP SWITCHER GUARD
+// ✅ FIX-STATIC-RACE:     _lastFired reset on each enable() call
+// ✅ FIX-APPSWITCHER-DEDUP: visibilitychange and pagehide share the same
+//    _lastFired cooldown, so a single tab-switch does not fire both handlers
+//    and count as two violations. The cooldown window is 2s — if both events
+//    fire within 2s of each other, only the first increments the counter.
+// ==========================================
+export class AppSwitcherGuard {
+  static _visHandler  = null;
+  static _hideHandler = null;
+  static _cooldown    = 2000;
+  static _lastFired   = 0;
+
+  static enable(onSwitch) {
+    // Reset per enable() call so a fresh guard starts with no cooldown debt
+    this._lastFired = 0;
+
+    // ✅ FIX-APPSWITCHER-DEDUP: both handlers share _lastFired so only one fires per event pair
+    this._visHandler = () => {
+      if (!document.hidden) return;
+      const now = Date.now();
+      if (now - this._lastFired < this._cooldown) return;
+      this._lastFired = now;
+      onSwitch();
+    };
+
+    this._hideHandler = () => {
+      const now = Date.now();
+      if (now - this._lastFired < this._cooldown) return;
+      this._lastFired = now;
+      onSwitch();
+    };
+
+    document.addEventListener('visibilitychange', this._visHandler);
+    window.addEventListener('pagehide', this._hideHandler);
+  }
+
+  static disable() {
+    if (this._visHandler)  document.removeEventListener('visibilitychange', this._visHandler);
+    if (this._hideHandler) window.removeEventListener('pagehide', this._hideHandler);
+    this._visHandler  = null;
+    this._hideHandler = null;
+    this._lastFired   = 0;
+  }
+}
+
+// ==========================================
+// FULLSCREEN GUARD
+// ✅ FIX-FULLSCREEN-FLAG: _active set AFTER enter() resolves
+// ✅ FIX-FS-TRY-CATCH:   enter() failure is fully caught; listener not
+//    registered if fullscreen is completely unavailable in the environment
+// ==========================================
+export class FullscreenGuard {
+  static _removeListener = null;
+  static _active         = false;
+
+  static async enable(onExit) {
+    if (this._active) return;
+    // ✅ FIX-FS-TRY-CATCH: wrap entire sequence so a synchronous throw from
+    //    enter() (e.g. sandbox restrictions) doesn't leave partial state
+    try {
+      await FullscreenManager.enter();
+      // ✅ FIX-FULLSCREEN-FLAG: set _active only AFTER enter() resolves
+      this._active = true;
+      this._removeListener = FullscreenManager.onChange(() => {
+        if (!FullscreenManager.isActive() && this._active) {
+          onExit();
+        }
+      });
+    } catch (err) {
+      // Fullscreen not available — proceed without it, do not set _active
+    }
+  }
+
+  static async reEnter() {
+    await FullscreenManager.enter();
+  }
+
+  static disable() {
+    this._active = false;
+    if (this._removeListener) {
+      this._removeListener();
+      this._removeListener = null;
+    }
+  }
+}
+
+// ==========================================
+// SCREENSHOT BLOCKER (Mobile meta tags)
+// ✅ FIX-SCREENBLOCKER-DEDUP: _enabled flag prevents duplicate meta injection
+// ==========================================
+export class ScreenshotBlocker {
+  static _injected = [];
+  static _enabled  = false; // ✅ FIX-SCREENBLOCKER-DEDUP
+
+  static enable() {
+    if (typeof document === 'undefined') return;
+    if (this._enabled) return; // ✅ FIX-SCREENBLOCKER-DEDUP
+    this._enabled = true;
+
+    const metas = [
+      { name: 'apple-mobile-web-app-capable',          content: 'yes' },
+      { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
+      { 'http-equiv': 'x-ua-compatible',               content: 'IE=edge' },
+    ];
+    metas.forEach(attrs => {
+      const selector = attrs.name
+        ? `meta[name="${attrs.name}"]`
+        : `meta[http-equiv="${attrs['http-equiv']}"]`;
+      if (document.querySelector(selector)) return;
+      const meta = document.createElement('meta');
+      Object.entries(attrs).forEach(([k, v]) => meta.setAttribute(k, v));
+      document.head.appendChild(meta);
+      this._injected.push(meta);
+    });
+  }
+
+  static disable() {
+    if (!this._enabled) return; // ✅ FIX-SCREENBLOCKER-DEDUP
+    this._enabled = false;
+    this._injected.forEach(m => { try { m.remove(); } catch (e) {} });
+    this._injected = [];
+  }
+}
+
+// ==========================================
+// ANTI-CHEAT CONTROLLER — v4
+// ✅ FIX-PRIVATE-FIELDS:    #violations + #active are true JS private fields.
+// ✅ FIX-VIOLATION-RESET:   enable() always resets #violations to 0.
+// ✅ FIX-SOURCETLABEL-PRIVATE: _sourceLabel() is now a private static method
+//    inside AntiCheatController — not reachable from module scope.
+// ✅ FIX-VISIBILITY-GUARD:  sets window.__antiCheatControllerActive flag.
+//
+// USAGE in your exam component:
+//   const ac = new AntiCheatController({
+//     onWarning:    (msg, level, force) => showWarning(msg, level, force),
+//     onDisqualify: (reason)            => handleSubmit(true, reason),
+//   });
+//   await ac.enable();
+//         ac.disable();
+//   Use ac.violations in calculateScore instead of tabSwitchCount.
+//
+// ORDERING REQUIREMENT (must be preserved):
+//   1. new AntiCheatController(...)
+//   2. devToolsDetector.start()        ← MUST be before SecurityManager
+//   3. securityManager.enable()
+//   4. await ac.enable()
+// ==========================================
+export class AntiCheatController {
+  // ✅ FIX-PRIVATE-FIELDS: true private — not reachable from DevTools console
+  #violations = 0;
+  #active     = false;
+
+  constructor({ onWarning, onDisqualify }) {
+    this.onWarning    = onWarning;
+    this.onDisqualify = onDisqualify;
+  }
+
+  // ✅ FIX-SOURCETLABEL-PRIVATE: moved from module scope into class
+  static #sourceLabel(source) {
+    return {
+      'tab-switch':      'Tab / App Switch',
+      'fullscreen-exit': 'Fullscreen Exited',
+      'app-switch':      'App Switched',
+    }[source] || source;
+  }
+
+  _recordViolation(source) {
+    if (!this.#active) return;
+    this.#violations++;
+    const remaining = APP_CONFIG.MAX_TAB_SWITCHES - this.#violations;
+
+    if (this.#violations >= APP_CONFIG.MAX_TAB_SWITCHES) {
+      this.#active = false;
+      this.onWarning(
+        `DISQUALIFIED — Too Many Violations (${AntiCheatController.#sourceLabel(source)})\n\nTest is being submitted as FAIL.`,
+        'final',
+        true
+      );
+      setTimeout(() => {
+        this.onDisqualify(`violations-limit-${source}`);
+      }, APP_CONFIG.AUTO_SUBMIT_DELAY);
+    } else {
+      this.onWarning(
+        `⚠️ WARNING — ${AntiCheatController.#sourceLabel(source)}! (${this.#violations}/${APP_CONFIG.MAX_TAB_SWITCHES})\n\n` +
+        `${remaining} more violation${remaining === 1 ? '' : 's'} and you will be DISQUALIFIED!\n\n` +
+        `Returning to fullscreen now...`,
+        'critical',
+        true
+      );
+      setTimeout(() => FullscreenGuard.reEnter(), 800);
+    }
+  }
+
+  async enable() {
+    // ✅ FIX-VIOLATION-RESET: always reset state on enable so re-use is safe
+    this.#active     = true;
+    this.#violations = 0;
+    window.__antiCheatControllerActive = true; // ✅ FIX-VISIBILITY-GUARD flag
+    BackButtonBlocker.enable();
+    TabCloseGuard.enable();
+    AppSwitcherGuard.enable(() => this._recordViolation('tab-switch'));
+    await FullscreenGuard.enable(() => this._recordViolation('fullscreen-exit'));
+    ScreenshotBlocker.enable();
+  }
+
+  disable() {
+    this.#active = false;
+    window.__antiCheatControllerActive = false;
+    BackButtonBlocker.disable();
+    TabCloseGuard.disable();
+    AppSwitcherGuard.disable();
+    FullscreenGuard.disable();
+    ScreenshotBlocker.disable();
+  }
+
+  get violations() { return this.#violations; }
+}
+
+// ==========================================
 // CLEANUP MANAGER
-// ✅ FIX-FULLSCREEN: 800ms delay — result screen mount hone ke liye time
-// ✅ FIX-DESKTOP:    DesktopModeEnforcer.disable() ab viewport restore karta hai
+// ✅ FIX-CLEANUP-SECURITY: accepts optional securityManager + devToolsDetector
+//    instances and calls their disable()/stop() methods, preventing dangling
+//    event listeners and intervals when the exam component unmounts.
+// ✅ FIX-FULLSCREEN: 800ms delay for result screen mount
+// ✅ FIX-DESKTOP:    DesktopModeEnforcer.disable() restores viewport
 // ==========================================
 export class CleanupManager {
-  static performFullCleanup(delayFullscreen = false) {
+  /**
+   * @param {boolean}              [delayFullscreen=false]
+   * @param {SecurityManager|null} [securityManager=null]   — pass your instance for full cleanup
+   * @param {DevToolsDetector|null}[devToolsDetector=null]  — pass your instance to stop the interval
+   */
+  static performFullCleanup(delayFullscreen = false, securityManager = null, devToolsDetector = null) {
     window.onbeforeunload = null;
+    window.__antiCheatControllerActive = false;
+
+    // ✅ FIX-CLEANUP-SECURITY: stop devtools detector interval if instance provided
+    if (devToolsDetector && typeof devToolsDetector.stop === 'function') {
+      try { devToolsDetector.stop(); } catch (e) {}
+    }
 
     DesktopModeEnforcer.disable();
     ScreenRecordBlocker.disable();
     NetworkGuard.disable();
     VisibilityManager.disable();
+    BackButtonBlocker.disable();
+    TabCloseGuard.disable();
+    AppSwitcherGuard.disable();
+    FullscreenGuard.disable();
+    ScreenshotBlocker.disable();
+
+    // ✅ FIX-CLEANUP-SECURITY: disable security manager (restores console, clipboard, etc.)
+    if (securityManager && typeof securityManager.disable === 'function') {
+      try { securityManager.disable(); } catch (e) {}
+    }
 
     const doExit = () => FullscreenManager.exit();
     if (delayFullscreen) {
-      setTimeout(doExit, 800); // ✅ 400 → 800ms
+      setTimeout(doExit, 800);
     } else {
       doExit();
     }

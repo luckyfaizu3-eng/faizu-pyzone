@@ -1,7 +1,11 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/ExamScreens.jsx
-// ✅ FIX-SUBMIT:  handleSubmit — onComplete pehle, CleanupManager 800ms baad
-// ✅ FIX-AUDIO:   handleTimerTick / handleTimerExpire se audio calls hataye
+// ✅ FIX-SUBMIT:     handleSubmit — onComplete pehle, CleanupManager 800ms baad
+// ✅ FIX-AUDIO:      handleTimerTick / handleTimerExpire se audio calls hataye
+// ✅ FIX-DUPLICATE:  Tab-switch visibilitychange useEffect REMOVED — AntiCheatController handles it
+//                    (avoids double-violation-count bug)
+// ✅ FIX-ANTICHEAT:  AntiCheatController.enable() called on exam start
+//                    ac.violations used in calculateScore instead of tabSwitchRef
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRight, CheckCircle, Shield, BookOpen, EyeOff } from 'lucide-react';
@@ -17,6 +21,7 @@ import {
   NetworkGuard,
   VisibilityManager,
   CleanupManager,
+  AntiCheatController,
 } from './utils';
 
 import {
@@ -148,6 +153,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const audioRef        = useRef(new AudioManager());
   const securityRef     = useRef(null);
   const devToolsRef     = useRef(null);
+  const antiCheatRef    = useRef(null); // ✅ NEW: AntiCheatController ref
   const warningTimerRef = useRef(null);
   const hasSubmittedRef = useRef(false);
   const tabSwitchRef    = useRef(0);
@@ -155,7 +161,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const lastActivityRef = useRef(Date.now());
   const inactivityRef   = useRef(null);
   const handleSubmitRef = useRef(null);
-  const tabSwitchHappeningRef = useRef(false);
   const isDisqualifiedRef     = useRef(false);
 
   const isAdmin        = TestUtils.isAdmin(userEmail);
@@ -185,12 +190,10 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
   const handleAcknowledge = useCallback(() => setShowWarning(false), []);
 
-  // ✅ FIX-AUDIO: handleTimerTick — audio removed, only used for external callbacks
   const handleTimerTick = useCallback((_left) => {
     // No audio — tick sounds removed
   }, []);
 
-  // ✅ FIX-AUDIO: handleTimerExpire — no alarm, just show warning and submit
   const handleTimerExpire = useCallback(() => {
     showWarningMessage('TIME IS UP!\n\nYour test is being submitted automatically.', 'final', true);
     if (handleSubmitRef.current) handleSubmitRef.current(false, 'time-up');
@@ -212,7 +215,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     setAnswers(prev => ({ ...prev, [qIndex]: optIdx }));
   }, [resetActivity]);
 
-  // ✅ FIX-SUBMIT: Correct order — security stop → onComplete → cleanup 800ms baad
+  // ✅ FIX-SUBMIT + FIX-ANTICHEAT: use ac.violations for unified count
   const handleSubmit = useCallback((penalized = false, reason = '') => {
     if (hasSubmittedRef.current) return;
     window.onbeforeunload = null;
@@ -220,17 +223,21 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
     const currentAnswers = answersRef.current;
     const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const score     = TestUtils.calculateScore(currentAnswers, questions, tabSwitchRef.current, isAdmin, passPercent);
 
-    // Step 1: Stop security monitors first
+    // Use AntiCheatController violations if available, else fall back to tabSwitchRef
+    const violationCount = antiCheatRef.current ? antiCheatRef.current.violations : tabSwitchRef.current;
+    const score = TestUtils.calculateScore(currentAnswers, questions, violationCount, isAdmin, passPercent);
+
+    // Step 1: Stop all security monitors
     if (devToolsRef.current) devToolsRef.current.stop();
     if (securityRef.current) securityRef.current.disable();
+    if (antiCheatRef.current) antiCheatRef.current.disable();
 
     // Step 2: Show result screen immediately
     onComplete({
       ...score,
       timeTaken: `${Math.floor(timeTaken/60)}m ${timeTaken%60}s`,
-      tabSwitches: tabSwitchRef.current,
+      tabSwitches: violationCount,
       penalized,
       disqualificationReason: reason,
       studentInfo,
@@ -257,6 +264,11 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [currentQuestion]);
 
+  // ==========================================
+  // MAIN SETUP EFFECT
+  // ✅ FIX-ANTICHEAT: AntiCheatController started here for non-admin
+  // ✅ FIX-DUPLICATE: No separate visibilitychange for tab switching here
+  // ==========================================
   useEffect(() => {
     const sels = ['nav','header','footer','.navbar','.header','.footer','.menu','.toolbar','#toolbar','[role="navigation"]','[role="banner"]','[role="contentinfo"]','.telegram-button','#telegram-button','.TelegramButton','[class*="telegram"]','.background','.Background','[class*="background"]','.toast-container','.ToastContainer','[class*="toast"]','[class*="razorpay"]','[id*="razorpay"]','aside','.sidebar','#sidebar'];
     const hidden = [];
@@ -292,6 +304,8 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
     if (!isAdmin) {
       audioRef.current.init();
+
+      // Security + DevTools
       securityRef.current = new SecurityManager(showWarningMessage, handleSubmitRef);
       securityRef.current.enable();
       NetworkGuard.enable();
@@ -302,6 +316,28 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       );
       devToolsRef.current.start();
       DesktopModeEnforcer.enable();
+
+      // ✅ NEW: AntiCheatController — handles tab switch, fullscreen exit, back button, app switch
+      // This REPLACES the old separate visibilitychange useEffect for tab switching
+      antiCheatRef.current = new AntiCheatController({
+        onWarning: (msg, level, force) => {
+          // Sync violation count to tabSwitches display state
+          if (antiCheatRef.current) {
+            tabSwitchRef.current = antiCheatRef.current.violations;
+            setTabSwitches(antiCheatRef.current.violations);
+            if (antiCheatRef.current.violations >= APP_CONFIG.MAX_TAB_SWITCHES) {
+              setIsDisqualifiedSynced(true);
+            }
+          }
+          showWarningMessage(msg, level, force);
+        },
+        onDisqualify: (reason) => {
+          setIsDisqualifiedSynced(true);
+          if (handleSubmitRef.current) handleSubmitRef.current(true, reason);
+        },
+      });
+      // Enable async — fullscreen + all guards
+      antiCheatRef.current.enable().catch(() => {});
     }
 
     window.onbeforeunload = (e) => {
@@ -327,6 +363,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       NetworkGuard.disable();
       VisibilityManager.disable();
       DesktopModeEnforcer.disable();
+      // AntiCheatController cleanup handled in handleSubmit
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage]);
@@ -361,10 +398,14 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, inactivityLimitMs, resetActivity, showWarningMessage]);
 
+  // ✅ FIX-DUPLICATE: Fullscreen onChange still here for soft warning + re-enter
+  // AntiCheatController handles it as a violation; this adds the user-visible message
   useEffect(() => {
     if (isAdmin) return;
     const handler = () => {
       if (!FullscreenManager.isActive() && !hasSubmittedRef.current && !isDisqualifiedRef.current) {
+        // AntiCheatController.FullscreenGuard already counts the violation.
+        // This just shows the warning message if the modal didn't appear yet.
         showWarningMessage('You exited fullscreen mode. Returning to fullscreen...', 'normal');
         setTimeout(() => FullscreenManager.enter(), 1500);
       }
@@ -373,38 +414,9 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage]);
 
-  useEffect(() => {
-    if (isAdmin) return;
-    const handler = () => {
-      if (!document.hidden || hasSubmittedRef.current || isDisqualifiedRef.current) return;
-      tabSwitchHappeningRef.current = true;
-      setTimeout(() => { tabSwitchHappeningRef.current = false; }, 3000);
-
-      const n = tabSwitchRef.current + 1;
-      tabSwitchRef.current = n;
-      setTabSwitches(n);
-
-      if (n >= APP_CONFIG.MAX_TAB_SWITCHES) {
-        setIsDisqualifiedSynced(true);
-        showWarningMessage(
-          `DISQUALIFIED — Tab Switch Limit Reached!\n\nYou switched tabs ${n} times.\nTest is being submitted as FAIL.\nNo certificate will be issued.`,
-          'final', true
-        );
-        setTimeout(() => {
-          if (handleSubmitRef.current) handleSubmitRef.current(true, 'tab-switching-disqualified');
-        }, APP_CONFIG.AUTO_SUBMIT_DELAY);
-      } else {
-        const remaining = APP_CONFIG.MAX_TAB_SWITCHES - n;
-        showWarningMessage(
-          `⚠️ Tab Switch Detected! (${n}/${APP_CONFIG.MAX_TAB_SWITCHES})\n\nYou switched away from the exam.\n\nSwitch ${remaining} more time${remaining === 1 ? '' : 's'} and you will be DISQUALIFIED!`,
-          'critical', true
-        );
-      }
-    };
-    document.addEventListener('visibilitychange', handler);
-    return () => document.removeEventListener('visibilitychange', handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, showWarningMessage, setIsDisqualifiedSynced]);
+  // ✅ FIX-DUPLICATE: OLD tab-switch visibilitychange useEffect REMOVED.
+  // AntiCheatController.AppSwitcherGuard handles this now.
+  // Keeping only the blur/focus for content-blur overlay (separate concern).
 
   useEffect(() => {
     if (isAdmin) return;
@@ -496,7 +508,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
               <span style={{ fontSize:'0.68rem', color:'#94a3b8' }}>· {studentInfo?.email}</span>
               {tabSwitches > 0 && (
                 <span style={{ marginLeft:'4px', background:'#fee2e2', color:'#dc2626', padding:'1px 6px', borderRadius:'5px', fontSize:'0.62rem', fontWeight:'800' }}>
-                  Tab switch: {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
+                  Violations: {tabSwitches}/{APP_CONFIG.MAX_TAB_SWITCHES}
                 </span>
               )}
               {blurCount > 0 && (
