@@ -51,7 +51,6 @@ function PythonLogo({ size = 24, style = {} }) {
 
 // ─────────────────────────────────────────────
 // LAYER 1 — "Future Self" CertBadgePlant
-// Shows during test / on page to plant the certificate idea early 🧠
 // ─────────────────────────────────────────────
 function CertBadgePlant({ accentColor = '#6366f1', totalDownloads = 1247 }) {
   return (
@@ -78,7 +77,6 @@ function CertBadgePlant({ accentColor = '#6366f1', totalDownloads = 1247 }) {
 
 // ─────────────────────────────────────────────
 // LAYER 4 — Specimen watermark overlay
-// Used inside CertificateViewer when certificate is locked
 // ─────────────────────────────────────────────
 function SpecimenOverlay() {
   return (
@@ -88,7 +86,6 @@ function SpecimenOverlay() {
       alignItems: 'center', justifyContent: 'center',
       zIndex: 20, pointerEvents: 'none',
     }}>
-      {/* Red stamp */}
       <div style={{
         border: '5px solid rgba(239,68,68,0.75)',
         borderRadius: 8, padding: '0.6rem 2rem',
@@ -370,7 +367,6 @@ function MockTestPage() {
       if (historyResult.success) {
         setTestHistory(historyResult.tests);
 
-        // ── PDF URL fetch karo latest test ka Firestore se ──
         if (historyResult.tests.length > 0) {
           const latestTest = historyResult.tests[0];
           try {
@@ -639,7 +635,6 @@ function MockTestPage() {
 
       setOverlayAiDone(false);
 
-      // ── LAYER 3: Include studentName in overlay data ──
       setSubmitOverlayData({
         isPassed,
         score:       results.percentage,
@@ -648,7 +643,6 @@ function MockTestPage() {
       });
       setShowSubmitOverlay(true);
 
-      // Generate report in background
       generateAndSaveReport(testData, user.uid).then(report => {
         if (report.success) {
           setAiReports(prev => ({
@@ -776,7 +770,8 @@ function MockTestPage() {
   });
 
   return (
-    <div style={{ minHeight: '100vh', background: isDark ? 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)' : 'linear-gradient(135deg, #f0f4ff 0%, #fdf2f8 100%)', padding: '100px 1rem 3rem' }}>
+    // ── KEY CHANGE: background removed entirely — transparent so canvas Background shows through ──
+    <div style={{ minHeight: '100vh', background: 'transparent', padding: '100px 1rem 3rem' }}>
 
       {/* ── Submission Overlay ── */}
       {showSubmitOverlay && (
@@ -807,7 +802,7 @@ function MockTestPage() {
             Professional certification tests with instant results
           </p>
 
-          {/* ── LAYER 1: CertBadgePlant — plants certificate idea before test starts 🧠 ── */}
+          {/* CertBadgePlant */}
           <div style={{ marginBottom: '1.5rem' }}>
             <CertBadgePlant />
           </div>
@@ -1084,18 +1079,4 @@ function MockTestPage() {
 
 export default MockTestPage;
 
-// ─────────────────────────────────────────────
-// EXPORT SpecimenOverlay for use in CertificateViewer.jsx
-// ─────────────────────────────────────────────
-// In CertificateViewer.jsx, import and use like this:
-//
-//   import { SpecimenOverlay } from './MockTestPage';
-//   // OR copy the SpecimenOverlay component directly into CertificateViewer.jsx
-//
-// Then replace the existing locked overlay:
-//   {isLocked && <SpecimenOverlay />}
-//
-// Also change the blur filter on the cert box:
-//   filter: isLocked ? 'brightness(0.55)' : 'none',
-// ─────────────────────────────────────────────
 export { SpecimenOverlay };
