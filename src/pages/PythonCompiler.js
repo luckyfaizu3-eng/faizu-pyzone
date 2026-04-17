@@ -255,10 +255,9 @@ function hlCode(lang, code) {
 }
 
 /* ═══════════════════════════════════════════════════
-   TURTLE HTML — White background, single centered canvas
+   TURTLE HTML — FIX: Fully responsive canvas, fits mobile screen
 ═══════════════════════════════════════════════════ */
 function makeTurtleHTML(code) {
-  // Remove bgcolor calls — they create extra blank canvases in Skulpt
   const cleaned = code
     .replace(/screen\.bgcolor\s*\([^)]*\)/g, "pass")
     .replace(/turtle\.bgcolor\s*\([^)]*\)/g, "pass")
@@ -273,7 +272,7 @@ function makeTurtleHTML(code) {
   return `<!DOCTYPE html>
 <html>
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
@@ -285,10 +284,17 @@ function makeTurtleHTML(code) {
     display:flex;
     flex-direction:column;
     align-items:center;
-    justify-content:center;
+    justify-content:flex-start;
     height:100vh;
     font-family:'Segoe UI',sans-serif;
-    gap:10px;
+    padding: 8px;
+    gap:8px;
+  }
+  #st {
+    color:#2d7a2d; font-size:12px; font-weight:600;
+    padding:4px 14px; background:rgba(45,122,45,0.08);
+    border-radius:20px; border:1px solid rgba(45,122,45,0.2);
+    flex-shrink:0; white-space:nowrap;
   }
   #turtle-canvas-container {
     display:flex;
@@ -297,24 +303,23 @@ function makeTurtleHTML(code) {
     width:100%;
     flex:1;
     min-height:0;
+    overflow:hidden;
   }
-  /* Force ONLY the first canvas to show — hide any extra ones Skulpt makes */
+  /* Hide extra canvases Skulpt may create */
   #turtle-canvas-container canvas:not(:first-child) {
     display: none !important;
   }
   #turtle-canvas-container canvas {
-    border-radius:14px;
-    box-shadow:0 4px 24px rgba(0,0,0,0.10);
+    border-radius:12px;
+    box-shadow:0 4px 20px rgba(0,0,0,0.12);
     background:#ffffff !important;
-    max-width:95vw;
-    max-height:calc(100vh - 70px);
+    /* KEY FIX: constrain canvas to fit within screen */
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
     display:block;
-  }
-  #st {
-    color:#2d7a2d; font-size:13px; font-weight:600;
-    padding:4px 16px; background:rgba(45,122,45,0.08);
-    border-radius:20px; border:1px solid rgba(45,122,45,0.2);
-    flex-shrink:0;
+    object-fit: contain;
   }
   #er {
     color:#cc0000; font-size:12px; max-width:90vw;
@@ -324,12 +329,12 @@ function makeTurtleHTML(code) {
     display:none; flex-shrink:0;
   }
   .loader {
-    width:11px; height:11px;
+    width:10px; height:10px;
     border:2px solid rgba(45,122,45,0.15);
     border-top-color:#2d7a2d;
     border-radius:50%;
     animation:spin 0.8s linear infinite;
-    display:inline-block; vertical-align:middle; margin-right:6px;
+    display:inline-block; vertical-align:middle; margin-right:5px;
   }
   @keyframes spin { to { transform:rotate(360deg); } }
 </style>
@@ -360,10 +365,13 @@ window.addEventListener('load', function() {
     loadScript(SKULPT_STD, function() {
       document.getElementById('ld').style.display = 'none';
       document.getElementById('st').textContent = 'Running...';
+
       var container = document.getElementById('turtle-canvas-container');
-      var vw = Math.min(window.innerWidth - 20, 580);
-      var vh = Math.min(window.innerHeight - 80, 520);
-      var sz = Math.min(vw, vh);
+      /* FIX: Use actual available space, leave room for status bar + padding */
+      var availW = window.innerWidth - 16;
+      var availH = window.innerHeight - 60; /* 60 = status bar + padding */
+      var sz = Math.min(availW, availH, 500); /* cap at 500 */
+
       Sk.configure({
         output: function() {},
         read: function(f) {
@@ -381,6 +389,14 @@ window.addEventListener('load', function() {
         return Sk.importMainWithBody('<stdin>', false, \`${escaped}\`, true);
       }).then(function() {
         document.getElementById('st').textContent = '✓ Done';
+        /* After drawing, scale canvas via CSS if it's still too big */
+        var canvas = container.querySelector('canvas');
+        if (canvas) {
+          canvas.style.maxWidth = availW + 'px';
+          canvas.style.maxHeight = availH + 'px';
+          canvas.style.width = 'auto';
+          canvas.style.height = 'auto';
+        }
       }).catch(function(e) {
         showErr(e.toString());
       });
@@ -798,59 +814,51 @@ function OutputPanel({ lines, isRunning, onClose, onStop, inputPrompt, onInputSu
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "#ffffff", display: "flex", flexDirection: "column" }}>
+      {/* FIX: flex-wrap on mobile so buttons don't overflow */}
       <div style={{
         background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
-        padding: "10px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+        padding: "8px 10px", display: "flex", alignItems: "center",
+        gap: 6, flexShrink: 0, flexWrap: "wrap",
       }}>
-        <div style={{ display: "flex", gap: 5 }}>
-          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#ff5f56" }} />
-          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#ffbd2e" }} />
-          <div style={{ width: 11, height: 11, borderRadius: "50%", background: "#27c93f" }} />
+        <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ff5f56" }} />
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ffbd2e" }} />
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#27c93f" }} />
         </div>
-        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "#555", marginLeft: 4 }}>
-          PySkill Terminal — {langLabel || "Output"}
+        <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "#555", flex: 1, minWidth: 80, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {langLabel || "Output"} · Terminal
         </span>
-        {isRunning && (
-          <span style={{ fontSize: 11, color: "#0070c1", display: "flex", alignItems: "center", gap: 4, marginLeft: 6 }}>
-            <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#0070c1", animation: "blink 1s infinite" }} />
-            Running
-          </span>
-        )}
         {isRunning && (
           <button onClick={onStop} style={{
             background: "#ff4444", border: "none", color: "#fff",
-            borderRadius: 7, padding: "5px 12px", fontSize: 11,
+            borderRadius: 7, padding: "5px 10px", fontSize: 11,
             cursor: "pointer", fontFamily: "'JetBrains Mono',monospace",
-            fontWeight: 700, display: "flex", alignItems: "center", gap: 4,
-          }}>
-            ■ Stop
-          </button>
+            fontWeight: 700, flexShrink: 0,
+          }}>■ Stop</button>
         )}
         <button onClick={copyOutput} style={{
-          marginLeft: isRunning ? 0 : "auto",
           background: termCopied ? "#f0fdf4" : "#fff",
           border: `1px solid ${termCopied ? "#bbf7d0" : "#ddd"}`,
           color: termCopied ? "#16a34a" : "#555",
-          borderRadius: 7, padding: "5px 10px", fontSize: 11,
-          cursor: "pointer", transition: "all 0.2s",
+          borderRadius: 7, padding: "5px 8px", fontSize: 11,
+          cursor: "pointer", flexShrink: 0,
           fontFamily: "'JetBrains Mono',monospace",
         }}>
-          {termCopied ? "✓ Copied!" : "⎘ Copy"}
+          {termCopied ? "✓" : "⎘"}
         </button>
-        {!isRunning && <div style={{ flex: 1 }} />}
         <button onClick={onClose} style={{
           background: "#fff", border: "1px solid #ddd", color: "#555",
-          borderRadius: 7, padding: "5px 14px", fontSize: 12, cursor: "pointer",
-        }}>✕ Close</button>
+          borderRadius: 7, padding: "5px 10px", fontSize: 11, cursor: "pointer", flexShrink: 0,
+        }}>✕</button>
       </div>
 
-      <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px", background: "#ffffff", userSelect: "text", WebkitUserSelect: "text" }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px", background: "#ffffff", userSelect: "text", WebkitUserSelect: "text" }}>
         <div style={{
-          fontFamily: "'JetBrains Mono',monospace", fontSize: 12,
+          fontFamily: "'JetBrains Mono',monospace", fontSize: 11,
           color: "#aaa", marginBottom: 8, borderBottom: "1px solid #f0f0f0", paddingBottom: 8,
           userSelect: "none",
         }}>
-          {langLabel} · PySkill Compiler ───────────────
+          {langLabel} · PySkill Compiler
         </div>
         {isRunning && lines.length === 0 && (
           <span style={{ color: "#888", fontFamily: "'JetBrains Mono',monospace", fontSize: 13 }}>▶ Running...</span>
@@ -885,7 +893,7 @@ function OutputPanel({ lines, isRunning, onClose, onStop, inputPrompt, onInputSu
             />
             <button onClick={submit} style={{
               background: "#0070c1", border: "none", color: "#fff",
-              borderRadius: 7, padding: "7px 14px", fontWeight: 700, cursor: "pointer", fontSize: 13,
+              borderRadius: 7, padding: "7px 12px", fontWeight: 700, cursor: "pointer", fontSize: 13,
             }}>↵</button>
           </div>
         )}
@@ -896,27 +904,37 @@ function OutputPanel({ lines, isRunning, onClose, onStop, inputPrompt, onInputSu
 }
 
 /* ═══════════════════════════════════════════════════
-   TURTLE SCREEN
+   TURTLE SCREEN — FIX: iframe fills remaining space properly
 ═══════════════════════════════════════════════════ */
 function TurtleScreen({ html, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#f2f2f2", display: "flex", flexDirection: "column" }}>
       <div style={{
-        height: 46, flexShrink: 0,
+        height: 44, flexShrink: 0,
         background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
-        display: "flex", alignItems: "center", padding: "0 16px",
+        display: "flex", alignItems: "center", padding: "0 12px",
       }}>
         <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 700, color: "#1e1e1e" }}>🐢 Turtle Graphics</span>
         <button onClick={onClose} style={{
           marginLeft: "auto", background: "#fff", border: "1px solid #ddd", color: "#555",
-          borderRadius: 7, padding: "6px 16px", fontFamily: "sans-serif", fontSize: 12, cursor: "pointer",
+          borderRadius: 7, padding: "6px 14px", fontFamily: "sans-serif", fontSize: 12, cursor: "pointer",
         }}>← Back</button>
       </div>
+      {/* FIX: iframe takes all remaining height, no overflow */}
       <iframe
         title="turtle"
         srcDoc={html}
         sandbox="allow-scripts"
-        style={{ flex: 1, width: "100%", border: "none", background: "#f2f2f2" }}
+        style={{
+          flex: 1,
+          width: "100%",
+          height: "calc(100vh - 44px)", /* explicit fallback */
+          border: "none",
+          background: "#f2f2f2",
+          display: "block",
+          overflow: "hidden",
+        }}
+        scrolling="no"
       />
     </div>
   );
@@ -929,17 +947,17 @@ function HTMLScreen({ html, onClose }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 300, background: "#fff", display: "flex", flexDirection: "column" }}>
       <div style={{
-        height: 46, flexShrink: 0,
+        height: 44, flexShrink: 0,
         background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
-        display: "flex", alignItems: "center", padding: "0 16px",
+        display: "flex", alignItems: "center", padding: "0 12px",
       }}>
         <span style={{ fontFamily: "sans-serif", fontSize: 13, fontWeight: 700, color: "#1e1e1e" }}>🌐 HTML Preview</span>
         <button onClick={onClose} style={{
           marginLeft: "auto", background: "#fff", border: "1px solid #ddd", color: "#555",
-          borderRadius: 7, padding: "6px 16px", fontFamily: "sans-serif", fontSize: 12, cursor: "pointer",
+          borderRadius: 7, padding: "6px 14px", fontFamily: "sans-serif", fontSize: 12, cursor: "pointer",
         }}>← Back</button>
       </div>
-      <iframe title="html-preview" srcDoc={html} style={{ flex: 1, width: "100%", border: "none" }} />
+      <iframe title="html-preview" srcDoc={html} style={{ flex: 1, width: "100%", border: "none", display: "block" }} />
     </div>
   );
 }
@@ -974,7 +992,7 @@ function PyLoadOverlay({ progress, msg }) {
 }
 
 /* ═══════════════════════════════════════════════════
-   MAIN APP
+   MAIN APP — FIX: Mobile responsive top/bottom bars
 ═══════════════════════════════════════════════════ */
 export default function App({ setCurrentPage, initialCode }) {
   const [lang,        setLang]       = useState("python");
@@ -1217,49 +1235,49 @@ export default function App({ setCurrentPage, initialCode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#ffffff", overflow: "hidden" }}>
 
-      {/* TOP BAR */}
+      {/* TOP BAR — FIX: compact on mobile, no overflow */}
       <div style={{
         height: 46, background: "#f5f5f5", borderBottom: "1px solid #e0e0e0",
-        display: "flex", alignItems: "center", padding: "0 10px", gap: 8, flexShrink: 0,
+        display: "flex", alignItems: "center", padding: "0 8px", gap: 6, flexShrink: 0,
+        overflow: "hidden",
       }}>
-        {/* Back button */}
+        {/* Back button — icon only on mobile */}
         <button onClick={handleBack} style={{
           background: "#fff", border: "1px solid #ddd", color: "#555", borderRadius: 8,
-          padding: "5px 10px", fontSize: 12, cursor: "pointer",
-          fontFamily: "'Space Grotesk', sans-serif",
-          display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
-        }}>← Back</button>
+          padding: "5px 8px", fontSize: 12, cursor: "pointer",
+          fontFamily: "sans-serif",
+          display: "flex", alignItems: "center", gap: 3, flexShrink: 0,
+          whiteSpace: "nowrap",
+        }}>←</button>
 
         {/* Logo */}
         <span style={{
-          fontFamily: "'Space Grotesk', sans-serif", fontSize: 15, fontWeight: 800,
+          fontFamily: "'Space Grotesk', sans-serif", fontSize: 14, fontWeight: 800,
           letterSpacing: "-0.4px", flexShrink: 0, color: "#1e1e1e", whiteSpace: "nowrap",
         }}>
           Py<span style={{ color: "#0070c1" }}>Skill</span>
           <span style={{
-            marginLeft: 6, fontSize: 10, fontWeight: 600, color: "#888",
+            marginLeft: 4, fontSize: 9, fontWeight: 600, color: "#888",
             letterSpacing: "0.5px", textTransform: "uppercase", verticalAlign: "middle",
-          }}>Compiler</span>
+          }}>IDE</span>
         </span>
 
         <div style={{ flex: 1 }} />
 
-        {/* Language selector — shows SHORT name in button, full name in dropdown */}
-        <div style={{ position: "relative" }}>
+        {/* Language selector */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
           <button onClick={() => setLangOpen(o => !o)} style={{
-            display: "flex", alignItems: "center", gap: 5, background: "#fff", border: "1px solid #ddd",
-            borderRadius: 8, padding: "5px 8px", fontFamily: "'JetBrains Mono',monospace",
-            fontSize: 11, fontWeight: 700, color: "#333", cursor: "pointer", flexShrink: 0,
+            display: "flex", alignItems: "center", gap: 4, background: "#fff", border: "1px solid #ddd",
+            borderRadius: 8, padding: "5px 7px", fontFamily: "'JetBrains Mono',monospace",
+            fontSize: 11, fontWeight: 700, color: "#333", cursor: "pointer",
           }}>
-            {/* Colored badge icon */}
             <span style={{
-              width: 20, height: 20, borderRadius: 4, background: cl.color,
+              width: 18, height: 18, borderRadius: 4, background: cl.color,
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: 9, fontWeight: 800, color: "#fff", flexShrink: 0,
+              fontSize: 8, fontWeight: 800, color: "#fff", flexShrink: 0,
             }}>{cl.badge}</span>
-            {/* SHORT name only — no layout shift */}
-            <span style={{ minWidth: 28, textAlign: "left" }}>{cl.short}</span>
-            <span style={{ fontSize: 9, color: "#aaa" }}>▾</span>
+            <span>{cl.short}</span>
+            <span style={{ fontSize: 8, color: "#aaa" }}>▾</span>
           </button>
 
           {langOpen && (
@@ -1267,21 +1285,20 @@ export default function App({ setCurrentPage, initialCode }) {
               position: "absolute", right: 0, top: "calc(100% + 4px)",
               background: "#fff", borderRadius: 10, border: "1px solid #e0e0e0",
               boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 100,
-              overflow: "hidden", minWidth: 165,
+              overflow: "hidden", minWidth: 155,
             }}>
               {Object.entries(LANGS).map(([k, v]) => (
                 <button key={k} onClick={() => switchLang(k)} style={{
-                  width: "100%", padding: "10px 14px", background: lang === k ? "#f5f5f5" : "transparent",
-                  border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
+                  width: "100%", padding: "9px 12px", background: lang === k ? "#f5f5f5" : "transparent",
+                  border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 7,
                   fontFamily: "sans-serif", fontSize: 13, fontWeight: lang === k ? 700 : 400,
                   color: lang === k ? "#1e1e1e" : "#555", textAlign: "left",
                 }}>
                   <span style={{
-                    width: 22, height: 22, borderRadius: 5, background: v.color,
+                    width: 20, height: 20, borderRadius: 5, background: v.color,
                     display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 9, fontWeight: 800, color: "#fff",
+                    fontSize: 8, fontWeight: 800, color: "#fff",
                   }}>{v.badge}</span>
-                  {/* Full name in dropdown */}
                   {v.label}
                   {lang === k && <span style={{ marginLeft: "auto", color: v.color }}>✓</span>}
                 </button>
@@ -1292,14 +1309,15 @@ export default function App({ setCurrentPage, initialCode }) {
 
         {/* Run button */}
         <button onClick={() => runCode(displayCode)} className="run-btn-live" style={{
-          border: "none", color: "#fff", borderRadius: 9, padding: "7px 16px",
+          border: "none", color: "#fff", borderRadius: 9, padding: "7px 14px",
           fontSize: 13, fontWeight: 800, cursor: "pointer",
           fontFamily: "'Space Grotesk', sans-serif",
-          display: "flex", alignItems: "center", gap: 5,
+          display: "flex", alignItems: "center", gap: 4,
           letterSpacing: "0.2px", flexShrink: 0,
           textShadow: "0 1px 3px rgba(0,0,0,0.25)",
+          whiteSpace: "nowrap",
         }}>
-          <span style={{ fontSize: 10 }}>▶</span> Run
+          <span style={{ fontSize: 9 }}>▶</span> Run
         </button>
       </div>
 
@@ -1308,29 +1326,25 @@ export default function App({ setCurrentPage, initialCode }) {
         <div style={{
           background: !hasError && fixMsg ? "#f0fdf4" : "#fff5f5",
           borderBottom: "1px solid " + (!hasError && fixMsg ? "#bbf7d0" : "#fecaca"),
-          padding: "7px 14px", display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
+          padding: "6px 12px", display: "flex", alignItems: "center", gap: 8, flexShrink: 0,
+          flexWrap: "wrap",
         }}>
           <span style={{ width: 7, height: 7, borderRadius: "50%", flexShrink: 0, background: !hasError && fixMsg ? "#22c55e" : "#ff0000" }} />
-          <span style={{ fontSize: 12, fontFamily: "sans-serif", flex: 1, color: !hasError && fixMsg ? "#16a34a" : "#cc0000" }}>
-            {fixMsg || `${cl.label} error detected`}
+          <span style={{ fontSize: 12, fontFamily: "sans-serif", flex: 1, color: !hasError && fixMsg ? "#16a34a" : "#cc0000", minWidth: 60 }}>
+            {fixMsg || `${cl.label} error`}
           </span>
           {hasError && !isFixing && (
             <button onClick={doFix} style={{
               background: "#ff0000", border: "none", color: "#fff",
-              borderRadius: 7, padding: "5px 13px", fontSize: 12, fontWeight: 700,
-              cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-            }}>
-              🔧 AI Fix
-            </button>
+              borderRadius: 7, padding: "4px 10px", fontSize: 11, fontWeight: 700,
+              cursor: "pointer", flexShrink: 0,
+            }}>🔧 AI Fix</button>
           )}
           {isFixing && (
-            <span style={{ fontSize: 11, color: "#0070c1", display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: "#0070c1", animation: "blink 0.8s infinite" }} />
-              Fixing...
-            </span>
+            <span style={{ fontSize: 11, color: "#0070c1", flexShrink: 0 }}>Fixing...</span>
           )}
           {!hasError && fixMsg && (
-            <button onClick={() => setFixMsg("")} style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", fontSize: 15 }}>×</button>
+            <button onClick={() => setFixMsg("")} style={{ background: "none", border: "none", color: "#aaa", cursor: "pointer", fontSize: 15, flexShrink: 0 }}>×</button>
           )}
         </div>
       )}
@@ -1346,20 +1360,23 @@ export default function App({ setCurrentPage, initialCode }) {
         canRedo={canRedo}
       />
 
-      {/* BOTTOM BAR */}
+      {/* BOTTOM BAR — FIX: Scrollable on very small screens */}
       <div style={{
         height: 44, background: "#f5f5f5", borderTop: "1px solid #e0e0e0",
-        display: "flex", alignItems: "center", padding: "0 12px", gap: 6, flexShrink: 0,
+        display: "flex", alignItems: "center", padding: "0 8px", gap: 5, flexShrink: 0,
+        overflowX: "auto", overflowY: "hidden",
+        WebkitOverflowScrolling: "touch",
       }}>
         {/* Undo */}
         <button onClick={undo} disabled={!canUndo} title="Undo" style={{
           background: canUndo ? "#fff" : "#fafafa",
           border: `1px solid ${canUndo ? "#ddd" : "#ebebeb"}`,
           color: canUndo ? "#333" : "#ccc",
-          borderRadius: 7, padding: "5px 10px", fontSize: 16,
+          borderRadius: 7, padding: "5px 9px", fontSize: 15,
           cursor: canUndo ? "pointer" : "default",
-          lineHeight: 1, userSelect: "none", transition: "all 0.15s",
-          display: "flex", alignItems: "center", justifyContent: "center", minWidth: 34,
+          lineHeight: 1, userSelect: "none",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          minWidth: 32, flexShrink: 0,
         }}>↩</button>
 
         {/* Redo */}
@@ -1367,38 +1384,41 @@ export default function App({ setCurrentPage, initialCode }) {
           background: canRedo ? "#fff" : "#fafafa",
           border: `1px solid ${canRedo ? "#ddd" : "#ebebeb"}`,
           color: canRedo ? "#333" : "#ccc",
-          borderRadius: 7, padding: "5px 10px", fontSize: 16,
+          borderRadius: 7, padding: "5px 9px", fontSize: 15,
           cursor: canRedo ? "pointer" : "default",
-          lineHeight: 1, userSelect: "none", transition: "all 0.15s",
-          display: "flex", alignItems: "center", justifyContent: "center", minWidth: 34,
+          lineHeight: 1, userSelect: "none",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          minWidth: 32, flexShrink: 0,
         }}>↪</button>
 
-        <div style={{ width: 1, height: 20, background: "#e0e0e0", margin: "0 2px" }} />
+        <div style={{ width: 1, height: 18, background: "#e0e0e0", flexShrink: 0 }} />
 
         <button onClick={() => { reset(""); _pendingCode.current = ""; setHasError(false); setLastError(""); setFixMsg(""); }} style={{
           background: "#fff", border: "1px solid #ddd", color: "#555",
-          borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer", fontFamily: "sans-serif",
+          borderRadius: 7, padding: "5px 9px", fontSize: 12, cursor: "pointer",
+          fontFamily: "sans-serif", flexShrink: 0, whiteSpace: "nowrap",
         }}>Clear</button>
 
         <button onClick={handleCopy} style={{
           background: copyDone ? "#f0fdf4" : "#fff",
           border: `1px solid ${copyDone ? "#bbf7d0" : "#ddd"}`,
           color: copyDone ? "#16a34a" : "#555",
-          borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer",
-          transition: "all 0.2s", fontFamily: "sans-serif",
+          borderRadius: 7, padding: "5px 9px", fontSize: 12, cursor: "pointer",
+          fontFamily: "sans-serif", flexShrink: 0, whiteSpace: "nowrap",
         }}>
-          {copyDone ? "✓ Copied!" : "Copy"}
+          {copyDone ? "✓" : "Copy"}
         </button>
 
         {lang === "python" && (
           <button onClick={() => { reset(TURTLE_CODE); _pendingCode.current = TURTLE_CODE; }} style={{
             background: "#fff", border: "1px solid #ddd", color: "#008000",
-            borderRadius: 7, padding: "5px 11px", fontSize: 12, cursor: "pointer", fontFamily: "sans-serif",
+            borderRadius: 7, padding: "5px 9px", fontSize: 12, cursor: "pointer",
+            fontFamily: "sans-serif", flexShrink: 0, whiteSpace: "nowrap",
           }}>🐢 Turtle</button>
         )}
 
-        <div style={{ flex: 1 }} />
-        <span style={{ fontSize: 11, color: "#bbb", fontFamily: "'JetBrains Mono',monospace" }}>PySkill</span>
+        <div style={{ flex: 1, minWidth: 8 }} />
+        <span style={{ fontSize: 10, color: "#ccc", fontFamily: "'JetBrains Mono',monospace", flexShrink: 0 }}>PySkill</span>
       </div>
 
       {langOpen && <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setLangOpen(false)} />}

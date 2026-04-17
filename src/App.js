@@ -31,6 +31,7 @@ import LoginPage from './pages/LoginPage';
 import MockTestPage from './pages/MockTestPage';
 import AIChatPage from './pages/AIChatPage';
 import PythonCompiler from './pages/PythonCompiler';
+import ReviewsPage from './pages/ReviewsPage'; // ✅ ADDED
 
 import StreakChallengePage from './pages/StreakChallengePage';
 import DailyPractice from './pages/DailyPractice';
@@ -121,6 +122,7 @@ function App() {
         'mocktests', 'leaderboard', 'aichat', 'compiler',
         'streak', 'streak-practice', 'streak-result', 'admin-streak',
         'blog-mock-test', 'verify', 'migrate-certs',
+        'reviews', // ✅ ADDED
       ];
       return validPages.includes(hash) ? hash : 'home';
     };
@@ -245,6 +247,7 @@ function App() {
         setUser({
           email: firebaseUser.email, displayName: firebaseUser.displayName,
           uid: firebaseUser.uid, isAdmin: isAdminAuth(firebaseUser.email),
+          photoURL: firebaseUser.photoURL, // ✅ photoURL bhi include kar lo ReviewsPage ke liye
         });
         if (firebaseUser.email === ADMIN_EMAIL) {
           localStorage.setItem(`streak_purchased_${firebaseUser.uid}`, 'true');
@@ -504,8 +507,6 @@ function App() {
                   {currentPage === 'leaderboard' && <Leaderboard userEmail={user?.email} />}
                   {currentPage === 'aichat' && <AIChatPage setCurrentPage={setCurrentPage} user={user} openCompiler={openCompiler} />}
 
-                  {/* ✅ FIX: setCurrentPage prop ab compiler ko pass ho raha hai
-                      Back button click karne par seedha home page pe jayega */}
                   {currentPage === 'compiler' && (
                     <PythonCompiler
                       initialCode={compilerInitialCode}
@@ -521,6 +522,9 @@ function App() {
                   {currentPage === 'blog-mock-test' && <BlogPostMockTest setCurrentPage={setCurrentPage} />}
                   {currentPage === 'migrate-certs' && <MigrateCertsPage />}
                   {currentPage === 'verify' && <VerifyCertificate certificateId={verifyCertId} onBack={() => setCurrentPage('home')} />}
+
+                  {/* ✅ REVIEWS PAGE ROUTE */}
+                  {currentPage === 'reviews' && <ReviewsPage setCurrentPage={setCurrentPage} />}
                 </main>
 
                 {currentPage === 'home' && !isVerifyPage && <Footer setCurrentPage={setCurrentPage} />}
