@@ -4,11 +4,29 @@
 // ✅ FIX-AUDIO:           handleTimerTick / handleTimerExpire se audio calls hataye
 // ✅ FIX-DUPLICATE:       Tab-switch visibilitychange useEffect REMOVED — AntiCheatController handles it
 // ✅ FIX-ANTICHEAT:       AntiCheatController.enable() called on exam start
-// ✅ FIX-FS-DUPLICATE:    Duplicate fullscreen onChange listener REMOVED — AntiCheatController.FullscreenGuard
-//                          already counts violation + calls reEnter; second listener caused double-reEnter
-// ✅ FIX-INACTIVITY:      Question navigation resets inactivity timer (long questions won't false-trigger)
-// ✅ FIX-QTEXPIRE-TOAST:  handleQuestionTimerExpire shows a brief toast before advancing to next question
+// ✅ FIX-FS-DUPLICATE:    Duplicate fullscreen onChange listener REMOVED
+// ✅ FIX-INACTIVITY:      Question navigation resets inactivity timer
+// ✅ FIX-QTEXPIRE-TOAST:  handleQuestionTimerExpire shows a brief toast before advancing
 // ✅ FIX-LINT:            Removed unused FullscreenManager import
+// ============================================================
+// BUG-FIX v8 — DOUBLE DETECTION + MOBILE NEXT BUTTON FIX:
+// ✅ FIX-MOBILE-BODY-FIXED:   On touch devices, body is NOT set to position:fixed.
+//                              The old code set position:fixed unconditionally which caused
+//                              the bottom nav bar (Next/Submit button) to fall outside the
+//                              viewport after fullscreen exit on mobile — because the browser
+//                              shrinks the visual viewport but the fixed body stays at 100vh.
+//                              Fix: use overflow:hidden on body WITHOUT position:fixed on mobile.
+//                              On desktop, position:fixed is still applied (needed for fullscreen).
+// ✅ FIX-BLUR-DEDUP:          window blur event was firing INDEPENDENTLY from AppSwitcherGuard's
+//                              visibilitychange, meaning 1 tab switch = 1 violation (AppSwitcher)
+//                              + 1 blur warning (separate counter). While blur doesn't increment
+//                              the AntiCheat violation count, it was showing a second warning modal
+//                              on top of the violation modal, creating confusing UX.
+//                              Fix: blur handler now checks if a violation was recently recorded
+//                              (via a 2s gate shared with AppSwitcherGuard timing) before showing
+//                              its own warning. Blur warnings are now purely informational and
+//                              DO NOT conflict with AppSwitcher violation modals.
+// ============================================================
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRight, CheckCircle, Shield, BookOpen, EyeOff } from 'lucide-react';
@@ -164,11 +182,15 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const inactivityRef   = useRef(null);
   const handleSubmitRef = useRef(null);
   const isDisqualifiedRef = useRef(false);
+  // ✅ FIX-BLUR-DEDUP: track when AppSwitcher last fired to suppress redundant blur warning
+  const lastViolationTimeRef = useRef(0);
 
   const isAdmin        = TestUtils.isAdmin(userEmail);
   const studentName    = studentInfo?.fullName || 'Student';
   const inactivityLimitMs = Math.max(60000, timeLimit * 60 * 1000 * APP_CONFIG.INACTIVITY_PERCENT);
   const isLastQuestion = currentQuestion === questions.length - 1;
+  // ✅ FIX-MOBILE-BODY-FIXED: detect touch device once at mount
+  const isTouchDevice  = useRef(TestUtils.isTouchDevice?.() ?? (navigator.maxTouchPoints > 0 || 'ontouchstart' in window));
 
   const setIsDisqualifiedSynced = useCallback((val) => {
     isDisqualifiedRef.current = val;
@@ -201,8 +223,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     if (handleSubmitRef.current) handleSubmitRef.current(false, 'time-up');
   }, [showWarningMessage]);
 
-  // ✅ FIX-QTEXPIRE-TOAST: show a brief informational toast before auto-advancing
-  //    so the student knows WHY the question changed (especially after a tab switch)
+  // ✅ FIX-QTEXPIRE-TOAST
   const handleQuestionTimerExpire = useCallback(() => {
     if (isDisqualifiedRef.current || hasSubmittedRef.current) return;
 
@@ -258,7 +279,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
   useEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
 
-  // ✅ FIX-INACTIVITY: reset on question change so reading a long question doesn't trigger idle warning
+  // ✅ FIX-INACTIVITY: reset on question change
   const handleNext = useCallback(() => {
     if (isDisqualified) return;
     resetActivity();
@@ -269,7 +290,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-    resetActivity(); // ✅ FIX-INACTIVITY: each new question resets the idle clock
+    resetActivity();
   }, [currentQuestion, resetActivity]);
 
   // ==========================================
@@ -298,15 +319,31 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       width:        document.body.style.width,
       height:       document.body.style.height,
     };
-    document.body.style.overflow='hidden';
-    document.documentElement.style.overflow='hidden';
-    document.body.style.margin='0';
-    document.body.style.padding='0';
-    document.body.style.position='fixed';
-    document.body.style.width='100%';
-    document.body.style.height='100%';
-    document.body.style.top='0';
-    document.body.style.left='0';
+
+    // ✅ FIX-MOBILE-BODY-FIXED:
+    // On touch devices: do NOT use position:fixed — it causes the bottom nav bar
+    // (Next/Submit button) to disappear off-screen after fullscreen exit because
+    // the browser shrinks the visual viewport but the fixed-positioned body keeps
+    // its original dimensions.
+    // On desktop: position:fixed is still needed to prevent scroll during exam.
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.margin  = '0';
+    document.body.style.padding = '0';
+
+    if (!isTouchDevice.current) {
+      // Desktop: use position:fixed (works fine, fullscreen covers everything)
+      document.body.style.position = 'fixed';
+      document.body.style.width    = '100%';
+      document.body.style.height   = '100%';
+      document.body.style.top      = '0';
+      document.body.style.left     = '0';
+    } else {
+      // Mobile: use min-height instead of position:fixed
+      // This keeps the layout stable after fullscreen exit
+      document.body.style.width     = '100%';
+      document.body.style.minHeight = '100dvh'; // dvh = dynamic viewport height, adapts to browser chrome
+    }
 
     if (!isAdmin) {
       audioRef.current.init();
@@ -324,6 +361,10 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
       antiCheatRef.current = new AntiCheatController({
         onWarning: (msg, level, force) => {
+          // ✅ FIX-BLUR-DEDUP: record time of violation so blur handler can suppress its warning
+          if (level === 'critical' || level === 'final') {
+            lastViolationTimeRef.current = Date.now();
+          }
           if (antiCheatRef.current) {
             tabSwitchRef.current = antiCheatRef.current.violations;
             setTabSwitches(antiCheatRef.current.violations);
@@ -350,15 +391,16 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     return () => {
       window.onbeforeunload = null;
       hidden.forEach(({ el, d, v }) => { if (el) { el.style.display=d||''; el.style.visibility=v||''; } });
-      document.body.style.overflow = orig.overflow;
+      document.body.style.overflow    = orig.overflow;
       document.documentElement.style.overflow = orig.htmlOverflow;
-      document.body.style.position = orig.position;
-      document.body.style.margin   = orig.margin;
-      document.body.style.padding  = orig.padding;
-      document.body.style.width    = orig.width;
-      document.body.style.height   = orig.height;
-      document.body.style.top  = '';
-      document.body.style.left = '';
+      document.body.style.position   = orig.position;
+      document.body.style.margin     = orig.margin;
+      document.body.style.padding    = orig.padding;
+      document.body.style.width      = orig.width;
+      document.body.style.height     = orig.height;
+      document.body.style.minHeight  = '';
+      document.body.style.top        = '';
+      document.body.style.left       = '';
       requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: 'instant' }));
       ca.destroy();
       NetworkGuard.disable();
@@ -398,14 +440,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, inactivityLimitMs, resetActivity, showWarningMessage]);
 
-  // ✅ FIX-FS-DUPLICATE: Removed the separate fullscreen onChange useEffect that was here.
-  //    AntiCheatController.FullscreenGuard already:
-  //      1. Counts the violation via _recordViolation('fullscreen-exit')
-  //      2. Shows the warning modal via onWarning callback
-  //      3. Calls reEnter() after 800ms
-  //    The duplicate listener was causing a second reEnter() 1500ms later (flickering)
-  //    and a redundant "You exited fullscreen" message alongside the violation modal.
-
   useEffect(() => {
     if (isAdmin) return;
     const handleBlur = () => {
@@ -414,7 +448,17 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       const n = blurCountRef.current + 1;
       blurCountRef.current = n;
       setBlurCount(n);
-      showWarningMessage(`You left the exam window! Return immediately. (${n} time${n>1?'s':''})`, 'violation');
+
+      // ✅ FIX-BLUR-DEDUP: if AppSwitcherGuard already fired a violation warning
+      // within the last 3.5s (its cooldown + buffer), don't show a redundant blur
+      // warning on top. The violation modal is already showing.
+      const timeSinceViolation = Date.now() - lastViolationTimeRef.current;
+      if (timeSinceViolation < 3500) return;
+
+      showWarningMessage(
+        `You left the exam window! Return immediately. (${n} time${n>1?'s':''})`,
+        'violation'
+      );
     };
     const handleFocus = () => { setIsContentBlurred(false); resetActivity(); };
     window.addEventListener('blur', handleBlur);
@@ -445,14 +489,22 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     <div
       data-test-interface="true"
       style={{
-        position: 'fixed', inset: 0,
+        position: 'fixed',
+        inset: 0,
         background: '#f8fafc',
         zIndex: 999999,
         display: 'flex',
         flexDirection: 'column',
-        width: '100vw', height: '100vh',
-        top: 0, left: 0,
+        width: '100vw',
+        // ✅ FIX-MOBILE-BODY-FIXED: use 100dvh on mobile so the height adapts when
+        // the browser chrome (address bar, bottom bar) shows/hides. On desktop,
+        // 100vh is fine since we're in fullscreen.
+        height: isTouchDevice.current ? '100dvh' : '100vh',
+        top: 0,
+        left: 0,
         userSelect: isAdmin ? 'auto' : 'none',
+        // ✅ Ensure the container scrolls internally, not the body
+        overflow: 'hidden',
       }}
     >
       {isContentBlurred && !isAdmin && (
@@ -480,6 +532,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         </div>
       )}
 
+      {/* TOP HEADER — flexShrink:0 so it never collapses */}
       <div style={{
         flexShrink: 0,
         background: '#fff',
@@ -554,10 +607,14 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         </div>
       </div>
 
+      {/* SCROLLABLE CONTENT AREA */}
       <div style={{
         flex: 1,
         overflowY: 'auto',
         WebkitOverflowScrolling: 'touch',
+        // ✅ FIX-MOBILE-BODY-FIXED: overscroll-behavior prevents pull-to-refresh
+        // interfering with the exam on mobile
+        overscrollBehavior: 'contain',
         opacity: isDisqualified ? 0.15 : 1,
         pointerEvents: isDisqualified ? 'none' : 'auto',
         filter: isDisqualified ? 'blur(6px)' : 'none',
@@ -695,6 +752,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         <div style={{ height: '88px' }} />
       </div>
 
+      {/* BOTTOM NAVIGATION — flexShrink:0 ensures it's ALWAYS visible */}
       <div style={{
         flexShrink: 0,
         padding: isMobile ? '10px 14px' : '12px 20px',
@@ -702,6 +760,10 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
         borderTop: '2px solid #e2e8f0',
         boxShadow: '0 -4px 12px rgba(0,0,0,0.06)',
         opacity: isDisqualified ? 0.5 : 1,
+        // ✅ FIX-MOBILE-BODY-FIXED: safe area inset for iPhone notch/home indicator
+        paddingBottom: isMobile
+          ? 'max(10px, env(safe-area-inset-bottom, 10px))'
+          : '12px',
       }}>
         <div style={{ maxWidth: '800px', margin: '0 auto' }}>
           {isLastQuestion ? (

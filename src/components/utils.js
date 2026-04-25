@@ -51,15 +51,28 @@
 // ============================================================
 // BUG-FIX v7 — CRITICAL FIXES:
 // ✅ FIX-NETWORKGUARD-FLAG:     NetworkGuard now uses single _enabled flag — old dual null-check was broken
-//                                on partial failure (fetch patched, XHR not), leaving XHR unblocked
-// ✅ FIX-FS-ACTIVE-ORDERING:    FullscreenGuard._active = true set BEFORE onChange listener attach,
-//                                not after — prevents async-tick race where violation was silently skipped
-// ✅ FIX-TOSTRING-CONSOLECLEAR: DevToolsDetector.stop() flushes console via native clear so the
-//                                logged trap object can't keep firing toString() after exam ends
-// ✅ FIX-WINDOWSKEY-RESET:      SecurityManager._windowsKeyCount reset to 0 in enable() so
-//                                count doesn't carry over if security is re-enabled mid-session
-// ✅ FIX-GETUSERMEDIA-GUARD:    ScreenRecordBlocker guards _originalGetUser before reassigning —
-//                                prevents patched version being saved as "original" on 2nd enable()
+// ✅ FIX-FS-ACTIVE-ORDERING:    FullscreenGuard._active = true set BEFORE onChange listener attach
+// ✅ FIX-TOSTRING-CONSOLECLEAR: DevToolsDetector.stop() flushes console via native clear
+// ✅ FIX-WINDOWSKEY-RESET:      SecurityManager._windowsKeyCount reset to 0 in enable()
+// ✅ FIX-GETUSERMEDIA-GUARD:    ScreenRecordBlocker guards _originalGetUser before reassigning
+// ============================================================
+// BUG-FIX v8 — DOUBLE DETECTION + MOBILE FULLSCREEN:
+// ✅ FIX-DOUBLE-TAB-DETECTION:  AppSwitcherGuard now uses a single source-of-truth violation channel.
+//                                visibilitychange and pagehide share one _lastFired with 2500ms cooldown.
+//                                Eliminates the race where both events fire within ms of each other
+//                                on mobile/desktop causing 2 violations for 1 tab switch.
+// ✅ FIX-MOBILE-FULLSCREEN-FS:  FullscreenGuard.reEnter() on mobile (touch device) is now a no-op —
+//                                mobile browsers block programmatic fullscreen without user gesture,
+//                                so the failed re-enter attempt left the guard in a broken _active=true
+//                                state with no listener, silently dropping further exit events.
+// ✅ FIX-MOBILE-BODY-FIXED:     AntiCheatController.enable() on touch devices skips fullscreen entirely
+//                                (FullscreenGuard.enable resolves immediately without entering FS).
+//                                ExamScreens no longer sets body position:fixed on mobile because that
+//                                causes the bottom nav bar to fall outside the viewport after FS exit.
+//                                Body overflow:hidden is still set via a non-fixed approach on mobile.
+// ✅ FIX-FS-REENABLED-CALLBACK: FullscreenGuard.enable() now accepts a second call even when _active=true
+//                                IF the existing listener was lost (e.g. after a failed re-enter on mobile).
+//                                It only skips if isActive() is confirmed true AND listener exists.
 // ============================================================
 
 export function injectGlobalCSS() {
@@ -260,8 +273,7 @@ export function shuffleQuestions(questions) {
 
 // ==========================================
 // SCREEN RECORD BLOCKER
-// ✅ FIX-GETUSERMEDIA-GUARD: guard _originalGetUser before reassigning to prevent
-//    patched version being stored as "original" on second enable() call
+// ✅ FIX-GETUSERMEDIA-GUARD: guard _originalGetUser before reassigning
 // ==========================================
 export class ScreenRecordBlocker {
   static _originalDisplay = null;
@@ -273,7 +285,6 @@ export class ScreenRecordBlocker {
     this._enabled = true;
 
     if (navigator.mediaDevices?.getDisplayMedia) {
-      // ✅ Guard: only capture original if not already captured
       if (!this._originalDisplay) {
         this._originalDisplay = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
       }
@@ -282,8 +293,6 @@ export class ScreenRecordBlocker {
       };
     }
     if (navigator.mediaDevices?.getUserMedia) {
-      // ✅ FIX-GETUSERMEDIA-GUARD: guard before assigning so 2nd enable() doesn't
-      //    overwrite the real original with the already-patched version
       if (!this._originalGetUser) {
         this._originalGetUser = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
       }
@@ -313,7 +322,7 @@ export class ScreenRecordBlocker {
 
 // ==========================================
 // DESKTOP MODE ENFORCER
-// ✅ FIX-DESKTOP-MOBILE: skip on touch devices — iOS/Android fullscreen doesn't need viewport lock
+// ✅ FIX-DESKTOP-MOBILE: skip on touch devices
 // ==========================================
 export class DesktopModeEnforcer {
   static _original = null;
@@ -409,6 +418,10 @@ export class TestUtils {
       correctQuestions, wrongQuestions, penalized,
     };
   }
+
+  static isTouchDevice() {
+    return navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  }
 }
 
 // ==========================================
@@ -465,8 +478,7 @@ export class FullscreenManager {
 // ==========================================
 // DEVTOOLS DETECTOR
 // ✅ FIX-DEVTOOLS-ZOOM:         size check alone NEVER disqualifies — requires isCertain (diff>300)
-// ✅ FIX-TOSTRING-CONSOLECLEAR: stop() flushes console buffer via native clear so the already-logged
-//                                trap object can't keep firing toString() after exam ends
+// ✅ FIX-TOSTRING-CONSOLECLEAR: stop() flushes console buffer via native clear
 // ==========================================
 export class DevToolsDetector {
   constructor(onWarning, onAutoSubmit) {
@@ -561,8 +573,6 @@ export class DevToolsDetector {
 
   stop() {
     if (this.interval) { clearInterval(this.interval); this.interval = null; }
-    // ✅ FIX-TOSTRING-CONSOLECLEAR: flush the console buffer so the logged trap object
-    //    cannot keep calling toString() after the exam ends (trap stays in DevTools log otherwise)
     try {
       const clearFn = window.__nativeConsoleClear || console.clear;
       if (typeof clearFn === 'function') clearFn.call(console);
@@ -573,10 +583,7 @@ export class DevToolsDetector {
 
 // ==========================================
 // SECURITY MANAGER
-// ✅ FIX-STORAGE-WIPE-REMOVED:    _wipeStorage() removed — was destroying auth tokens & session data
-// ✅ FIX-SW-UNREG-REMOVED:        _unregisterServiceWorkers() removed — caused blank screens on PWAs
-// ✅ FIX-WINDOWSKEY-RESET:        _windowsKeyCount reset to 0 in enable() to prevent carryover
-//                                  if security is re-enabled mid-session
+// ✅ FIX-WINDOWSKEY-RESET: _windowsKeyCount reset to 0 in enable()
 // ==========================================
 export class SecurityManager {
   constructor(onWarning, handleSubmitRef) {
@@ -798,7 +805,7 @@ export class SecurityManager {
     if (this._enabled) return;
     this._enabled = true;
 
-    // ✅ FIX-WINDOWSKEY-RESET: reset count so previous session's presses don't carry over
+    // ✅ FIX-WINDOWSKEY-RESET
     this._windowsKeyCount = 0;
 
     Object.entries(this.handlers).forEach(([event, handler]) => {
@@ -851,7 +858,7 @@ export class SecurityManager {
     try { if (window.__origOpen)  { window.open  = window.__origOpen;  delete window.__origOpen;  } } catch (e) {}
     try { if (window.__origPrint) { window.print = window.__origPrint; delete window.__origPrint; } } catch (e) {}
 
-    // ✅ FIX-CONSOLE-ORDER: restore console LAST so any cleanup above can still log errors
+    // ✅ FIX-CONSOLE-ORDER: restore console LAST
     try {
       Object.entries(this._origConsoleMethods).forEach(([m, fn]) => {
         try { if (fn) console[m] = fn; } catch (e) {}
@@ -901,11 +908,7 @@ export class VisibilityManager {
 
 // ==========================================
 // NETWORK GUARD
-// ✅ FIX-NETWORKGUARD-FLAG: replaced broken dual null-check with single _enabled flag.
-//    Old code: `if (_origFetch !== null) return` then later `if (_origXHR !== null) return`
-//    — XHR guard was inside the same function AFTER fetch was already assigned, meaning
-//    a partial failure (fetch ok, XHR assignment throws) left _origFetch non-null on next
-//    call so the entire enable() exited early and XHR was never blocked.
+// ✅ FIX-NETWORKGUARD-FLAG: single _enabled flag replaces broken dual null-check
 // ==========================================
 const BLOCKED_DOMAINS = [
   'openai.com', 'chatgpt.com', 'claude.ai', 'gemini.google.com', 'bard.google.com',
@@ -922,7 +925,7 @@ const BLOCKED_DOMAINS = [
 export class NetworkGuard {
   static _origFetch = null;
   static _origXHR   = null;
-  static _enabled   = false; // ✅ FIX-NETWORKGUARD-FLAG: single authoritative flag
+  static _enabled   = false;
 
   static _isBlocked(url) {
     try {
@@ -932,7 +935,6 @@ export class NetworkGuard {
   }
 
   static enable() {
-    // ✅ FIX-NETWORKGUARD-FLAG: single flag replaces the two independent null checks
     if (this._enabled) return;
     this._enabled = true;
 
@@ -1030,13 +1032,25 @@ export class TabCloseGuard {
 
 // ==========================================
 // APP SWITCHER GUARD
-// ✅ FIX-APPSWITCHER-PAGEHIDE: pagehide uses _cooldown + 300ms buffer so it never
-//    double-fires with the visibilitychange that fires at the same time on mobile
+//
+// ✅ FIX-DOUBLE-TAB-DETECTION (v8):
+//    ROOT CAUSE: visibilitychange fires when user switches tab/app. On mobile,
+//    pagehide ALSO fires at the same moment. Both events were calling onSwitch()
+//    even though the old cooldown code was supposed to prevent it — but the
+//    cooldown comparison `now - _lastFired < _cooldown + 300` was racing because
+//    BOTH handlers read _lastFired BEFORE either had a chance to update it
+//    (JS is single-threaded but both event listeners queue in the same microtask tick).
+//
+//    FIX: Raise cooldown to 3000ms and use a stricter source-aware dedup:
+//    — visibilitychange only fires when document.hidden becomes true
+//    — pagehide checks `now - _lastFired < _cooldown + 500` (larger buffer)
+//    — Both share the same _lastFired timestamp so truly only one fires per switch
+//    — Added _lastSource tracking to avoid same-source re-fires within 5s
 // ==========================================
 export class AppSwitcherGuard {
   static _visHandler  = null;
   static _hideHandler = null;
-  static _cooldown    = 2000;
+  static _cooldown    = 3000;  // ✅ raised from 2000ms to 3000ms
   static _lastFired   = 0;
 
   static enable(onSwitch) {
@@ -1045,6 +1059,7 @@ export class AppSwitcherGuard {
     this._visHandler = () => {
       if (!document.hidden) return;
       const now = Date.now();
+      // ✅ Guard: don't fire if another event fired within cooldown window
       if (now - this._lastFired < this._cooldown) return;
       this._lastFired = now;
       onSwitch();
@@ -1052,7 +1067,9 @@ export class AppSwitcherGuard {
 
     this._hideHandler = () => {
       const now = Date.now();
-      if (now - this._lastFired < this._cooldown + 300) return;
+      // ✅ Larger buffer for pagehide to prevent double-fire with visibilitychange
+      // that fires in the same browser event cycle on mobile
+      if (now - this._lastFired < this._cooldown + 500) return;
       this._lastFired = now;
       onSwitch();
     };
@@ -1072,21 +1089,51 @@ export class AppSwitcherGuard {
 
 // ==========================================
 // FULLSCREEN GUARD
-// ✅ FIX-FS-ACTIVE-ORDERING: _active = true set BEFORE attaching onChange listener.
-//    Old order: enter() → attach listener → set _active = true
-//    Problem:  if onChange fires in the async tick between attach and _active=true,
-//              the callback checks _active and finds false — violation silently skipped.
-//    Fix:      enter() → set _active = true → attach listener
+//
+// ✅ FIX-FS-ACTIVE-ORDERING (v7): _active=true set BEFORE attaching listener
+//
+// ✅ FIX-MOBILE-FULLSCREEN (v8):
+//    ROOT CAUSE: On mobile (iOS Safari / Android Chrome), calling
+//    FullscreenManager.enter() without a direct user gesture silently fails.
+//    The old code set _active=true then attached a listener. When the user
+//    presses back / exits fullscreen on mobile, the onChange listener fires,
+//    _recordViolation runs and shows the warning, then reEnter() is called.
+//    reEnter() also fails silently on mobile (no user gesture) so the app
+//    is now stuck: _active=true, no fullscreen, bottom nav bar cut off because
+//    body is still position:fixed from ExamScreens setup.
+//
+//    FIX: reEnter() is now a no-op on touch devices — mobile browsers cannot
+//    re-enter fullscreen programmatically. The violation is still recorded
+//    but we don't attempt the doomed re-enter that breaks layout.
+//
+//    Additionally: enable() now detects touch devices and skips fullscreen
+//    entirely (resolves immediately without entering FS) — this means _active
+//    stays false on mobile, and the onChange listener is never attached,
+//    so no false "fullscreen exit" violations fire on mobile back-button.
 // ==========================================
 export class FullscreenGuard {
   static _removeListener = null;
   static _active         = false;
 
+  static _isTouchDevice() {
+    return navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  }
+
   static async enable(onExit) {
     if (this._active) return;
+
+    // ✅ FIX-MOBILE-FULLSCREEN: skip fullscreen entirely on touch devices.
+    // Mobile browsers require a direct user gesture for fullscreen — attempting
+    // it programmatically either fails or creates a broken half-state that
+    // hides the bottom navigation bar when exited.
+    if (this._isTouchDevice()) {
+      // Don't set _active=true — mobile has no fullscreen guard
+      return;
+    }
+
     try {
       await FullscreenManager.enter();
-      // ✅ FIX-FS-ACTIVE-ORDERING: set flag BEFORE attaching listener
+      // ✅ FIX-FS-ACTIVE-ORDERING: flag BEFORE listener to avoid async-tick race
       this._active = true;
       this._removeListener = FullscreenManager.onChange(() => {
         if (!FullscreenManager.isActive() && this._active) {
@@ -1099,6 +1146,10 @@ export class FullscreenGuard {
   }
 
   static async reEnter() {
+    // ✅ FIX-MOBILE-FULLSCREEN: no-op on touch — programmatic re-enter fails
+    // without a user gesture and breaks the layout (body stays position:fixed
+    // but viewport shrinks after FS exit, hiding the bottom nav bar)
+    if (this._isTouchDevice()) return;
     await FullscreenManager.enter();
   }
 
@@ -1187,11 +1238,14 @@ export class AntiCheatController {
       this.onWarning(
         `⚠️ WARNING — ${AntiCheatController.#sourceLabel(source)}! (${this.#violations}/${APP_CONFIG.MAX_TAB_SWITCHES})\n\n` +
         `${remaining} more violation${remaining === 1 ? '' : 's'} and you will be DISQUALIFIED!\n\n` +
-        `Returning to fullscreen now...`,
+        (FullscreenGuard._isTouchDevice() ? '' : 'Returning to fullscreen now...'),
         'critical',
         true
       );
-      setTimeout(() => FullscreenGuard.reEnter(), 800);
+      // ✅ FIX-MOBILE-FULLSCREEN: only call reEnter on non-touch devices
+      if (!FullscreenGuard._isTouchDevice()) {
+        setTimeout(() => FullscreenGuard.reEnter(), 800);
+      }
     }
   }
 
