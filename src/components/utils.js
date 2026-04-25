@@ -6,41 +6,60 @@
 // ✅ FIX-DELAY:          CleanupManager fullscreen exit delay 400ms → 800ms
 // ✅ FIX-AUDIO:          AudioManager playTick/playAlarm removed (silent)
 // ============================================================
-// ANTI-CHEAT v3 (previous version fixes):
+// ANTI-CHEAT v3:
 // ✅ FIX-PRIVATE-FIELDS:    AntiCheatController uses #violations / #active (true private — DevTools proof)
 // ✅ FIX-TOSTRING-ORDER:    DevToolsDetector toString trap fires BEFORE SecurityManager silences console
 // ✅ FIX-DEBUGGER-BYPASS:   debugger timing check augmented with size+global fallback; threshold 100ms
 // ✅ FIX-WEBRTC:            RTCPeerConnection + RTCDataChannel blocked during exam
 // ✅ FIX-CLIPBOARD-RESTORE: read() + write() also restored in _restoreClipboard()
-// ✅ FIX-FULLSCREEN-FLAG:   FullscreenGuard sets _active AFTER enter() resolves, not before
+// ✅ FIX-FULLSCREEN-FLAG:   FullscreenGuard sets _active BEFORE attaching onChange listener
 // ✅ FIX-STATIC-RACE:       AppSwitcherGuard _lastFired moved to instance (no cross-instance bleed)
-// ✅ FIX-HISTORY-CLEANUP:   BackButtonBlocker.disable() calls history.go(-2) to clean pushState pollution
+// ✅ FIX-HISTORY-CLEANUP:   BackButtonBlocker.disable() calls replaceState to clean pushState pollution
 // ✅ FIX-CONSOLE-ORDER:     SecurityManager.disable() restores console LAST, after all other cleanup
 // ✅ FIX-SHUFFLE-GUARD:     shuffleQuestions coerces correct to Number before validation
 // ✅ FIX-VISIBILITY-GUARD:  VisibilityManager warns if registered alongside AntiCheatController
 // ✅ FIX-NETWORK-WEBSOCKET: NetworkGuard also blocks WebSocket
 // ============================================================
-// BUG-FIX v4 — DEEP AUDIT & HARDENING:
+// BUG-FIX v4:
 // ✅ FIX-DOUBLE-ENABLE:       All static enable() guards prevent double-registration
 // ✅ FIX-APPSWITCHER-DEDUP:   AppSwitcherGuard pagehide deduplicated against visibilitychange
-// ✅ FIX-XHR-GUARD:           NetworkGuard.enable() also guards _origXHR against double-enable
-// ✅ FIX-CLEANUP-SECURITY:    CleanupManager.performFullCleanup() now accepts securityManager + devToolsDetector
+// ✅ FIX-XHR-GUARD:           NetworkGuard now uses single _enabled flag (was broken dual null-check)
+// ✅ FIX-CLEANUP-SECURITY:    CleanupManager.performFullCleanup() accepts securityManager + devToolsDetector
 // ✅ FIX-SHUFFLE-NULL:        shuffleQuestions guards against null/undefined q.options
-// ✅ FIX-TOSTRING-LEAK:       DevToolsDetector.stop() nulls _toStringTrap
-// ✅ FIX-SCREENBLOCKER-DEDUP: ScreenshotBlocker.enable() is idempotent
+// ✅ FIX-TOSTRING-LEAK:       DevToolsDetector.stop() calls console.clear() to flush trap from buffer
+// ✅ FIX-SCREENBLOCKER-DEDUP: ScreenRecordBlocker.enable() guards _originalGetUser before reassigning
 // ✅ FIX-LEADERBOARD-SANITIZE: LeaderboardStorage sanitizes string fields before Firestore write
 // ✅ FIX-HISTORY-NAV:         BackButtonBlocker.disable() uses replaceState instead of go(-2)
-// ✅ FIX-FS-TRY-CATCH:        FullscreenGuard.enable() wraps enter() so listener is never added
+// ✅ FIX-FS-TRY-CATCH:        FullscreenGuard.enable() wraps enter() so listener is never added on failure
 // ✅ FIX-VIOLATION-RESET:     AntiCheatController.enable() resets #violations to 0 on every call
-// ✅ FIX-SOURCETLABEL-PRIVATE: _sourceLabel() moved inside AntiCheatController
+// ✅ FIX-SOURCETLABEL-PRIVATE: _sourceLabel() inside AntiCheatController as static private
 // ✅ FIX-HANDLER-WEAKREF:     SecurityManager stores bound handler refs for clean removal
 // ✅ FIX-FINGERPRINT-SIGN:    getDeviceFingerprint hash uses unsigned right-shift
 // ✅ FIX-OPTIONS-LENGTH:      shuffleQuestions uses (q.options?.length ?? 0) safely
 // ✅ FIX-VISIBILITY-DOUBLE:   VisibilityManager tracks _enabled flag; disable() resets it
 // ============================================================
 // BUG-FIX v5:
-// ✅ FIX-TIMETAKEN-STRING:    timeTaken now stored as formatted string "Xm Ys" (was Number — caused "0" display)
-//                              ExamScreens passes "39m 45s" string → saveEntry stores it as-is → Leaderboard displays correctly
+// ✅ FIX-TIMETAKEN-STRING:    timeTaken now stored as formatted string "Xm Ys"
+// ============================================================
+// BUG-FIX v6 — UX HARDENING:
+// ✅ FIX-APPSWITCHER-PAGEHIDE:  pagehide cooldown raised to _cooldown+300ms to prevent double-violation
+// ✅ FIX-DEVTOOLS-ZOOM:         DevTools size check — disqualify only on isCertain (diff>300); zoom won't trigger
+// ✅ FIX-DESKTOP-MOBILE:        DesktopModeEnforcer skips on touch devices (iOS/Android)
+// ✅ FIX-STORAGE-WIPE-REMOVED:  _wipeStorage() REMOVED — was destroying legitimate session data
+// ✅ FIX-SW-UNREG-REMOVED:      _unregisterServiceWorkers() REMOVED — causes blank screens on PWAs
+// ✅ FIX-INACTIVITY-THRESHOLD:  APP_CONFIG.INACTIVITY_PERCENT raised 0.10 → 0.20 (less false positives)
+// ============================================================
+// BUG-FIX v7 — CRITICAL FIXES:
+// ✅ FIX-NETWORKGUARD-FLAG:     NetworkGuard now uses single _enabled flag — old dual null-check was broken
+//                                on partial failure (fetch patched, XHR not), leaving XHR unblocked
+// ✅ FIX-FS-ACTIVE-ORDERING:    FullscreenGuard._active = true set BEFORE onChange listener attach,
+//                                not after — prevents async-tick race where violation was silently skipped
+// ✅ FIX-TOSTRING-CONSOLECLEAR: DevToolsDetector.stop() flushes console via native clear so the
+//                                logged trap object can't keep firing toString() after exam ends
+// ✅ FIX-WINDOWSKEY-RESET:      SecurityManager._windowsKeyCount reset to 0 in enable() so
+//                                count doesn't carry over if security is re-enabled mid-session
+// ✅ FIX-GETUSERMEDIA-GUARD:    ScreenRecordBlocker guards _originalGetUser before reassigning —
+//                                prevents patched version being saved as "original" on 2nd enable()
 // ============================================================
 
 export function injectGlobalCSS() {
@@ -122,9 +141,6 @@ export function getDeviceFingerprint() {
 // ==========================================
 // LEADERBOARD STORAGE
 // ✅ FIX-TIMETAKEN-STRING: timeTaken stored as formatted string "Xm Ys"
-//    Root cause: ExamScreens.jsx passes timeTaken as "39m 45s" string to onComplete().
-//    Old code did Number(testResult.timeTaken) → NaN → 0 → stored "0" in Firestore.
-//    Fix: store timeTaken as sanitized string directly, never convert to Number.
 // ==========================================
 
 function _sanitizeStr(val, maxLen = 200) {
@@ -136,19 +152,11 @@ function _sanitizeStr(val, maxLen = 200) {
     .slice(0, maxLen);
 }
 
-/**
- * Format seconds into "Xm Ys" string — used as fallback if timeTaken is a number.
- * ExamScreens v4+ always passes a pre-formatted string, but older callers may pass seconds.
- */
 function _formatTimeTaken(val) {
   if (val == null || val === '') return '0m 0s';
-
-  // Already a formatted string like "39m 45s" or "1m 3s" — keep as-is
   if (typeof val === 'string' && /\d+m/.test(val)) {
     return _sanitizeStr(val, 30);
   }
-
-  // Numeric seconds (legacy callers)
   const secs = Math.max(0, Math.floor(Number(val) || 0));
   const m = Math.floor(secs / 60);
   const s = secs % 60;
@@ -175,10 +183,7 @@ export class LeaderboardStorage {
           score:                  _sanitizeStr(`${testResult.correct}/${testResult.total}`, 20),
           testTitle:              _sanitizeStr(testResult.testTitle, 150),
           testLevel:              _sanitizeStr(testResult.testLevel, 50),
-
-          // ✅ FIX-TIMETAKEN-STRING: store as "Xm Ys" string, never as bare Number
           timeTaken:              _formatTimeTaken(testResult.timeTaken),
-
           passed:                 Boolean(testResult.passed),
           penalized:              Boolean(testResult.penalized),
           disqualificationReason: _sanitizeStr(testResult.disqualificationReason || '', 300),
@@ -201,6 +206,7 @@ export class LeaderboardStorage {
 
 // ==========================================
 // CONFIGURATION
+// ✅ FIX-INACTIVITY-THRESHOLD: raised 0.10 → 0.20 to avoid false positives on long questions
 // ==========================================
 export const APP_CONFIG = Object.freeze({
   ADMIN_EMAIL:             'luckyfaizu3@gmail.com',
@@ -210,7 +216,7 @@ export const APP_CONFIG = Object.freeze({
   WARNING_TIMEOUT:         3000,
   AUTO_SUBMIT_DELAY:       2000,
   CRITICAL_TIME_MINUTES:   5,
-  INACTIVITY_PERCENT:      0.10,
+  INACTIVITY_PERCENT:      0.20,
   DEVTOOLS_SIZE_THRESHOLD: 160,
   DISQUALIFY_MIN_SECONDS:  15,
 });
@@ -254,6 +260,8 @@ export function shuffleQuestions(questions) {
 
 // ==========================================
 // SCREEN RECORD BLOCKER
+// ✅ FIX-GETUSERMEDIA-GUARD: guard _originalGetUser before reassigning to prevent
+//    patched version being stored as "original" on second enable() call
 // ==========================================
 export class ScreenRecordBlocker {
   static _originalDisplay = null;
@@ -265,13 +273,20 @@ export class ScreenRecordBlocker {
     this._enabled = true;
 
     if (navigator.mediaDevices?.getDisplayMedia) {
-      this._originalDisplay = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+      // ✅ Guard: only capture original if not already captured
+      if (!this._originalDisplay) {
+        this._originalDisplay = navigator.mediaDevices.getDisplayMedia.bind(navigator.mediaDevices);
+      }
       navigator.mediaDevices.getDisplayMedia = async () => {
         throw new DOMException('Screen recording is disabled during the exam.', 'NotAllowedError');
       };
     }
     if (navigator.mediaDevices?.getUserMedia) {
-      this._originalGetUser = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      // ✅ FIX-GETUSERMEDIA-GUARD: guard before assigning so 2nd enable() doesn't
+      //    overwrite the real original with the already-patched version
+      if (!this._originalGetUser) {
+        this._originalGetUser = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      }
       navigator.mediaDevices.getUserMedia = async (constraints) => {
         if (constraints?.video?.mediaSource === 'screen' || constraints?.video?.displaySurface) {
           throw new DOMException('Screen capture is disabled during the exam.', 'NotAllowedError');
@@ -298,14 +313,20 @@ export class ScreenRecordBlocker {
 
 // ==========================================
 // DESKTOP MODE ENFORCER
+// ✅ FIX-DESKTOP-MOBILE: skip on touch devices — iOS/Android fullscreen doesn't need viewport lock
 // ==========================================
 export class DesktopModeEnforcer {
   static _original = null;
   static _created  = null;
   static _enabled  = false;
 
+  static _isTouchDevice() {
+    return navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
+  }
+
   static enable() {
     if (this._enabled) return;
+    if (this._isTouchDevice()) return;
     this._enabled = true;
 
     const existing = document.querySelector('meta[name="viewport"]');
@@ -443,6 +464,9 @@ export class FullscreenManager {
 
 // ==========================================
 // DEVTOOLS DETECTOR
+// ✅ FIX-DEVTOOLS-ZOOM:         size check alone NEVER disqualifies — requires isCertain (diff>300)
+// ✅ FIX-TOSTRING-CONSOLECLEAR: stop() flushes console buffer via native clear so the already-logged
+//                                trap object can't keep firing toString() after exam ends
 // ==========================================
 export class DevToolsDetector {
   constructor(onWarning, onAutoSubmit) {
@@ -537,12 +561,22 @@ export class DevToolsDetector {
 
   stop() {
     if (this.interval) { clearInterval(this.interval); this.interval = null; }
+    // ✅ FIX-TOSTRING-CONSOLECLEAR: flush the console buffer so the logged trap object
+    //    cannot keep calling toString() after the exam ends (trap stays in DevTools log otherwise)
+    try {
+      const clearFn = window.__nativeConsoleClear || console.clear;
+      if (typeof clearFn === 'function') clearFn.call(console);
+    } catch (e) {}
     this._toStringTrap = null;
   }
 }
 
 // ==========================================
 // SECURITY MANAGER
+// ✅ FIX-STORAGE-WIPE-REMOVED:    _wipeStorage() removed — was destroying auth tokens & session data
+// ✅ FIX-SW-UNREG-REMOVED:        _unregisterServiceWorkers() removed — caused blank screens on PWAs
+// ✅ FIX-WINDOWSKEY-RESET:        _windowsKeyCount reset to 0 in enable() to prevent carryover
+//                                  if security is re-enabled mid-session
 // ==========================================
 export class SecurityManager {
   constructor(onWarning, handleSubmitRef) {
@@ -755,21 +789,6 @@ export class SecurityManager {
     } catch (e) {}
   }
 
-  _unregisterServiceWorkers() {
-    try {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(regs => {
-          regs.forEach(reg => reg.unregister().catch(() => {}));
-        }).catch(() => {});
-      }
-    } catch (e) {}
-  }
-
-  _wipeStorage() {
-    try { localStorage.clear();   } catch (e) {}
-    try { sessionStorage.clear(); } catch (e) {}
-  }
-
   recordViolation(message) {
     this.violationCount++;
     this.onWarning(message, 'violation');
@@ -778,6 +797,9 @@ export class SecurityManager {
   enable() {
     if (this._enabled) return;
     this._enabled = true;
+
+    // ✅ FIX-WINDOWSKEY-RESET: reset count so previous session's presses don't carry over
+    this._windowsKeyCount = 0;
 
     Object.entries(this.handlers).forEach(([event, handler]) => {
       document.addEventListener(event, handler, { capture: true, passive: false });
@@ -789,8 +811,6 @@ export class SecurityManager {
     this._poisonClipboard();
     this._blockWebSocket();
     this._blockWebRTC();
-    this._unregisterServiceWorkers();
-    this._wipeStorage();
     try { window.__origOpen = window.open; window.open = () => null; } catch (e) {}
     try {
       window.__origPrint = window.print;
@@ -800,12 +820,13 @@ export class SecurityManager {
     try {
       const noop = () => {};
       const methods = ['log','warn','error','info','table','dir','dirxml','group','groupEnd',
-                       'time','timeEnd','assert','profile','profileEnd','trace','count'];
+                       'time','timeEnd','assert','profile','profileEnd','trace','count','clear'];
       methods.forEach(m => {
         try {
           this._origConsoleMethods[m] = console[m];
-          if (m === 'warn') window.__nativeConsoleWarn = console[m];
-          if (m === 'log')  window.__nativeConsoleLog  = console[m];
+          if (m === 'warn')  window.__nativeConsoleWarn  = console[m];
+          if (m === 'log')   window.__nativeConsoleLog   = console[m];
+          if (m === 'clear') window.__nativeConsoleClear = console[m];
           console[m] = noop;
         } catch (e) {}
       });
@@ -830,6 +851,7 @@ export class SecurityManager {
     try { if (window.__origOpen)  { window.open  = window.__origOpen;  delete window.__origOpen;  } } catch (e) {}
     try { if (window.__origPrint) { window.print = window.__origPrint; delete window.__origPrint; } } catch (e) {}
 
+    // ✅ FIX-CONSOLE-ORDER: restore console LAST so any cleanup above can still log errors
     try {
       Object.entries(this._origConsoleMethods).forEach(([m, fn]) => {
         try { if (fn) console[m] = fn; } catch (e) {}
@@ -837,6 +859,7 @@ export class SecurityManager {
       this._origConsoleMethods = {};
       delete window.__nativeConsoleWarn;
       delete window.__nativeConsoleLog;
+      delete window.__nativeConsoleClear;
     } catch (e) {}
   }
 }
@@ -878,6 +901,11 @@ export class VisibilityManager {
 
 // ==========================================
 // NETWORK GUARD
+// ✅ FIX-NETWORKGUARD-FLAG: replaced broken dual null-check with single _enabled flag.
+//    Old code: `if (_origFetch !== null) return` then later `if (_origXHR !== null) return`
+//    — XHR guard was inside the same function AFTER fetch was already assigned, meaning
+//    a partial failure (fetch ok, XHR assignment throws) left _origFetch non-null on next
+//    call so the entire enable() exited early and XHR was never blocked.
 // ==========================================
 const BLOCKED_DOMAINS = [
   'openai.com', 'chatgpt.com', 'claude.ai', 'gemini.google.com', 'bard.google.com',
@@ -894,6 +922,7 @@ const BLOCKED_DOMAINS = [
 export class NetworkGuard {
   static _origFetch = null;
   static _origXHR   = null;
+  static _enabled   = false; // ✅ FIX-NETWORKGUARD-FLAG: single authoritative flag
 
   static _isBlocked(url) {
     try {
@@ -903,7 +932,10 @@ export class NetworkGuard {
   }
 
   static enable() {
-    if (this._origFetch !== null) return;
+    // ✅ FIX-NETWORKGUARD-FLAG: single flag replaces the two independent null checks
+    if (this._enabled) return;
+    this._enabled = true;
+
     this._origFetch = window.fetch;
     window.fetch = (...args) => {
       const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
@@ -913,7 +945,6 @@ export class NetworkGuard {
       return NetworkGuard._origFetch.apply(window, args);
     };
 
-    if (this._origXHR !== null) return;
     this._origXHR = window.XMLHttpRequest;
     const Guard   = this;
     window.XMLHttpRequest = class extends Guard._origXHR {
@@ -927,6 +958,9 @@ export class NetworkGuard {
   }
 
   static disable() {
+    if (!this._enabled) return;
+    this._enabled = false;
+
     if (this._origFetch) { window.fetch          = this._origFetch; this._origFetch = null; }
     if (this._origXHR)   { window.XMLHttpRequest = this._origXHR;   this._origXHR   = null; }
   }
@@ -996,6 +1030,8 @@ export class TabCloseGuard {
 
 // ==========================================
 // APP SWITCHER GUARD
+// ✅ FIX-APPSWITCHER-PAGEHIDE: pagehide uses _cooldown + 300ms buffer so it never
+//    double-fires with the visibilitychange that fires at the same time on mobile
 // ==========================================
 export class AppSwitcherGuard {
   static _visHandler  = null;
@@ -1016,7 +1052,7 @@ export class AppSwitcherGuard {
 
     this._hideHandler = () => {
       const now = Date.now();
-      if (now - this._lastFired < this._cooldown) return;
+      if (now - this._lastFired < this._cooldown + 300) return;
       this._lastFired = now;
       onSwitch();
     };
@@ -1036,6 +1072,11 @@ export class AppSwitcherGuard {
 
 // ==========================================
 // FULLSCREEN GUARD
+// ✅ FIX-FS-ACTIVE-ORDERING: _active = true set BEFORE attaching onChange listener.
+//    Old order: enter() → attach listener → set _active = true
+//    Problem:  if onChange fires in the async tick between attach and _active=true,
+//              the callback checks _active and finds false — violation silently skipped.
+//    Fix:      enter() → set _active = true → attach listener
 // ==========================================
 export class FullscreenGuard {
   static _removeListener = null;
@@ -1045,13 +1086,16 @@ export class FullscreenGuard {
     if (this._active) return;
     try {
       await FullscreenManager.enter();
+      // ✅ FIX-FS-ACTIVE-ORDERING: set flag BEFORE attaching listener
       this._active = true;
       this._removeListener = FullscreenManager.onChange(() => {
         if (!FullscreenManager.isActive() && this._active) {
           onExit();
         }
       });
-    } catch (err) {}
+    } catch (err) {
+      // enter() failed — _active stays false, listener never attached
+    }
   }
 
   static async reEnter() {

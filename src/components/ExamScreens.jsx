@@ -1,11 +1,14 @@
 // @ts-nocheck
 // FILE LOCATION: src/components/ExamScreens.jsx
-// ✅ FIX-SUBMIT:     handleSubmit — onComplete pehle, CleanupManager 800ms baad
-// ✅ FIX-AUDIO:      handleTimerTick / handleTimerExpire se audio calls hataye
-// ✅ FIX-DUPLICATE:  Tab-switch visibilitychange useEffect REMOVED — AntiCheatController handles it
-//                    (avoids double-violation-count bug)
-// ✅ FIX-ANTICHEAT:  AntiCheatController.enable() called on exam start
-//                    ac.violations used in calculateScore instead of tabSwitchRef
+// ✅ FIX-SUBMIT:          handleSubmit — onComplete pehle, CleanupManager 800ms baad
+// ✅ FIX-AUDIO:           handleTimerTick / handleTimerExpire se audio calls hataye
+// ✅ FIX-DUPLICATE:       Tab-switch visibilitychange useEffect REMOVED — AntiCheatController handles it
+// ✅ FIX-ANTICHEAT:       AntiCheatController.enable() called on exam start
+// ✅ FIX-FS-DUPLICATE:    Duplicate fullscreen onChange listener REMOVED — AntiCheatController.FullscreenGuard
+//                          already counts violation + calls reEnter; second listener caused double-reEnter
+// ✅ FIX-INACTIVITY:      Question navigation resets inactivity timer (long questions won't false-trigger)
+// ✅ FIX-QTEXPIRE-TOAST:  handleQuestionTimerExpire shows a brief toast before advancing to next question
+// ✅ FIX-LINT:            Removed unused FullscreenManager import
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChevronRight, CheckCircle, Shield, BookOpen, EyeOff } from 'lucide-react';
@@ -14,7 +17,6 @@ import {
   APP_CONFIG,
   TestUtils,
   AudioManager,
-  FullscreenManager,
   DesktopModeEnforcer,
   DevToolsDetector,
   SecurityManager,
@@ -153,7 +155,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const audioRef        = useRef(new AudioManager());
   const securityRef     = useRef(null);
   const devToolsRef     = useRef(null);
-  const antiCheatRef    = useRef(null); // ✅ NEW: AntiCheatController ref
+  const antiCheatRef    = useRef(null);
   const warningTimerRef = useRef(null);
   const hasSubmittedRef = useRef(false);
   const tabSwitchRef    = useRef(0);
@@ -161,7 +163,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const lastActivityRef = useRef(Date.now());
   const inactivityRef   = useRef(null);
   const handleSubmitRef = useRef(null);
-  const isDisqualifiedRef     = useRef(false);
+  const isDisqualifiedRef = useRef(false);
 
   const isAdmin        = TestUtils.isAdmin(userEmail);
   const studentName    = studentInfo?.fullName || 'Student';
@@ -191,7 +193,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   const handleAcknowledge = useCallback(() => setShowWarning(false), []);
 
   const handleTimerTick = useCallback((_left) => {
-    // No audio — tick sounds removed
+    // No audio
   }, []);
 
   const handleTimerExpire = useCallback(() => {
@@ -199,14 +201,23 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     if (handleSubmitRef.current) handleSubmitRef.current(false, 'time-up');
   }, [showWarningMessage]);
 
+  // ✅ FIX-QTEXPIRE-TOAST: show a brief informational toast before auto-advancing
+  //    so the student knows WHY the question changed (especially after a tab switch)
   const handleQuestionTimerExpire = useCallback(() => {
     if (isDisqualifiedRef.current || hasSubmittedRef.current) return;
+
+    showWarningMessage(
+      'Question time ran out — moving to the next question automatically.',
+      'normal',
+      false
+    );
+
     setCurrentQuestion(prev => {
       if (prev < questions.length - 1) return prev + 1;
       if (handleSubmitRef.current) handleSubmitRef.current(false, 'time-up');
       return prev;
     });
-  }, [questions.length]);
+  }, [questions.length, showWarningMessage]);
 
   const handleAnswer = useCallback((qIndex, optIdx) => {
     if (isDisqualifiedRef.current) return;
@@ -215,7 +226,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     setAnswers(prev => ({ ...prev, [qIndex]: optIdx }));
   }, [resetActivity]);
 
-  // ✅ FIX-SUBMIT + FIX-ANTICHEAT: use ac.violations for unified count
   const handleSubmit = useCallback((penalized = false, reason = '') => {
     if (hasSubmittedRef.current) return;
     window.onbeforeunload = null;
@@ -224,16 +234,13 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     const currentAnswers = answersRef.current;
     const timeTaken = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
-    // Use AntiCheatController violations if available, else fall back to tabSwitchRef
     const violationCount = antiCheatRef.current ? antiCheatRef.current.violations : tabSwitchRef.current;
     const score = TestUtils.calculateScore(currentAnswers, questions, violationCount, isAdmin, passPercent);
 
-    // Step 1: Stop all security monitors
     if (devToolsRef.current) devToolsRef.current.stop();
     if (securityRef.current) securityRef.current.disable();
     if (antiCheatRef.current) antiCheatRef.current.disable();
 
-    // Step 2: Show result screen immediately
     onComplete({
       ...score,
       timeTaken: `${Math.floor(timeTaken/60)}m ${timeTaken%60}s`,
@@ -243,7 +250,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       studentInfo,
     });
 
-    // Step 3: Cleanup AFTER result screen is mounted (800ms delay)
     setTimeout(() => {
       CleanupManager.performFullCleanup(false);
     }, 800);
@@ -252,6 +258,7 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
   useEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
 
+  // ✅ FIX-INACTIVITY: reset on question change so reading a long question doesn't trigger idle warning
   const handleNext = useCallback(() => {
     if (isDisqualified) return;
     resetActivity();
@@ -262,12 +269,11 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [currentQuestion]);
+    resetActivity(); // ✅ FIX-INACTIVITY: each new question resets the idle clock
+  }, [currentQuestion, resetActivity]);
 
   // ==========================================
   // MAIN SETUP EFFECT
-  // ✅ FIX-ANTICHEAT: AntiCheatController started here for non-admin
-  // ✅ FIX-DUPLICATE: No separate visibilitychange for tab switching here
   // ==========================================
   useEffect(() => {
     const sels = ['nav','header','footer','.navbar','.header','.footer','.menu','.toolbar','#toolbar','[role="navigation"]','[role="banner"]','[role="contentinfo"]','.telegram-button','#telegram-button','.TelegramButton','[class*="telegram"]','.background','.Background','[class*="background"]','.toast-container','.ToastContainer','[class*="toast"]','[class*="razorpay"]','[id*="razorpay"]','aside','.sidebar','#sidebar'];
@@ -305,7 +311,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
     if (!isAdmin) {
       audioRef.current.init();
 
-      // Security + DevTools
       securityRef.current = new SecurityManager(showWarningMessage, handleSubmitRef);
       securityRef.current.enable();
       NetworkGuard.enable();
@@ -317,11 +322,8 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       devToolsRef.current.start();
       DesktopModeEnforcer.enable();
 
-      // ✅ NEW: AntiCheatController — handles tab switch, fullscreen exit, back button, app switch
-      // This REPLACES the old separate visibilitychange useEffect for tab switching
       antiCheatRef.current = new AntiCheatController({
         onWarning: (msg, level, force) => {
-          // Sync violation count to tabSwitches display state
           if (antiCheatRef.current) {
             tabSwitchRef.current = antiCheatRef.current.violations;
             setTabSwitches(antiCheatRef.current.violations);
@@ -336,7 +338,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
           if (handleSubmitRef.current) handleSubmitRef.current(true, reason);
         },
       });
-      // Enable async — fullscreen + all guards
       antiCheatRef.current.enable().catch(() => {});
     }
 
@@ -363,7 +364,6 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
       NetworkGuard.disable();
       VisibilityManager.disable();
       DesktopModeEnforcer.disable();
-      // AntiCheatController cleanup handled in handleSubmit
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, showWarningMessage]);
@@ -398,25 +398,13 @@ export function TestInterface({ questions, onComplete, testTitle, timeLimit, use
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, inactivityLimitMs, resetActivity, showWarningMessage]);
 
-  // ✅ FIX-DUPLICATE: Fullscreen onChange still here for soft warning + re-enter
-  // AntiCheatController handles it as a violation; this adds the user-visible message
-  useEffect(() => {
-    if (isAdmin) return;
-    const handler = () => {
-      if (!FullscreenManager.isActive() && !hasSubmittedRef.current && !isDisqualifiedRef.current) {
-        // AntiCheatController.FullscreenGuard already counts the violation.
-        // This just shows the warning message if the modal didn't appear yet.
-        showWarningMessage('You exited fullscreen mode. Returning to fullscreen...', 'normal');
-        setTimeout(() => FullscreenManager.enter(), 1500);
-      }
-    };
-    return FullscreenManager.onChange(handler);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin, showWarningMessage]);
-
-  // ✅ FIX-DUPLICATE: OLD tab-switch visibilitychange useEffect REMOVED.
-  // AntiCheatController.AppSwitcherGuard handles this now.
-  // Keeping only the blur/focus for content-blur overlay (separate concern).
+  // ✅ FIX-FS-DUPLICATE: Removed the separate fullscreen onChange useEffect that was here.
+  //    AntiCheatController.FullscreenGuard already:
+  //      1. Counts the violation via _recordViolation('fullscreen-exit')
+  //      2. Shows the warning modal via onWarning callback
+  //      3. Calls reEnter() after 800ms
+  //    The duplicate listener was causing a second reEnter() 1500ms later (flickering)
+  //    and a redundant "You exited fullscreen" message alongside the violation modal.
 
   useEffect(() => {
     if (isAdmin) return;
