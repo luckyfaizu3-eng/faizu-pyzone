@@ -10,15 +10,25 @@ import { Users, Award, DollarSign, RefreshCw, Unlock, Search, ChevronDown, Chevr
 const ADMIN_EMAIL = 'luckyfaizu3@gmail.com';
 
 // ── helpers ──────────────────────────────────────────────────
-function fmt(ms) {
-  const n = Number(ms);
-  if (!ms || isNaN(n) || n <= 0) return '—';
+// ✅ FIX-FMT: handles both "5m 30s" string and milliseconds number
+function fmt(val) {
+  if (!val) return '—';
+  if (typeof val === 'string' && /\d+m/.test(val)) return val;
+  const n = Number(val);
+  if (!n || isNaN(n) || n <= 0) return '—';
   const s = Math.floor(n / 1000);
   const m = Math.floor(s / 60);
   const h = Math.floor(m / 60);
   if (h > 0) return `${h}h ${m % 60}m`;
   if (m > 0) return `${m}m ${s % 60}s`;
   return `${s}s`;
+}
+
+// ✅ FIX-CERT-LEVEL: safely extract level from cert doc id (handles "basic", "basic_1234", etc)
+function certLevel(c) {
+  if (c.level) return c.level;
+  if (!c.id) return 'basic';
+  return c.id.includes('_') ? c.id.split('_')[0] : c.id;
 }
 
 function StatCard({ icon, label, value, sub, color, isDark }) {
@@ -50,8 +60,8 @@ export default function MockTestAdminTab({ isDark }) {
   const [unlocking, setUnlocking] = useState(null);
   const [unlockEmail, setUnlockEmail] = useState('');
   const [unlockLoading, setUnlockLoading] = useState(false);
-  const [deletingUser, setDeletingUser] = useState(null); // uid being deleted
-  const [confirmDelete, setConfirmDelete] = useState(null); // uid to confirm
+  const [deletingUser, setDeletingUser] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const [revenue, setRevenue] = useState({ total: 0, certPayments: 0, testPayments: 0, count: 0 });
   const [refreshing, setRefreshing] = useState(false);
 
@@ -63,12 +73,15 @@ export default function MockTestAdminTab({ isDark }) {
   const [extendDays, setExtendDays] = useState({});
   const [lockUsers, setLockUsers] = useState([]);
 
+  // ✅ FIX-LOCKUSERS: improved useEffect to correctly detect locks from mockTestPayments
   useEffect(() => {
     const now = new Date();
     const result = [];
 
     for (const u of users) {
-      // ── Paid tests (advanced/pro) — from mockTestPayments ──
+      const addedLevels = new Set();
+
+      // ── From mockTestPayments (all levels including basic) ──
       for (const tp of u.testPays) {
         if (!tp.level) continue;
         const lockEndsAt = tp.lockEndsAt ? new Date(tp.lockEndsAt) : null;
@@ -84,46 +97,40 @@ export default function MockTestAdminTab({ isDark }) {
           testSubmittedAt: tp.testSubmittedAt || null,
           source: 'payment',
         });
+        addedLevels.add(tp.level);
       }
 
-      // ── Basic test lock — from mockTests docs ──
-      // Basic users don't have mockTestPayments, lock is stored in the test doc
-      const basicTests = u.tests.filter(t => (t.level || 'basic') === 'basic');
-      const basicLockTest = basicTests.find(t => t.lockEndsAt);
-      // Only add basic if not already in testPays
-      const alreadyAdded = result.some(r => r.uid === u.uid && r.level === 'basic');
-      if (!alreadyAdded && basicLockTest) {
-        const lockEndsAt = new Date(basicLockTest.lockEndsAt);
-        const isLocked = now < lockEndsAt;
-        result.push({
-          uid: u.uid, name: u.name, email: u.email,
-          level: 'basic',
-          lockEndsAt: basicLockTest.lockEndsAt || null,
-          lockStartsAt: basicLockTest.lockStartsAt || null,
-          isLocked, timeRemaining: isLocked ? lockEndsAt - now : 0,
-          hasPaid: false,
-          testSubmittedAt: basicLockTest.testSubmittedAt || null,
-          source: 'test',
-        });
-      }
-
-      // Also check if basic lock is in mockTestPayments (new flow)
-      if (!alreadyAdded) {
-        const basicPay = u.testPays.find(tp => tp.level === 'basic');
-        if (basicPay?.lockEndsAt) {
-          const lockEndsAt = new Date(basicPay.lockEndsAt);
+      // ── Basic test lock from mockTests docs (old flow fallback) ──
+      if (!addedLevels.has('basic')) {
+        const basicTests = u.tests.filter(t => (t.level || 'basic') === 'basic');
+        const basicLockTest = basicTests.find(t => t.lockEndsAt);
+        if (basicLockTest) {
+          const lockEndsAt = new Date(basicLockTest.lockEndsAt);
           const isLocked = now < lockEndsAt;
           result.push({
             uid: u.uid, name: u.name, email: u.email,
             level: 'basic',
-            lockEndsAt: basicPay.lockEndsAt || null,
-            lockStartsAt: basicPay.lockStartsAt || null,
+            lockEndsAt: basicLockTest.lockEndsAt || null,
+            lockStartsAt: basicLockTest.lockStartsAt || null,
             isLocked, timeRemaining: isLocked ? lockEndsAt - now : 0,
             hasPaid: false,
-            testSubmittedAt: basicPay.testSubmittedAt || null,
-            source: 'payment',
+            testSubmittedAt: basicLockTest.testSubmittedAt || null,
+            source: 'test',
           });
+          addedLevels.add('basic');
         }
+      }
+
+      // ── If user took a test but has no lock entry at all, still show them as unlocked ──
+      if (!addedLevels.has('basic') && u.tests.some(t => (t.level || 'basic') === 'basic')) {
+        result.push({
+          uid: u.uid, name: u.name, email: u.email,
+          level: 'basic',
+          lockEndsAt: null, lockStartsAt: null,
+          isLocked: false, timeRemaining: 0,
+          hasPaid: false, testSubmittedAt: null,
+          source: 'test',
+        });
       }
     }
 
@@ -147,68 +154,105 @@ export default function MockTestAdminTab({ isDark }) {
       setPassPercent(pp);
       setNewPassPercent(String(pp));
 
-      // 2. Use collectionGroup to fetch ONLY users who have taken tests
-      //    Fetch from both 'mockTests' and 'mockTestResults' subcollections
+      // 2. ✅ FIX-NEW-USERS: fetch from ALL 3 subcollections so new users always appear
       const userMap = {};
+
+      const ensureUser = (uid) => {
+        if (!uid) return;
+        if (!userMap[uid]) {
+          userMap[uid] = { uid, tests: [], certs: [], certPays: [], testPays: [], profileLoaded: false };
+        }
+      };
 
       const addTestDocs = (snap) => {
         for (const testDoc of snap.docs) {
           const uid = testDoc.ref.parent.parent.id;
           if (!uid) continue;
+          ensureUser(uid);
           const testData = { id: testDoc.id, ...testDoc.data() };
-          if (!userMap[uid]) {
-            userMap[uid] = { uid, tests: [], certs: [], certPays: [], testPays: [], profileLoaded: false };
-          }
-          // avoid duplicates
           if (!userMap[uid].tests.find(t => t.id === testData.id)) {
             userMap[uid].tests.push(testData);
           }
         }
       };
 
-      const [mockTestsSnap, mockTestResultsSnap] = await Promise.all([
+      // ✅ FIX-NEW-USERS: also fetch mockTestPayments collectionGroup
+      // so users who just paid but haven't submitted test yet also appear
+      const [mockTestsSnap, mockTestResultsSnap, mockPaymentsSnap] = await Promise.all([
         getDocs(collectionGroup(db, 'mockTests')),
         getDocs(collectionGroup(db, 'mockTestResults')),
+        getDocs(collectionGroup(db, 'mockTestPayments')),
       ]);
 
       addTestDocs(mockTestsSnap);
       addTestDocs(mockTestResultsSnap);
 
-      console.log(`[Admin] mockTests: ${mockTestsSnap.docs.length} | mockTestResults: ${mockTestResultsSnap.docs.length} | Unique test-takers: ${Object.keys(userMap).length}`);
+      // Add users from mockTestPayments even if they have no test docs yet
+      for (const payDoc of mockPaymentsSnap.docs) {
+        const uid = payDoc.ref.parent.parent.id;
+        if (!uid) continue;
+        ensureUser(uid);
+        // Pre-populate testPays to avoid double fetch below
+        const payData = { level: payDoc.id, ...payDoc.data() };
+        if (!userMap[uid].testPays.find(tp => tp.level === payDoc.id)) {
+          userMap[uid].testPays.push(payData);
+        }
+        userMap[uid]._paysFetched = true;
+      }
 
-      // Now fetch profile + subcollections only for users who have tests
+      console.log(`[Admin] mockTests: ${mockTestsSnap.docs.length} | mockTestResults: ${mockTestResultsSnap.docs.length} | mockPayments: ${mockPaymentsSnap.docs.length} | Unique users: ${Object.keys(userMap).length}`);
+
+      // Now fetch profile + subcollections for all users
       await Promise.all(Object.keys(userMap).map(async (uid) => {
         const entry = userMap[uid];
 
-        // Sort tests newest first
         entry.tests.sort((a, b) => (b.timestamp?.toMillis?.() || 0) - (a.timestamp?.toMillis?.() || 0));
         const latest = entry.tests[0];
 
-        // Fetch profile doc, certs, payments in parallel
-        const [profileSnap, certsSnap, certPaySnap, testPaySnap] = await Promise.all([
+        // ✅ FIX-NEW-USERS: fetch certs + certPays always; skip testPays if already fetched
+        const fetches = [
           getDoc(doc(db, 'users', uid)),
           getDocs(collection(db, 'users', uid, 'certificates')),
           getDocs(collection(db, 'users', uid, 'certificatePayments')),
-          getDocs(collection(db, 'users', uid, 'mockTestPayments')),
-        ]);
+        ];
+        if (!entry._paysFetched) {
+          fetches.push(getDocs(collection(db, 'users', uid, 'mockTestPayments')));
+        }
+
+        const results = await Promise.all(fetches);
+        const profileSnap  = results[0];
+        const certsSnap    = results[1];
+        const certPaySnap  = results[2];
+        const testPaySnap  = results[3]; // undefined if already fetched
 
         const profileData = profileSnap.exists() ? profileSnap.data() : {};
-        entry.certs    = certsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-        entry.certPays = certPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
-        entry.testPays = testPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
 
-        // Resolve name & email: profile doc first, then test studentInfo
+        // ✅ FIX-CERT-LEVEL: store level properly on each cert
+        entry.certs = certsSnap.docs.map(d => ({
+          id: d.id,
+          level: d.id.includes('_') ? d.id.split('_')[0] : d.id,
+          ...d.data()
+        }));
+        entry.certPays = certPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
+
+        if (testPaySnap) {
+          entry.testPays = testPaySnap.docs.map(d => ({ level: d.id, ...d.data() }));
+        }
+
+        // ✅ FIX-NAME: better fallback chain for name + email
         entry.name =
           profileData?.displayName ||
           profileData?.fullName ||
           profileData?.name ||
           latest?.studentInfo?.fullName ||
           latest?.studentInfo?.name ||
+          entry.testPays[0]?.studentName ||
           'Unknown';
         entry.email =
           profileData?.email ||
           latest?.studentInfo?.email ||
           latest?.userEmail ||
+          entry.testPays[0]?.userEmail ||
           '—';
 
         entry.latestScore = latest?.score;
@@ -217,10 +261,15 @@ export default function MockTestAdminTab({ isDark }) {
         entry.latestDate  = latest?.testDate || latest?.date;
         entry.totalTests  = entry.tests.length;
 
-        console.log(`[Admin] UID: ${uid} | name: "${entry.name}" | email: "${entry.email}" | tests: ${entry.totalTests} | profileExists: ${profileSnap.exists()}`);
+        console.log(`[Admin] UID: ${uid} | name: "${entry.name}" | email: "${entry.email}" | tests: ${entry.totalTests} | certs: ${entry.certs.length} | testPays: ${entry.testPays.length}`);
       }));
 
-      setUsers(Object.values(userMap).sort((a, b) => b.tests[0]?.timestamp?.toMillis?.() - a.tests[0]?.timestamp?.toMillis?.() || 0));
+      setUsers(Object.values(userMap)
+        .filter(u => u.tests.length > 0 || u.name !== 'Unknown')
+        .sort((a, b) =>
+          (b.tests[0]?.timestamp?.toMillis?.() || b.testPays[0]?.timestamp?.toMillis?.() || 0) -
+          (a.tests[0]?.timestamp?.toMillis?.() || a.testPays[0]?.timestamp?.toMillis?.() || 0)
+        ));
 
       // 3. Revenue
       let totalRev = 0, certRev = 0, testRev = 0, cnt = 0;
@@ -342,27 +391,31 @@ export default function MockTestAdminTab({ isDark }) {
     return `${s}s`;
   };
 
+  // ✅ FIX-UNLOCK-LOCK: now correctly updates mockTestPayments first, falls back to mockTests
   const handleUnlockLock = async (uid, level) => {
     const key = `${uid}_${level}`;
     setLockActionLoading(key);
     try {
       const { updateDoc } = await import('firebase/firestore');
-      if (level === 'basic') {
-        // Basic lock is in mockTests docs — update all basic test docs
-        const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
-        await Promise.all(basicSnap.docs
-          .filter(d => (d.data().level || 'basic') === 'basic')
-          .map(d => updateDoc(d.ref, { lockEndsAt: null, lockStartsAt: null }))
-        );
-        // Also try mockTestPayments in case new flow saved it there
-        try {
-          await updateDoc(doc(db, 'users', uid, 'mockTestPayments', 'basic'), { lockEndsAt: null, lockStartsAt: null });
-        } catch {}
-      } else {
+
+      // Always try mockTestPayments first (this is where updateTestAttempt saves locks)
+      try {
         await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
-          lockEndsAt: null, lockStartsAt: null,
+          lockEndsAt: null, lockStartsAt: null, testSubmittedAt: null,
         });
+        console.log(`✅ Lock removed from mockTestPayments for ${level}`);
+      } catch (e) {
+        console.warn('mockTestPayments update failed, trying mockTests...', e.message);
+        // Fallback: update mockTests docs (old flow)
+        if (level === 'basic') {
+          const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
+          await Promise.all(basicSnap.docs
+            .filter(d => (d.data().level || 'basic') === 'basic')
+            .map(d => updateDoc(d.ref, { lockEndsAt: null, lockStartsAt: null }))
+          );
+        }
       }
+
       window.showToast?.(`✅ Lock removed for ${level} test`, 'success');
       await loadAll();
     } catch { window.showToast?.('❌ Unlock failed', 'error'); }
@@ -378,16 +431,19 @@ export default function MockTestAdminTab({ isDark }) {
       const { updateDoc } = await import('firebase/firestore');
       const base = currentLockEndsAt ? new Date(currentLockEndsAt) : new Date();
       const newEnd = new Date(base.getTime() + days * 24 * 60 * 60 * 1000);
-      if (level === 'basic') {
-        const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
-        await Promise.all(basicSnap.docs
-          .filter(d => (d.data().level || 'basic') === 'basic')
-          .map(d => updateDoc(d.ref, { lockEndsAt: newEnd.toISOString() }))
-        );
-        try { await updateDoc(doc(db, 'users', uid, 'mockTestPayments', 'basic'), { lockEndsAt: newEnd.toISOString() }); } catch {}
-      } else {
+
+      try {
         await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), { lockEndsAt: newEnd.toISOString() });
+      } catch (e) {
+        if (level === 'basic') {
+          const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
+          await Promise.all(basicSnap.docs
+            .filter(d => (d.data().level || 'basic') === 'basic')
+            .map(d => updateDoc(d.ref, { lockEndsAt: newEnd.toISOString() }))
+          );
+        }
       }
+
       window.showToast?.(`✅ Lock extended by ${days} day(s)`, 'success');
       setExtendDays(prev => ({ ...prev, [key]: '' }));
       await loadAll();
@@ -399,23 +455,26 @@ export default function MockTestAdminTab({ isDark }) {
     const key = `${uid}_${level}`;
     setLockActionLoading(key + '_complete');
     try {
-      const { updateDoc } = await import('firebase/firestore');
+      const { updateDoc, setDoc: setFireDoc } = await import('firebase/firestore');
       const now = new Date();
       const lockEndsAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      if (level === 'basic') {
-        const basicSnap = await getDocs(collection(db, 'users', uid, 'mockTests'));
-        await Promise.all(basicSnap.docs
-          .filter(d => (d.data().level || 'basic') === 'basic')
-          .map(d => updateDoc(d.ref, { lockStartsAt: now.toISOString(), lockEndsAt: lockEndsAt.toISOString(), testSubmittedAt: now.toISOString() }))
-        );
-        try { await updateDoc(doc(db, 'users', uid, 'mockTestPayments', 'basic'), { lockStartsAt: now.toISOString(), lockEndsAt: lockEndsAt.toISOString(), testSubmittedAt: now.toISOString() }); } catch {}
+      const lockData = {
+        lockStartsAt: now.toISOString(),
+        lockEndsAt: lockEndsAt.toISOString(),
+        testSubmittedAt: now.toISOString(),
+      };
+
+      const payRef = doc(db, 'users', uid, 'mockTestPayments', level);
+      const paySnap = await getDoc(payRef);
+      if (paySnap.exists()) {
+        await updateDoc(payRef, lockData);
       } else {
-        await updateDoc(doc(db, 'users', uid, 'mockTestPayments', level), {
-          lockStartsAt: now.toISOString(),
-          lockEndsAt: lockEndsAt.toISOString(),
-          testSubmittedAt: now.toISOString(),
+        await setFireDoc(payRef, {
+          level, hasPaid: false, planId: `mock-${level}`,
+          ...lockData,
         });
       }
+
       window.showToast?.(`✅ Full 7-day lock applied for ${level}`, 'success');
       await loadAll();
     } catch { window.showToast?.('❌ Lock failed', 'error'); }
@@ -582,8 +641,9 @@ export default function MockTestAdminTab({ isDark }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
             {filtered.map(u => {
               const isExpanded = expandedUser === u.uid;
+              // ✅ FIX-CERT-LEVEL: use certLevel() helper for correct level extraction
+              const hasCert    = u.certs.some(c => certLevel(c) === 'basic');
               const hasCertPaid = u.certPays.some(cp => cp.hasPaid && cp.level === 'basic');
-              const hasCert = u.certs.some(c => (c.level || c.id) === 'basic');
               const isBeingUnlocked = unlocking === u.uid;
 
               return (
@@ -639,7 +699,7 @@ export default function MockTestAdminTab({ isDark }) {
                     )}
 
                     <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                      {/* Delete button — inline confirm */}
+                      {/* Delete button */}
                       {confirmDelete === u.uid ? (
                         <>
                           <span style={{ fontSize: '0.72rem', color: isDark ? '#94a3b8' : '#64748b', fontWeight: 600 }}>Sure?</span>
@@ -672,20 +732,24 @@ export default function MockTestAdminTab({ isDark }) {
                       {/* All tests */}
                       <div style={{ marginBottom: '1rem' }}>
                         <div style={{ fontSize: '0.78rem', fontWeight: 700, color: isDark ? '#64748b' : '#94a3b8', letterSpacing: 1, marginBottom: 8 }}>ALL TESTS</div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                          {u.tests.map((t, i) => (
-                            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: isDark ? 'rgba(255,255,255,0.03)' : '#fff', borderRadius: 10, flexWrap: 'wrap', fontSize: '0.82rem' }}>
-                              <span style={{ fontWeight: 700, color: isDark ? '#94a3b8' : '#64748b', minWidth: 20 }}>#{i+1}</span>
-                              <span style={{ fontWeight: 700, color: t.passed ? '#10b981' : '#ef4444' }}>{t.score ?? '—'}%</span>
-                              <span style={{ color: isDark ? '#cbd5e1' : '#475569', fontWeight: 600 }}>{(t.level || '').toUpperCase()}</span>
-                              <span style={{ color: isDark ? '#475569' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={11}/>{fmt(t.timeTaken)}</span>
-                              <span style={{ color: isDark ? '#475569' : '#94a3b8' }}>{t.testDate || t.date || '—'}</span>
-                              <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, color: t.passed ? '#10b981' : '#ef4444', background: t.passed ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', padding: '0.15rem 0.5rem', borderRadius: 20 }}>
-                                {t.passed ? '✅ PASS' : '❌ FAIL'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                        {u.tests.length === 0 ? (
+                          <div style={{ fontSize: '0.82rem', color: isDark ? '#475569' : '#94a3b8', padding: '0.5rem' }}>No tests taken yet</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                            {u.tests.map((t, i) => (
+                              <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: isDark ? 'rgba(255,255,255,0.03)' : '#fff', borderRadius: 10, flexWrap: 'wrap', fontSize: '0.82rem' }}>
+                                <span style={{ fontWeight: 700, color: isDark ? '#94a3b8' : '#64748b', minWidth: 20 }}>#{i+1}</span>
+                                <span style={{ fontWeight: 700, color: t.passed ? '#10b981' : '#ef4444' }}>{t.score ?? '—'}%</span>
+                                <span style={{ color: isDark ? '#cbd5e1' : '#475569', fontWeight: 600 }}>{(t.level || '').toUpperCase()}</span>
+                                <span style={{ color: isDark ? '#475569' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 3 }}><Clock size={11}/>{fmt(t.timeTaken)}</span>
+                                <span style={{ color: isDark ? '#475569' : '#94a3b8' }}>{t.testDate || t.date || '—'}</span>
+                                <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, color: t.passed ? '#10b981' : '#ef4444', background: t.passed ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', padding: '0.15rem 0.5rem', borderRadius: 20 }}>
+                                  {t.passed ? '✅ PASS' : '❌ FAIL'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {/* Certificates */}
@@ -694,18 +758,19 @@ export default function MockTestAdminTab({ isDark }) {
                           <div style={{ fontSize: '0.78rem', fontWeight: 700, color: isDark ? '#64748b' : '#94a3b8', letterSpacing: 1, marginBottom: 8 }}>CERTIFICATES</div>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                             {u.certs.map(c => {
-                              const isPaid = u.certPays.some(cp => cp.level === (c.level || c.id?.split('_')[0]) && cp.hasPaid);
-                              const certLevel = c.level || c.id?.split('_')[0] || 'basic';
+                              // ✅ FIX-CERT-LEVEL: use certLevel() helper
+                              const cLevel = certLevel(c);
+                              const isPaid = u.certPays.some(cp => cp.level === cLevel && cp.hasPaid);
                               return (
                                 <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0.75rem', background: isDark ? 'rgba(255,255,255,0.03)' : '#fff', borderRadius: 10, flexWrap: 'wrap', fontSize: '0.82rem' }}>
-                                  <span style={{ fontWeight: 700, color: '#f59e0b' }}>🏆 {certLevel.toUpperCase()}</span>
+                                  <span style={{ fontWeight: 700, color: '#f59e0b' }}>🏆 {cLevel.toUpperCase()}</span>
                                   <span style={{ color: isDark ? '#cbd5e1' : '#475569' }}>{c.score}%</span>
                                   <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: isDark ? '#475569' : '#94a3b8' }}>{c.certificateId}</span>
                                   <span style={{ marginLeft: 'auto', fontSize: '0.7rem', fontWeight: 700, color: isPaid ? '#10b981' : '#f59e0b', background: isPaid ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)', padding: '0.15rem 0.5rem', borderRadius: 20 }}>
                                     {isPaid ? '💳 Paid' : '🆓 Free/Locked'}
                                   </span>
-                                  {!isPaid && certLevel === 'basic' && (
-                                    <button onClick={() => handleFreeUnlock(u.uid, u.email, certLevel)}
+                                  {!isPaid && cLevel === 'basic' && (
+                                    <button onClick={() => handleFreeUnlock(u.uid, u.email, cLevel)}
                                       disabled={unlocking === u.uid}
                                       style={{ padding: '0.25rem 0.6rem', background: 'linear-gradient(135deg,#10b981,#059669)', border: 'none', borderRadius: 20, color: '#fff', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer' }}>
                                       🔓 Unlock Free
@@ -761,7 +826,7 @@ export default function MockTestAdminTab({ isDark }) {
             </div>
             <div>
               <div style={{ fontWeight: 900, color: isDark ? '#e2e8f0' : '#1e293b', fontSize: '0.95rem' }}>Test Lock Manager</div>
-              <div style={{ fontSize: '0.72rem', color: isDark ? '#64748b' : '#94a3b8' }}>Advanced & Pro test locks — unlock, extend, or force lock</div>
+              <div style={{ fontSize: '0.72rem', color: isDark ? '#64748b' : '#94a3b8' }}>All test locks — unlock, extend, or force lock</div>
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -774,7 +839,7 @@ export default function MockTestAdminTab({ isDark }) {
           </div>
         </div>
 
-        {/* Search + Tab switcher row */}
+        {/* Search + Tab switcher */}
         <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem', flexWrap: 'wrap', alignItems: 'center' }}>
           <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
             <Search size={14} color="#64748b" style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)' }}/>
@@ -802,7 +867,7 @@ export default function MockTestAdminTab({ isDark }) {
             .filter(l => !lockSearch.trim() || l.name.toLowerCase().includes(lockSearch.toLowerCase()) || l.email.toLowerCase().includes(lockSearch.toLowerCase()));
           if (filteredLocks.length === 0) return (
             <div style={{ textAlign: 'center', padding: '2rem', color: isDark ? '#475569' : '#94a3b8', fontSize: '0.9rem' }}>
-              {lockSearch ? '❌ No users found' : lockTab === 'locked' ? '✅ No users are currently locked' : '📭 No unlocked paid test users'}
+              {lockSearch ? '❌ No users found' : lockTab === 'locked' ? '✅ No users are currently locked' : '📭 No unlocked test users'}
             </div>
           );
           return (
@@ -820,7 +885,7 @@ export default function MockTestAdminTab({ isDark }) {
                         <div style={{ fontWeight: 700, color: isDark ? '#e2e8f0' : '#1e293b', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lu.name}</div>
                         <div style={{ fontSize: '0.72rem', color: isDark ? '#64748b' : '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lu.email}</div>
                       </div>
-                      <span style={{ padding: '0.25rem 0.65rem', background: lu.level === 'pro' ? 'rgba(245,158,11,0.15)' : 'rgba(99,102,241,0.12)', border: `1px solid ${lu.level === 'pro' ? 'rgba(245,158,11,0.4)' : 'rgba(99,102,241,0.3)'}`, borderRadius: 20, fontSize: '0.7rem', fontWeight: 800, color: lu.level === 'pro' ? '#f59e0b' : '#6366f1', textTransform: 'uppercase' }}>
+                      <span style={{ padding: '0.25rem 0.65rem', background: lu.level === 'pro' ? 'rgba(245,158,11,0.15)' : lu.level === 'advanced' ? 'rgba(99,102,241,0.12)' : 'rgba(16,185,129,0.12)', border: `1px solid ${lu.level === 'pro' ? 'rgba(245,158,11,0.4)' : lu.level === 'advanced' ? 'rgba(99,102,241,0.3)' : 'rgba(16,185,129,0.3)'}`, borderRadius: 20, fontSize: '0.7rem', fontWeight: 800, color: lu.level === 'pro' ? '#f59e0b' : lu.level === 'advanced' ? '#6366f1' : '#10b981', textTransform: 'uppercase' }}>
                         {lu.level}
                       </span>
                       {lu.isLocked
