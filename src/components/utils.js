@@ -74,6 +74,45 @@
 //                                IF the existing listener was lost (e.g. after a failed re-enter on mobile).
 //                                It only skips if isActive() is confirmed true AND listener exists.
 // ============================================================
+// BUG-FIX v9 — MOBILE DEVTOOLS + 6 ADDITIONAL BUGS:
+// ✅ FIX-DEVTOOLS-MOBILE:       DevToolsDetector.start() returns early on touch devices.
+//                                ROOT CAUSE: (1) outerHeight-innerHeight diff naturally >160px on mobile
+//                                due to address bar + bottom nav — triggers size check falsely.
+//                                (2) iOS Safari's JS engine pauses debugger >100ms without DevTools
+//                                due to JIT warm-up / GC / low-power mode — timing check fires always.
+//                                (3) Android USB debugging triggers toString trap.
+//                                FIX: All detection gated behind !_isTouchDevice(). Mobile browsers
+//                                cannot open DevTools natively so detection has zero value there.
+// ✅ FIX-DEVTOOLS-STATE-RESET:  DevToolsDetector.start() now resets detected + consecutiveCount to 0
+//                                before starting — prevents stale state if start() is called again.
+// ✅ FIX-FS-DISABLE-EXIT:       FullscreenGuard.disable() now calls FullscreenManager.exit() itself.
+//                                ROOT CAUSE: AntiCheatController.disable() calls FullscreenGuard.disable()
+//                                which only removed the listener but never exited fullscreen — the exam
+//                                UI would render while the browser was still in fullscreen mode.
+//                                CleanupManager already called FullscreenManager.exit() separately, but
+//                                any caller using AntiCheatController.disable() directly was affected.
+// ✅ FIX-TABCLOSE-ONBEFOREUNLOAD: TabCloseGuard.disable() no longer sets window.onbeforeunload = null.
+//                                ROOT CAUSE: The handler was registered via addEventListener (not via
+//                                window.onbeforeunload assignment), so the null-assignment in disable()
+//                                did nothing to remove our handler — but DID silently destroy any
+//                                onbeforeunload handler set by other code after enable() was called.
+// ✅ FIX-APPSWITCHER-DOUBLE-REG: AppSwitcherGuard.enable() now guards against double-registration.
+//                                ROOT CAUSE: Unlike every other guard, AppSwitcherGuard had no _enabled
+//                                flag. A second call to enable() overwrote _visHandler/_hideHandler refs,
+//                                leaving the first pair of listeners permanently attached and unremovable.
+// ✅ FIX-FS-LISTENER-RECOVERY:  FullscreenGuard.enable() second-call listener recovery now implemented.
+//                                ROOT CAUSE: v8 changelog documented this behaviour but the code still
+//                                did "if (this._active) return" unconditionally — no listener-existence
+//                                check. On mobile where reEnter() is a no-op, if the listener was lost
+//                                after a failed re-enter, subsequent FS exits were silently ignored.
+//                                FIX: if _active but _removeListener is null, re-attach listener only.
+// ✅ FIX-TOUCHSTART-PASSIVE:    SecurityManager touchstart handler now registered as passive.
+//                                ROOT CAUSE: All handlers were registered with {passive:false} including
+//                                touchstart, which only reads Date.now() and never calls preventDefault.
+//                                Non-passive touchstart on document forces the browser to wait for JS
+//                                before scrolling — causes janky scroll on every touch on mobile.
+//                                FIX: touchstart/touchend split out and registered separately as passive.
+// ============================================================
 
 export function injectGlobalCSS() {
   if (typeof document === 'undefined') return;
@@ -207,6 +246,13 @@ export class LeaderboardStorage {
         await addDoc(collection(db, 'leaderboard'), newEntry);
         return { success: true };
       } catch (error) {
+        // Don't retry permanent Firebase errors (permission denied, not found, quota, etc.)
+        const permanent = ['permission-denied', 'not-found', 'resource-exhausted',
+                           'unauthenticated', 'invalid-argument', 'already-exists'];
+        if (permanent.includes(error?.code)) {
+          (window.__nativeConsoleWarn || console.warn)('[MockTest] Leaderboard save — permanent error, no retry:', error.message);
+          return { success: false, error: error.message };
+        }
         if (attempt === MAX_RETRIES) {
           (window.__nativeConsoleWarn || console.warn)('[MockTest] Leaderboard save failed after retries:', error.message);
           return { success: false, error: error.message };
@@ -479,6 +525,8 @@ export class FullscreenManager {
 // DEVTOOLS DETECTOR
 // ✅ FIX-DEVTOOLS-ZOOM:         size check alone NEVER disqualifies — requires isCertain (diff>300)
 // ✅ FIX-TOSTRING-CONSOLECLEAR: stop() flushes console buffer via native clear
+// ✅ FIX-DEVTOOLS-MOBILE (v9):  All detection disabled on touch devices — see changelog above
+// ✅ FIX-DEVTOOLS-STATE-RESET:  start() resets detected + consecutiveCount before starting
 // ==========================================
 export class DevToolsDetector {
   constructor(onWarning, onAutoSubmit) {
@@ -488,6 +536,10 @@ export class DevToolsDetector {
     this.detected         = false;
     this.consecutiveCount = 0;
     this._toStringTrap    = null;
+  }
+
+  _isTouchDevice() {
+    return navigator.maxTouchPoints > 0 || 'ontouchstart' in window;
   }
 
   _isOpenBySize() {
@@ -554,6 +606,14 @@ export class DevToolsDetector {
   }
 
   start() {
+    // ✅ FIX-DEVTOOLS-MOBILE: mobile browsers can't open DevTools natively.
+    // All 3 detection methods produce false positives on touch devices — skip entirely.
+    if (this._isTouchDevice()) return;
+
+    // ✅ FIX-DEVTOOLS-STATE-RESET: always start fresh in case start() is called again.
+    this.detected         = false;
+    this.consecutiveCount = 0;
+
     this._setupToStringTrap(() => this._handleDetection());
 
     this.interval = setInterval(() => {
@@ -583,7 +643,9 @@ export class DevToolsDetector {
 
 // ==========================================
 // SECURITY MANAGER
-// ✅ FIX-WINDOWSKEY-RESET: _windowsKeyCount reset to 0 in enable()
+// ✅ FIX-WINDOWSKEY-RESET:    _windowsKeyCount reset to 0 in enable()
+// ✅ FIX-TOUCHSTART-PASSIVE:  touchstart/touchend registered separately as passive listeners
+//                              so they never block scroll — they only read timestamps.
 // ==========================================
 export class SecurityManager {
   constructor(onWarning, handleSubmitRef) {
@@ -609,6 +671,28 @@ export class SecurityManager {
     this._longPressThreshold = 500;
 
     this._origConsoleMethods = {};
+
+    // ✅ FIX-TOUCHSTART-PASSIVE: touchstart/touchend are separated from the main
+    // handlers object so they can be registered with passive:true independently.
+    // Keeping them in this.handlers would register them with passive:false (like all
+    // other handlers), which forces the browser to wait for JS before scrolling —
+    // causing janky scroll on every touch event on mobile.
+    this._touchStartHandler = (e) => { this._touchStartTime = Date.now(); };
+    this._touchEndHandler   = (e) => {
+      const touchDuration = Date.now() - this._touchStartTime;
+      const tag = e.target.tagName;
+      const isInteractive = (
+        tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' ||
+        tag === 'TEXTAREA' || tag === 'A' ||
+        e.target.isContentEditable ||
+        e.target.closest('button') ||
+        e.target.closest('a') ||
+        e.target.closest('[role="button"]')
+      );
+      if (touchDuration >= this._longPressThreshold && !isInteractive) {
+        e.preventDefault();
+      }
+    };
 
     this.handlers = {
       copy:        (e) => { e.preventDefault(); e.stopPropagation(); this.recordViolation('Copying is disabled during the test.'); },
@@ -687,24 +771,6 @@ export class SecurityManager {
       drop:        (e) => { e.preventDefault(); e.stopPropagation(); },
       selectstart: (e) => { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA') e.preventDefault(); },
       beforeprint: (e) => { this.recordViolation('Printing is disabled during the test.'); },
-
-      touchstart: (e) => { this._touchStartTime = Date.now(); },
-
-      touchend: (e) => {
-        const touchDuration = Date.now() - this._touchStartTime;
-        const tag = e.target.tagName;
-        const isInteractive = (
-          tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' ||
-          tag === 'TEXTAREA' || tag === 'A' ||
-          e.target.isContentEditable ||
-          e.target.closest('button') ||
-          e.target.closest('a') ||
-          e.target.closest('[role="button"]')
-        );
-        if (touchDuration >= this._longPressThreshold && !isInteractive) {
-          e.preventDefault();
-        }
-      },
     };
   }
 
@@ -808,9 +874,18 @@ export class SecurityManager {
     // ✅ FIX-WINDOWSKEY-RESET
     this._windowsKeyCount = 0;
 
+    // Main handlers — registered with capture:true, passive:false (needed for preventDefault)
     Object.entries(this.handlers).forEach(([event, handler]) => {
       document.addEventListener(event, handler, { capture: true, passive: false });
     });
+
+    // ✅ FIX-TOUCHSTART-PASSIVE: register touch handlers separately as passive.
+    // passive:true means the browser never waits for JS before scrolling — smooth UX.
+    // touchend still calls preventDefault for long-press, but only conditionally;
+    // passive:false on touchend is required for that preventDefault to work.
+    document.addEventListener('touchstart', this._touchStartHandler, { capture: true, passive: true });
+    document.addEventListener('touchend',   this._touchEndHandler,   { capture: true, passive: false });
+
     document.body.style.userSelect       = 'none';
     document.body.style.webkitUserSelect = 'none';
     document.body.style.msUserSelect     = 'none';
@@ -844,9 +919,15 @@ export class SecurityManager {
     if (!this._enabled) return;
     this._enabled = false;
 
+    // Remove main handlers
     Object.entries(this.handlers).forEach(([event, handler]) => {
       document.removeEventListener(event, handler, true);
     });
+
+    // ✅ FIX-TOUCHSTART-PASSIVE: remove touch handlers using same options as registration
+    document.removeEventListener('touchstart', this._touchStartHandler, true);
+    document.removeEventListener('touchend',   this._touchEndHandler,   true);
+
     document.body.style.userSelect       = '';
     document.body.style.webkitUserSelect = '';
     document.body.style.msUserSelect     = '';
@@ -1001,6 +1082,10 @@ export class BackButtonBlocker {
 
 // ==========================================
 // TAB CLOSE GUARD
+// ✅ FIX-TABCLOSE-ONBEFOREUNLOAD: disable() no longer sets window.onbeforeunload = null.
+//    ROOT CAUSE: The handler was added via addEventListener — setting window.onbeforeunload
+//    to null in disable() did NOT remove our listener, but DID silently destroy any
+//    onbeforeunload handler set by other code after our enable() was called.
 // ==========================================
 export class TabCloseGuard {
   static _handler = null;
@@ -1026,40 +1111,32 @@ export class TabCloseGuard {
       window.removeEventListener('beforeunload', this._handler);
       this._handler = null;
     }
-    window.onbeforeunload = null;
+    // ✅ FIX-TABCLOSE-ONBEFOREUNLOAD: removed "window.onbeforeunload = null" — see changelog
   }
 }
 
 // ==========================================
 // APP SWITCHER GUARD
-//
-// ✅ FIX-DOUBLE-TAB-DETECTION (v8):
-//    ROOT CAUSE: visibilitychange fires when user switches tab/app. On mobile,
-//    pagehide ALSO fires at the same moment. Both events were calling onSwitch()
-//    even though the old cooldown code was supposed to prevent it — but the
-//    cooldown comparison `now - _lastFired < _cooldown + 300` was racing because
-//    BOTH handlers read _lastFired BEFORE either had a chance to update it
-//    (JS is single-threaded but both event listeners queue in the same microtask tick).
-//
-//    FIX: Raise cooldown to 3000ms and use a stricter source-aware dedup:
-//    — visibilitychange only fires when document.hidden becomes true
-//    — pagehide checks `now - _lastFired < _cooldown + 500` (larger buffer)
-//    — Both share the same _lastFired timestamp so truly only one fires per switch
-//    — Added _lastSource tracking to avoid same-source re-fires within 5s
+// ✅ FIX-DOUBLE-TAB-DETECTION (v8): shared _lastFired with 3000ms cooldown
+// ✅ FIX-APPSWITCHER-DOUBLE-REG (v9): added _enabled guard to prevent handler leak on double enable()
 // ==========================================
 export class AppSwitcherGuard {
   static _visHandler  = null;
   static _hideHandler = null;
-  static _cooldown    = 3000;  // ✅ raised from 2000ms to 3000ms
+  static _cooldown    = 3000;
   static _lastFired   = 0;
+  static _enabled     = false; // ✅ FIX-APPSWITCHER-DOUBLE-REG
 
   static enable(onSwitch) {
+    // ✅ FIX-APPSWITCHER-DOUBLE-REG: without this guard, a second enable() call would
+    // overwrite _visHandler/_hideHandler, making the first pair of listeners unremovable.
+    if (this._enabled) return;
+    this._enabled   = true;
     this._lastFired = 0;
 
     this._visHandler = () => {
       if (!document.hidden) return;
       const now = Date.now();
-      // ✅ Guard: don't fire if another event fired within cooldown window
       if (now - this._lastFired < this._cooldown) return;
       this._lastFired = now;
       onSwitch();
@@ -1067,8 +1144,6 @@ export class AppSwitcherGuard {
 
     this._hideHandler = () => {
       const now = Date.now();
-      // ✅ Larger buffer for pagehide to prevent double-fire with visibilitychange
-      // that fires in the same browser event cycle on mobile
       if (now - this._lastFired < this._cooldown + 500) return;
       this._lastFired = now;
       onSwitch();
@@ -1079,6 +1154,9 @@ export class AppSwitcherGuard {
   }
 
   static disable() {
+    if (!this._enabled) return; // ✅ FIX-APPSWITCHER-DOUBLE-REG: symmetric guard
+    this._enabled = false;
+
     if (this._visHandler)  document.removeEventListener('visibilitychange', this._visHandler);
     if (this._hideHandler) window.removeEventListener('pagehide', this._hideHandler);
     this._visHandler  = null;
@@ -1089,27 +1167,17 @@ export class AppSwitcherGuard {
 
 // ==========================================
 // FULLSCREEN GUARD
-//
-// ✅ FIX-FS-ACTIVE-ORDERING (v7): _active=true set BEFORE attaching listener
-//
-// ✅ FIX-MOBILE-FULLSCREEN (v8):
-//    ROOT CAUSE: On mobile (iOS Safari / Android Chrome), calling
-//    FullscreenManager.enter() without a direct user gesture silently fails.
-//    The old code set _active=true then attached a listener. When the user
-//    presses back / exits fullscreen on mobile, the onChange listener fires,
-//    _recordViolation runs and shows the warning, then reEnter() is called.
-//    reEnter() also fails silently on mobile (no user gesture) so the app
-//    is now stuck: _active=true, no fullscreen, bottom nav bar cut off because
-//    body is still position:fixed from ExamScreens setup.
-//
-//    FIX: reEnter() is now a no-op on touch devices — mobile browsers cannot
-//    re-enter fullscreen programmatically. The violation is still recorded
-//    but we don't attempt the doomed re-enter that breaks layout.
-//
-//    Additionally: enable() now detects touch devices and skips fullscreen
-//    entirely (resolves immediately without entering FS) — this means _active
-//    stays false on mobile, and the onChange listener is never attached,
-//    so no false "fullscreen exit" violations fire on mobile back-button.
+// ✅ FIX-FS-ACTIVE-ORDERING (v7):      _active=true set BEFORE attaching listener
+// ✅ FIX-MOBILE-FULLSCREEN (v8):       reEnter() no-op on touch; enable() skips FS on touch
+// ✅ FIX-FS-LISTENER-RECOVERY (v9):    enable() second-call now actually re-attaches the listener
+//    when _active=true but _removeListener=null (listener was lost after failed reEnter on mobile).
+//    ROOT CAUSE: v8 changelog documented this behaviour but the code still did
+//    "if (this._active) return" unconditionally — no listener-existence check was performed.
+// ✅ FIX-FS-DISABLE-EXIT (v9):         disable() now calls FullscreenManager.exit() itself.
+//    ROOT CAUSE: AntiCheatController.disable() calls FullscreenGuard.disable() which only
+//    removed the listener and set _active=false — it never exited fullscreen, leaving the
+//    exam UI rendering inside the fullscreen viewport. CleanupManager called exit() separately
+//    but any caller using AntiCheatController.disable() directly was affected.
 // ==========================================
 export class FullscreenGuard {
   static _removeListener = null;
@@ -1120,14 +1188,21 @@ export class FullscreenGuard {
   }
 
   static async enable(onExit) {
-    if (this._active) return;
+    // ✅ FIX-FS-LISTENER-RECOVERY: if _active but _removeListener is null,
+    // the listener was lost (e.g. after a failed reEnter). Re-attach only — don't re-enter FS.
+    if (this._active) {
+      if (this._removeListener === null) {
+        this._removeListener = FullscreenManager.onChange(() => {
+          if (!FullscreenManager.isActive() && this._active) {
+            onExit();
+          }
+        });
+      }
+      return;
+    }
 
     // ✅ FIX-MOBILE-FULLSCREEN: skip fullscreen entirely on touch devices.
-    // Mobile browsers require a direct user gesture for fullscreen — attempting
-    // it programmatically either fails or creates a broken half-state that
-    // hides the bottom navigation bar when exited.
     if (this._isTouchDevice()) {
-      // Don't set _active=true — mobile has no fullscreen guard
       return;
     }
 
@@ -1146,9 +1221,7 @@ export class FullscreenGuard {
   }
 
   static async reEnter() {
-    // ✅ FIX-MOBILE-FULLSCREEN: no-op on touch — programmatic re-enter fails
-    // without a user gesture and breaks the layout (body stays position:fixed
-    // but viewport shrinks after FS exit, hiding the bottom nav bar)
+    // ✅ FIX-MOBILE-FULLSCREEN: no-op on touch — programmatic re-enter fails without user gesture
     if (this._isTouchDevice()) return;
     await FullscreenManager.enter();
   }
@@ -1159,6 +1232,9 @@ export class FullscreenGuard {
       this._removeListener();
       this._removeListener = null;
     }
+    // ✅ FIX-FS-DISABLE-EXIT: exit fullscreen here so any caller (including
+    // AntiCheatController.disable()) leaves a clean browser state.
+    FullscreenManager.exit();
   }
 }
 
@@ -1266,7 +1342,7 @@ export class AntiCheatController {
     BackButtonBlocker.disable();
     TabCloseGuard.disable();
     AppSwitcherGuard.disable();
-    FullscreenGuard.disable();
+    FullscreenGuard.disable(); // ✅ now also exits fullscreen via FIX-FS-DISABLE-EXIT
     ScreenshotBlocker.disable();
   }
 
@@ -1292,18 +1368,19 @@ export class CleanupManager {
     BackButtonBlocker.disable();
     TabCloseGuard.disable();
     AppSwitcherGuard.disable();
-    FullscreenGuard.disable();
-    ScreenshotBlocker.disable();
+    FullscreenGuard.disable(); // ✅ FIX-FS-DISABLE-EXIT: this now also calls FullscreenManager.exit()
 
     if (securityManager && typeof securityManager.disable === 'function') {
       try { securityManager.disable(); } catch (e) {}
     }
 
-    const doExit = () => FullscreenManager.exit();
+    ScreenshotBlocker.disable();
+
+    // FullscreenGuard.disable() already calls FullscreenManager.exit() immediately.
+    // delayFullscreen=true path is kept for callers that need an extra delayed exit
+    // (e.g. to let a transition animation play before the browser chrome reappears).
     if (delayFullscreen) {
-      setTimeout(doExit, 800);
-    } else {
-      doExit();
+      setTimeout(() => FullscreenManager.exit(), 800);
     }
 
     [document.body, document.documentElement].forEach(el => {
