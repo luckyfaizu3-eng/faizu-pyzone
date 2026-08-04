@@ -47,7 +47,15 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
                               ? resolvePrice(product.bundleInfo.savings)
                               : null;
 
+  // ✅ Whether the product itself was already free (before any coupon).
+  // Used to hide the coupon box — coupons shouldn't be offered on already-free items.
   const isFreeProduct = !product.price || product.price === 0;
+
+  // ✅ Whether the price is 0 AFTER a coupon is applied (e.g. a 100%-off coupon).
+  // This is the one that should actually control the "Download Free" button /
+  // free-checkout behavior, since discountedINRPrice can drop to 0 even when
+  // the original product was paid.
+  const isFreeAfterCoupon = discountedINRPrice === 0;
 
   // ── Apply coupon ──
   const handleApplyCoupon = async () => {
@@ -403,7 +411,9 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
             </div>
           </div>
 
-          {/* ── COUPON INPUT SECTION ── */}
+          {/* ── COUPON INPUT SECTION ──
+               Only shown when the ORIGINAL product is paid — coupons don't make sense
+               on already-free products, so this uses isFreeProduct (not isFreeAfterCoupon). */}
           {!isFreeProduct && (
             <div style={{
               background: '#fff', borderRadius: '20px', padding: '1.25rem',
@@ -538,14 +548,14 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
                 </div>
               )}
 
-              {/* Main price */}
+              {/* Main price — free either originally OR after a coupon zeroes it out */}
               <div style={{
                 fontSize: '3.5rem', fontWeight: '900',
                 background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
                 lineHeight: 1, marginBottom: '0.5rem', letterSpacing: '-0.03em'
               }}>
-                {isFreeProduct ? 'FREE' : priceInfo.display}
+                {isFreeAfterCoupon ? 'FREE' : priceInfo.display}
               </div>
 
               {/* Bundle savings badge */}
@@ -572,8 +582,8 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
                 </div>
               )}
 
-              {/* PayPal note for foreign users */}
-              {!isIndia && geoData && (
+              {/* PayPal note for foreign users — hidden once the coupon makes it free */}
+              {!isIndia && geoData && !isFreeAfterCoupon && (
                 <div style={{
                   marginTop: '12px', fontSize: '0.75rem', color: '#64748b', fontWeight: '600'
                 }}>
@@ -583,7 +593,7 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
             </div>
           </div>
 
-          {/* Action Buttons — pass coupon to onBuyNow */}
+          {/* Action Buttons — pass coupon + final price to onBuyNow */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginBottom: '1.5rem' }}>
             <button
               onClick={() => {
@@ -608,10 +618,13 @@ function ProductDetailPage({ product, onClose, onBuyNow, onAddReview, geoData, i
               onTouchEnd={(e) => { e.currentTarget.style.transform = 'scale(1)'; }}
             >
               <Zap size={24} />
-              {!isIndia && geoData
-                ? `Pay ${priceInfo.display} via PayPal`
-                : isFreeProduct
-                  ? 'Download Free'
+              {/* ✅ FIXED: check isFreeAfterCoupon FIRST — a coupon that zeroes the
+                  price should always show "Download Free", even for non-India / PayPal users,
+                  instead of trying to send them to PayPal to pay ₹0. */}
+              {isFreeAfterCoupon
+                ? 'Download Free'
+                : !isIndia && geoData
+                  ? `Pay ${priceInfo.display} via PayPal`
                   : `Buy Now — ${priceInfo.display}`
               }
             </button>

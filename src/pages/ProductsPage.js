@@ -156,7 +156,10 @@ function ProductsPage({
           setSelectedProduct(null);
           window.history.back();
         }}
-        onBuyNow={() => buyNow(selectedProduct)}
+        // ✅ FIXED: forward the coupon info (coupon + finalPrice) from ProductDetailPage
+        // through to buyNow, instead of dropping it. This is what lets a 100%-off
+        // coupon skip Razorpay and go straight to a free download.
+        onBuyNow={(couponInfo) => buyNow(selectedProduct, couponInfo)}
         onAddReview={handleAddReview}
         geoData={geoData}
         isIndia={isIndia}

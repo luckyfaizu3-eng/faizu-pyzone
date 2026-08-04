@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactGA from 'react-ga4';
-import { auth } from './firebase';
+import { auth, db } from './firebase';
+import { doc, updateDoc, increment } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import { registerUser, loginUser, logoutUser, isAdmin as isAdminAuth, resetPassword } from './authService';
 import { 
@@ -322,19 +323,99 @@ function App() {
     if (product) trackAction(ACTIONS.REMOVE_FROM_CART, { productId: product.id, productName: product.title });
   };
 
-  const buyNow = async (product) => {
+  // ✅ Increments a coupon's usedCount in Firestore. Safe no-op on failure (doesn't block the order).
+  const incrementCouponUsage = async (couponId) => {
+    if (!couponId) return;
+    try {
+      await updateDoc(doc(db, 'coupons', couponId), { usedCount: increment(1) });
+    } catch (err) {
+      console.error('Failed to increment coupon usage:', err);
+    }
+  };
+
+  // ✅ buyNow now accepts optional couponInfo: { coupon, finalPrice }
+  // If the final price is 0 (100% off coupon, or a genuinely free product),
+  // we skip Razorpay completely and create the order directly.
+  const buyNow = async (product, couponInfo = null) => {
     if (!user) { window.showToast?.('Please login first to purchase!', 'warning'); setCurrentPage('login'); return; }
-    trackAction(ACTIONS.PURCHASE_INITIATED, { productId: product.id, productName: product.title, price: product.price, isBundle: product.isBundle || false });
-    const itemData = { id: product.id, title: product.title, price: product.price, isBundle: product.isBundle || false, pdfFiles: product.pdfFiles || [], bundledProducts: product.bundledProducts || [] };
+
+    const appliedCoupon = couponInfo?.coupon || null;
+    const finalPrice = couponInfo && typeof couponInfo.finalPrice === 'number'
+      ? couponInfo.finalPrice
+      : product.price;
+
+    trackAction(ACTIONS.PURCHASE_INITIATED, {
+      productId: product.id,
+      productName: product.title,
+      price: finalPrice,
+      isBundle: product.isBundle || false,
+      couponCode: appliedCoupon?.code || null,
+    });
+
+    const itemData = {
+      id: product.id,
+      title: product.title,
+      price: finalPrice,
+      isBundle: product.isBundle || false,
+      pdfFiles: product.pdfFiles || [],
+      bundledProducts: product.bundledProducts || [],
+    };
     if (product.thumbnail) itemData.thumbnail = product.thumbnail;
-    initiatePayment(product.price, [product], async (response) => {
+    if (appliedCoupon?.code) itemData.couponCode = appliedCoupon.code;
+
+    // ── FREE FLOW: price is 0, skip Razorpay entirely ──
+    if (!finalPrice || finalPrice === 0) {
       try {
         const orderResult = await addOrder({
-          userEmail: user.email, userId: user.uid, items: [itemData], total: product.price,
+          userEmail: user.email,
+          userId: user.uid,
+          items: [itemData],
+          total: 0,
           date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-          paymentId: response.razorpay_payment_id, status: 'completed',
+          paymentId: appliedCoupon ? `FREE-COUPON-${appliedCoupon.code}-${Date.now()}` : `FREE-${Date.now()}`,
+          status: 'completed',
+          couponCode: appliedCoupon?.code || null,
         }, user.uid);
-        if (!orderResult.success) { window.showToast?.('Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error'); return; }
+
+        if (!orderResult.success) {
+          window.showToast?.('Order failed to save! Please contact admin.', 'error');
+          return;
+        }
+
+        if (appliedCoupon?.id) await incrementCouponUsage(appliedCoupon.id);
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await loadOrders();
+        setCurrentPage('orders');
+        window.showToast?.('Unlocked for free! Download your PDFs now!', 'success');
+      } catch (error) {
+        console.error('Free order error:', error);
+        window.showToast?.('Something went wrong creating your order. Please try again or contact admin.', 'error');
+      }
+      return;
+    }
+
+    // ── PAID FLOW: open Razorpay for the coupon-adjusted (or full) price ──
+    initiatePayment(finalPrice, [product], async (response) => {
+      try {
+        const orderResult = await addOrder({
+          userEmail: user.email,
+          userId: user.uid,
+          items: [itemData],
+          total: finalPrice,
+          date: new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+          paymentId: response.razorpay_payment_id,
+          status: 'completed',
+          couponCode: appliedCoupon?.code || null,
+        }, user.uid);
+
+        if (!orderResult.success) {
+          window.showToast?.('Payment successful but order not saved! Contact admin with payment ID: ' + response.razorpay_payment_id, 'error');
+          return;
+        }
+
+        if (appliedCoupon?.id) await incrementCouponUsage(appliedCoupon.id);
+
         await new Promise(resolve => setTimeout(resolve, 1000));
         await loadOrders();
         await new Promise(resolve => setTimeout(resolve, 500));
