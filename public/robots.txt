@@ -1,10 +1,12 @@
 User-agent: *
+Disallow: /admin/
 Allow: /
+
+# Public resources
 Allow: /blog/
 Allow: /sitemap.xml
-Disallow: /admin
 
-# AI crawlers — explicitly allow
+# AI Crawlers
 User-agent: GPTBot
 Allow: /
 
@@ -20,4 +22,5 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
+# Sitemap
 Sitemap: https://faizupyzone.shop/sitemap.xml
